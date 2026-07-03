@@ -1,0 +1,6 @@
+{
+  "name": "AutoLead",
+  "description": "AutoLead: A modern, responsive web application to manage car sales leads and conditions. It features filtering, adding, editing, and deleting functionalities with a clean UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
