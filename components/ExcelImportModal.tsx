@@ -394,6 +394,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         let invalids = 0;
 
         const cleanExistingNumbers = new Set(existingUsers.map(u => u.Number.trim()));
+        const seenNewNumbers = new Set<string>();
 
         rawRows.forEach(row => {
             // Priority to VOIP/Instagram specific phone columns if selected
@@ -557,11 +558,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 }
             }
 
+            const isAlreadyScheduledForCreation = seenNewNumbers.has(normalizedPhone);
+
             // If user already exists in CRM, we don't recreate them as a new customer lead
-            if (userExists && matchedUser) {
+            if ((userExists && matchedUser) || isAlreadyScheduledForCreation) {
                 duplicates++;
                 parsedExisting.push({
-                    userId: matchedUser.id,
+                    userId: matchedUser?.id || undefined,
                     FullName: finalName,
                     Number: normalizedPhone,
                     CarModel: rawCar || defaultCar || 'نامشخص',
@@ -572,6 +575,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 });
                 return;
             }
+
+            seenNewNumbers.add(normalizedPhone);
 
             let registerTimeStr = '';
             if (registerTimeIdx > -1 && row[registerTimeIdx] !== undefined && row[registerTimeIdx] !== null && row[registerTimeIdx] !== '') {
@@ -594,6 +599,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 }
             } catch {}
 
+            let lastActionValue = 'ثبت از فایل اکسل';
+            if (importType === 'VOIP') {
+                lastActionValue = vDateIdx > -1 && row[vDateIdx] ? String(row[vDateIdx]).trim() : registerTimeStr;
+            }
+
             parsed.push({
                 FullName: finalName,
                 Number: normalizedPhone,
@@ -604,7 +614,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : 'پنل پیامکی'),
                 leadStatus: defaultStatus,
                 RegisterTime: registerTimeStr,
-                LastAction: 'ثبت از فایل اکسل',
+                LastAction: lastActionValue,
                 IP: '',
                 createdAt: isoCreated,
                 updatedAt: isoCreated,
@@ -649,6 +659,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         let success = 0;
         let errors = 0;
         let currentOp = 0;
+        const phoneToNewUserIdMap = new Map<string, number>();
 
         if (hasCustomers) {
             // A. Create new customers and their logs
@@ -659,12 +670,25 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                     success++;
 
                     if (newUser && newUser.id) {
+                        if (record.Number) {
+                            phoneToNewUserIdMap.set(record.Number, newUser.id);
+                        }
                         try {
                             const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
-                            const journalContent = `📥 ثبت مشتری جدید از طریق درون‌ریزی گروهی اکسل (منبع: ${record.reference || 'فایل اکسل'})
+                            let journalContent = '';
+                            if (importType === 'VOIP') {
+                                journalContent = `📥 ثبت مشتری جدید از طریق درون‌ریزی گروهی اکسل (منبع: تماس VOIP)
+🚗 خودروی درخواستی: ${record.CarModel || 'نامشخص'}
+📍 استان/شهر: ${record.Province || '-'}${record.City ? ` / ${record.City}` : ''}
+
+📊 جزئیات تماس VOIP:
+${record.Decription ? record.Decription.split(' | ').join('\n') : 'فاقد جزئیات تماس'}`;
+                            } else {
+                                journalContent = `📥 ثبت مشتری جدید از طریق درون‌ریزی گروهی اکسل (منبع: ${record.reference || 'فایل اکسل'})
 🚗 خودروی درخواستی: ${record.CarModel || 'نامشخص'}
 📍 استان/شهر: ${record.Province || '-'}${record.City ? ` / ${record.City}` : ''}
 📝 توضیحات تکمیلی: ${record.Decription || 'فاقد توضیحات'}`;
+                            }
 
                             await createCustomerJournal({
                                 userId: newUser.id,
@@ -693,13 +717,32 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 const existingRecord = parsedExistingRecords[i];
                 try {
                     const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
-                    const journalContent = `🔄 ثبت فعالیت جدید برای مشتری قدیمی از طریق درون‌ریزی گروهی اکسل (منبع: ${existingRecord.reference || 'فایل اکسل'})
+                    
+                    const targetUserId = existingRecord.userId || (existingRecord.Number ? phoneToNewUserIdMap.get(existingRecord.Number) : undefined);
+                    if (!targetUserId) {
+                        console.warn('Could not find user ID for existing record:', existingRecord.Number);
+                        errors++;
+                        currentOp++;
+                        continue;
+                    }
+
+                    let journalContent = '';
+                    if (importType === 'VOIP') {
+                        journalContent = `🔄 ثبت فعالیت جدید برای مشتری قدیمی از طریق درون‌ریزی گروهی اکسل (منبع: تماس VOIP)
+🚗 خودروی درخواستی: ${existingRecord.CarModel || 'نامشخص'}
+📍 استان/شهر: ${existingRecord.Province || '-'}${existingRecord.City ? ` / ${existingRecord.City}` : ''}
+
+📊 جزئیات تماس VOIP:
+${existingRecord.Decription ? existingRecord.Decription.split(' | ').join('\n') : 'فاقد جزئیات تماس'}`;
+                    } else {
+                        journalContent = `🔄 ثبت فعالیت جدید برای مشتری قدیمی از طریق درون‌ریزی گروهی اکسل (منبع: ${existingRecord.reference || 'فایل اکسل'})
 🚗 خودروی درخواستی: ${existingRecord.CarModel || 'نامشخص'}
 📍 استان/شهر: ${existingRecord.Province || '-'}${existingRecord.City ? ` / ${existingRecord.City}` : ''}
 📝 توضیحات تکمیلی: ${existingRecord.Decription || 'فاقد توضیحات'}`;
+                    }
 
                     await createCustomerJournal({
-                        userId: existingRecord.userId,
+                        userId: targetUserId,
                         content: journalContent,
                         author: authorName
                     });
