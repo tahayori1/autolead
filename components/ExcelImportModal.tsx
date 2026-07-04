@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import type { User, CrmCallLog } from '../types';
 import { LeadStatus } from '../types';
-import { createUser, createCallLog, createCustomerJournal, getMyProfile } from '../services/api';
+import { createUser, updateUser, createCallLog, createCustomerJournal, getMyProfile } from '../services/api';
 import { 
     X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, 
     Instagram, Phone, MessageSquare, ArrowLeft, ArrowRight, Play, Check, AlertTriangle, Loader2 
@@ -666,7 +666,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             for (let i = 0; i < parsedRecords.length; i++) {
                 const record = parsedRecords[i];
                 try {
-                    const newUser = await createUser(record as Omit<User, 'id'>);
+                    const recordToSend = { ...record };
+                    if (importType === 'VOIP') {
+                        delete recordToSend.FullName;
+                        delete recordToSend.CarModel;
+                        delete recordToSend.Province;
+                        delete recordToSend.City;
+                    }
+                    const newUser = await updateUser(0, recordToSend as User);
                     success++;
 
                     if (newUser && newUser.id) {
