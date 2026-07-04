@@ -185,6 +185,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
 
     // Parsing state & feedback
     const [parsedRecords, setParsedRecords] = useState<Partial<User>[]>([]);
+    const [parsedExistingRecords, setParsedExistingRecords] = useState<any[]>([]);
     const [parsedCallLogs, setParsedCallLogs] = useState<CrmCallLog[]>([]);
     const [validRecords, setValidRecords] = useState<Partial<User>[]>([]);
     const [duplicateCount, setDuplicateCount] = useState(0);
@@ -387,6 +388,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         const iDateIdx = findColByCleanName(['تاریخ', 'date']);
 
         const parsed: Partial<User>[] = [];
+        const parsedExisting: any[] = [];
         const parsedLogs: CrmCallLog[] = [];
         let duplicates = 0;
         let invalids = 0;
@@ -556,8 +558,18 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             }
 
             // If user already exists in CRM, we don't recreate them as a new customer lead
-            if (userExists) {
+            if (userExists && matchedUser) {
                 duplicates++;
+                parsedExisting.push({
+                    userId: matchedUser.id,
+                    FullName: finalName,
+                    Number: normalizedPhone,
+                    CarModel: rawCar || defaultCar || 'نامشخص',
+                    Province: rawProv || '',
+                    City: rawCity || '',
+                    Decription: detailedDesc,
+                    reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : 'پنل پیامکی')
+                });
                 return;
             }
 
@@ -601,6 +613,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         });
 
         setParsedRecords(parsed);
+        setParsedExistingRecords(parsedExisting);
         setParsedCallLogs(parsedLogs);
         setDuplicateCount(duplicates);
         setInvalidCount(invalids);
@@ -609,7 +622,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
     // Handle Start Import
     const handleStartImport = async () => {
         const hasCallLogs = importType === 'VOIP' && parsedCallLogs.length > 0;
-        const hasCustomers = parsedRecords.length > 0;
+        const hasCustomers = parsedRecords.length > 0 || parsedExistingRecords.length > 0;
 
         if (!hasCustomers && !hasCallLogs) {
             alert('هیچ اطلاعات معتبری برای درون‌ریزی یافت نشد.');
@@ -618,7 +631,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
 
         setStep(3);
         setImporting(true);
-        setProgress({ current: 0, total: parsedRecords.length, success: 0, error: 0 });
+        const totalOps = parsedRecords.length + parsedExistingRecords.length;
+        setProgress({ current: 0, total: totalOps, success: 0, error: 0 });
 
         // 1. If we have VOIP call logs, import them to server via API
         if (importType === 'VOIP' && parsedCallLogs.length > 0) {
@@ -631,11 +645,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             }
         }
 
-        // 2. If we have new customers to register, create them
+        // 2. Process customer records (new or existing)
         let success = 0;
         let errors = 0;
+        let currentOp = 0;
 
         if (hasCustomers) {
+            // A. Create new customers and their logs
             for (let i = 0; i < parsedRecords.length; i++) {
                 const record = parsedRecords[i];
                 try {
@@ -663,15 +679,45 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                     console.error('Import Row error:', err);
                     errors++;
                 }
+                currentOp++;
                 setProgress(p => ({
                     ...p,
-                    current: i + 1,
+                    current: currentOp,
+                    success,
+                    error: errors
+                }));
+            }
+
+            // B. Register activities for existing/duplicate customers in Customer Timeline
+            for (let i = 0; i < parsedExistingRecords.length; i++) {
+                const existingRecord = parsedExistingRecords[i];
+                try {
+                    const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+                    const journalContent = `🔄 ثبت فعالیت جدید برای مشتری قدیمی از طریق درون‌ریزی گروهی اکسل (منبع: ${existingRecord.reference || 'فایل اکسل'})
+🚗 خودروی درخواستی: ${existingRecord.CarModel || 'نامشخص'}
+📍 استان/شهر: ${existingRecord.Province || '-'}${existingRecord.City ? ` / ${existingRecord.City}` : ''}
+📝 توضیحات تکمیلی: ${existingRecord.Decription || 'فاقد توضیحات'}`;
+
+                    await createCustomerJournal({
+                        userId: existingRecord.userId,
+                        content: journalContent,
+                        author: authorName
+                    });
+                    success++; // Count as successful operation
+                } catch (err) {
+                    console.error('Failed to create customer journal for existing user:', err);
+                    errors++;
+                }
+                currentOp++;
+                setProgress(p => ({
+                    ...p,
+                    current: currentOp,
                     success,
                     error: errors
                 }));
             }
         } else {
-            // No new customers to create, just successful call logs import
+            // No customer data at all, just call logs
             setProgress({
                 current: parsedCallLogs.length,
                 total: parsedCallLogs.length,
