@@ -5,7 +5,8 @@ import { LeadStatus } from '../types';
 import { createUser, updateUser, createCallLog, createCustomerJournal, getMyProfile } from '../services/api';
 import { 
     X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, 
-    Instagram, Phone, MessageSquare, ArrowLeft, ArrowRight, Play, Check, AlertTriangle, Loader2 
+    Instagram, Phone, MessageSquare, ArrowLeft, ArrowRight, Play, Check, AlertTriangle, Loader2,
+    Globe
 } from 'lucide-react';
 
 interface ExcelImportModalProps {
@@ -15,7 +16,7 @@ interface ExcelImportModalProps {
     onImportSuccess: () => void;
 }
 
-type ImportType = 'INSTAGRAM' | 'VOIP' | 'SMS_PANEL';
+type ImportType = 'INSTAGRAM' | 'VOIP' | 'SMS_PANEL' | 'SITE';
 
 const normalizePhoneNumber = (num: any): string => {
     if (!num) return '';
@@ -204,6 +205,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         } else if (importType === 'VOIP') {
             setBatchRef('تماس VOIP');
             setDefaultCar('');
+        } else if (importType === 'SITE') {
+            setBatchRef('سایت');
+            setDefaultCar('');
         } else {
             setBatchRef('پنل پیامکی');
             setDefaultCar('');
@@ -307,6 +311,22 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                     desc = h; // Mapping to description
                 }
             });
+        } else if (type === 'SITE') {
+            // Site Specific Auto Match: موبایل/تکرارموبایل is phone, نام و نام خانوادگی is name, خودرو مورد نظر شما is car, شهر is city
+            headers.forEach(h => {
+                const hClean = clean(h);
+                if (hClean === 'موبایل' || hClean === 'mobile') {
+                    phone = h;
+                } else if (!phone && hClean === 'تکرارموبایل') {
+                    phone = h;
+                } else if (hClean === 'نامونامخانوادگی' || hClean === 'fullname' || hClean === 'نام' || hClean.includes('نامخانوا')) {
+                    name = h;
+                } else if (hClean === 'خودروموردنظرشما' || hClean === 'خودرو') {
+                    car = h;
+                } else if (hClean === 'شهر' || hClean === 'city') {
+                    city = h;
+                }
+            });
         }
 
         let regTime = '';
@@ -387,6 +407,20 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         const iIgIdIdx = findColByCleanName(['ایدی اینستاگرام', 'آیدی اینستاگرام', 'ایدی', 'آیدی', 'instagramid', 'instagram', 'username', 'پیج']);
         const iDateIdx = findColByCleanName(['تاریخ', 'date']);
 
+        // Site specific columns
+        const sCarIdx = findColByCleanName(['خودرو مورد نظر شما', 'خودرو']);
+        const sNameIdx = findColByCleanName(['نام و نام خانوادگی', 'نام']);
+        const sPhoneIdx = findColByCleanName(['موبایل', 'telfon', 'mobile', 'phone']);
+        const sRepeatPhoneIdx = findColByCleanName(['تکرار موبایل']);
+        const sCityIdx = findColByCleanName(['شهر', 'city']);
+        const sFormIdx = findColByCleanName(['Form Name (ID)', 'formname', 'form']);
+        const sSubmissionIdx = findColByCleanName(['Submission ID', 'submissionid', 'submission']);
+        const sDateIdx = findColByCleanName(['Created At', 'createdat', 'تاریخ', 'زمان']);
+        const sUserIdIdx = findColByCleanName(['User ID', 'userid']);
+        const sUserAgentIdx = findColByCleanName(['User Agent', 'useragent']);
+        const sUserIpIdx = findColByCleanName(['User IP', 'userip', 'ip']);
+        const sReferrerIdx = findColByCleanName(['Referrer', 'referrer', 'منبع', 'ارجاع']);
+
         const parsed: Partial<User>[] = [];
         const parsedExisting: any[] = [];
         const parsedLogs: CrmCallLog[] = [];
@@ -418,6 +452,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 }
             } else if (importType === 'INSTAGRAM' && iNumIdx > -1) {
                 rawPhone = row[iNumIdx];
+            } else if (importType === 'SITE') {
+                rawPhone = sPhoneIdx > -1 && row[sPhoneIdx] ? String(row[sPhoneIdx]) : (sRepeatPhoneIdx > -1 && row[sRepeatPhoneIdx] ? String(row[sRepeatPhoneIdx]) : '');
+                if (!rawPhone) {
+                    rawPhone = phoneIdx > -1 ? String(row[phoneIdx]) : '';
+                }
             } else {
                 rawPhone = phoneIdx > -1 ? row[phoneIdx] : '';
             }
@@ -438,6 +477,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             if (!rawName) {
                 if (importType === 'INSTAGRAM' && iNameIdx > -1) {
                     rawName = String(row[iNameIdx] || '').trim();
+                } else if (importType === 'SITE' && sNameIdx > -1) {
+                    rawName = String(row[sNameIdx] || '').trim();
                 }
             }
 
@@ -549,6 +590,31 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 } else if (!finalName) {
                     finalName = igIdVal ? `@${igIdVal.replace(/^@/, '')}` : 'کاربر اینستاگرام';
                 }
+            } else if (importType === 'SITE') {
+                const parts: string[] = ['🌐 ثبت از سایت'];
+                if (sFormIdx > -1 && row[sFormIdx] !== undefined && row[sFormIdx] !== null && row[sFormIdx] !== '') parts.push(`فرم: ${row[sFormIdx]}`);
+                if (sSubmissionIdx > -1 && row[sSubmissionIdx] !== undefined && row[sSubmissionIdx] !== null && row[sSubmissionIdx] !== '') parts.push(`شناسه ثبت: ${row[sSubmissionIdx]}`);
+                if (sDateIdx > -1 && row[sDateIdx] !== undefined && row[sDateIdx] !== null && row[sDateIdx] !== '') parts.push(`تاریخ ثبت: ${row[sDateIdx]}`);
+                if (sUserIdIdx > -1 && row[sUserIdIdx] !== undefined && row[sUserIdIdx] !== null && row[sUserIdIdx] !== '') parts.push(`شناسه کاربر: ${row[sUserIdIdx]}`);
+                if (sUserAgentIdx > -1 && row[sUserAgentIdx] !== undefined && row[sUserAgentIdx] !== null && row[sUserAgentIdx] !== '') parts.push(`مرورگر: ${row[sUserAgentIdx]}`);
+                if (sUserIpIdx > -1 && row[sUserIpIdx] !== undefined && row[sUserIpIdx] !== null && row[sUserIpIdx] !== '') parts.push(`آی‌پی: ${row[sUserIpIdx]}`);
+                const refVal = sReferrerIdx > -1 && row[sReferrerIdx] ? String(row[sReferrerIdx]).trim() : '';
+                if (refVal) {
+                    parts.push(`منبع ارجاع: ${refVal}`);
+                } else {
+                    parts.push(`منبع ارجاع: سایت`);
+                }
+                
+                if (rawDesc && descIdx !== sFormIdx && descIdx !== sSubmissionIdx && descIdx !== sPhoneIdx) {
+                    parts.push(`توضیحات: ${rawDesc}`);
+                }
+                detailedDesc = parts.join(' | ');
+
+                if (matchedUser) {
+                    finalName = matchedUser.FullName;
+                } else if (!finalName) {
+                    finalName = 'مشتری سایت';
+                }
             } else {
                 detailedDesc = `💬 [درون‌ریزی پنل پیامکی] ${rawDesc ? `کمپین/متن پیام: ${rawDesc}` : ''}`;
                 if (matchedUser) {
@@ -571,7 +637,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                     Province: rawProv || '',
                     City: rawCity || '',
                     Decription: detailedDesc,
-                    reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : 'پنل پیامکی')
+                    reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : importType === 'SITE' ? 'سایت' : 'پنل پیامکی')
                 });
                 return;
             }
@@ -585,6 +651,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 registerTimeStr = parseAndConvertJalaliToGregorian(row[vDateIdx]);
             } else if (importType === 'INSTAGRAM' && iDateIdx > -1 && row[iDateIdx]) {
                 registerTimeStr = parseAndConvertJalaliToGregorian(row[iDateIdx]);
+            } else if (importType === 'SITE' && sDateIdx > -1 && row[sDateIdx]) {
+                registerTimeStr = parseAndConvertJalaliToGregorian(row[sDateIdx]);
             }
 
             if (!registerTimeStr) {
@@ -602,6 +670,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             let lastActionValue = 'ثبت از فایل اکسل';
             if (importType === 'VOIP') {
                 lastActionValue = vDateIdx > -1 && row[vDateIdx] ? parseAndConvertJalaliToGregorian(row[vDateIdx]) : registerTimeStr;
+            } else if (importType === 'SITE') {
+                lastActionValue = sDateIdx > -1 && row[sDateIdx] ? parseAndConvertJalaliToGregorian(row[sDateIdx]) : registerTimeStr;
             }
 
             parsed.push({
@@ -611,7 +681,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 Province: rawProv || '',
                 City: rawCity || '',
                 Decription: detailedDesc,
-                reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : 'پنل پیامکی'),
+                reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : importType === 'SITE' ? 'سایت' : 'پنل پیامکی'),
                 leadStatus: defaultStatus,
                 RegisterTime: registerTimeStr,
                 LastAction: lastActionValue,
@@ -690,6 +760,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
 
 📊 جزئیات تماس VOIP:
 ${record.Decription ? record.Decription.split(' | ').join('\n') : 'فاقد جزئیات تماس'}`;
+                            } else if (importType === 'SITE') {
+                                journalContent = `📥 ثبت مشتری جدید از طریق درون‌ریزی گروهی اکسل (منبع: سایت)
+🚗 خودروی درخواستی: ${record.CarModel || 'نامشخص'}
+📍 استان/شهر: ${record.Province || '-'}${record.City ? ` / ${record.City}` : ''}
+
+📊 جزئیات ثبت‌نام سایت:
+${record.Decription ? record.Decription.split(' | ').join('\n') : 'فاقد جزئیات ثبت‌نام'}`;
                             } else {
                                 journalContent = `📥 ثبت مشتری جدید از طریق درون‌ریزی گروهی اکسل (منبع: ${record.reference || 'فایل اکسل'})
 🚗 خودروی درخواستی: ${record.CarModel || 'نامشخص'}
@@ -741,6 +818,13 @@ ${record.Decription ? record.Decription.split(' | ').join('\n') : 'فاقد جز
 
 📊 جزئیات تماس VOIP:
 ${existingRecord.Decription ? existingRecord.Decription.split(' | ').join('\n') : 'فاقد جزئیات تماس'}`;
+                    } else if (importType === 'SITE') {
+                        journalContent = `🔄 ثبت فعالیت جدید برای مشتری قدیمی از طریق درون‌ریزی گروهی اکسل (منبع: سایت)
+🚗 خودروی درخواستی: ${existingRecord.CarModel || 'نامشخص'}
+📍 استان/شهر: ${existingRecord.Province || '-'}${existingRecord.City ? ` / ${existingRecord.City}` : ''}
+
+📊 جزئیات ثبت‌نام سایت:
+${existingRecord.Decription ? existingRecord.Decription.split(' | ').join('\n') : 'فاقد جزئیات ثبت‌نام'}`;
                     } else {
                         journalContent = `🔄 ثبت فعالیت جدید برای مشتری قدیمی از طریق درون‌ریزی گروهی اکسل (منبع: ${existingRecord.reference || 'فایل اکسل'})
 🚗 خودروی درخواستی: ${existingRecord.CarModel || 'نامشخص'}
@@ -816,7 +900,7 @@ ${existingRecord.Decription ? existingRecord.Decription.split(' | ').join('\n') 
                             {/* Type Selector */}
                             <div>
                                 <label className="block text-xs font-black text-slate-500 dark:text-slate-400 mb-2.5">منبع و نوع لیست اکسل را انتخاب کنید:</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                     <button
                                         type="button"
                                         onClick={() => setImportType('INSTAGRAM')}
@@ -842,6 +926,20 @@ ${existingRecord.Decription ? existingRecord.Decription.split(' | ').join('\n') 
                                         <div>
                                             <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">تاریخچه تماس‌های VOIP</h4>
                                             <p className="text-[10px] text-slate-400 mt-1">خروجی تماس‌های ورودی و خروجی مرکز تماس</p>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setImportType('SITE')}
+                                        className={`p-4 rounded-xl border text-right transition-all flex items-start gap-3.5 ${importType === 'SITE' ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}
+                                    >
+                                        <div className={`p-2.5 rounded-lg ${importType === 'SITE' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                                            <Globe className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">شماره‌های سایت</h4>
+                                            <p className="text-[10px] text-slate-400 mt-1">درون‌ریزی ثبت‌نام‌ها و فرم‌های سایت</p>
                                         </div>
                                     </button>
 
