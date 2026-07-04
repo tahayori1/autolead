@@ -607,7 +607,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             parsed.push({
                 FullName: finalName,
                 Number: normalizedPhone,
-                CarModel: rawCar || defaultCar || 'نامشخص',
+                CarModel: importType === 'VOIP' ? 'نامشخص' : (rawCar || defaultCar || 'نامشخص'),
                 Province: rawProv || '',
                 City: rawCity || '',
                 Decription: detailedDesc,
