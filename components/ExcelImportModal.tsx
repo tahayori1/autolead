@@ -454,7 +454,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 const parts: string[] = ['📞 تماس VOIP'];
                 if (vSourceIdx > -1 && row[vSourceIdx]) parts.push(`مبدا: ${row[vSourceIdx]}`);
                 if (vDestIdx > -1 && row[vDestIdx]) parts.push(`مقصد: ${row[vDestIdx]}`);
-                if (vDateIdx > -1 && row[vDateIdx]) parts.push(`تاریخ تماس: ${row[vDateIdx]}`);
+                if (vDateIdx > -1 && row[vDateIdx]) parts.push(`تاریخ تماس: ${parseAndConvertJalaliToGregorian(row[vDateIdx])}`);
                 if (vWaitIdx > -1 && row[vWaitIdx]) parts.push(`زمان انتظار: ${row[vWaitIdx]}`);
                 if (vDurationIdx > -1 && row[vDurationIdx]) parts.push(`طول تماس: ${row[vDurationIdx]}`);
                 if (vDurationSecIdx > -1 && row[vDurationSecIdx]) parts.push(`طول تماس (ثانیه): ${row[vDurationSecIdx]}`);
@@ -506,7 +506,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 // Timestamp
                 let callTimestamp = '';
                 if (vDateIdx > -1 && row[vDateIdx]) {
-                    callTimestamp = String(row[vDateIdx]).trim();
+                    callTimestamp = parseAndConvertJalaliToGregorian(row[vDateIdx]);
                 } else {
                     const now = new Date();
                     callTimestamp = now.toLocaleDateString('fa-IR') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -601,7 +601,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
 
             let lastActionValue = 'ثبت از فایل اکسل';
             if (importType === 'VOIP') {
-                lastActionValue = vDateIdx > -1 && row[vDateIdx] ? String(row[vDateIdx]).trim() : registerTimeStr;
+                lastActionValue = vDateIdx > -1 && row[vDateIdx] ? parseAndConvertJalaliToGregorian(row[vDateIdx]) : registerTimeStr;
             }
 
             parsed.push({
