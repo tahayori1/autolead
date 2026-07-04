@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import type { User, CrmCallLog } from '../types';
 import { LeadStatus } from '../types';
-import { createUser, createCallLog } from '../services/api';
+import { createUser, createCallLog, createCustomerJournal, getMyProfile } from '../services/api';
 import { 
     X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, 
     Instagram, Phone, MessageSquare, ArrowLeft, ArrowRight, Play, Check, AlertTriangle, Loader2 
@@ -161,6 +161,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
     const [fileName, setFileName] = useState<string>('');
     const [rawHeaders, setRawHeaders] = useState<string[]>([]);
     const [rawRows, setRawRows] = useState<any[][]>([]);
+    const [currentUser, setCurrentUser] = useState<any>(null);
+
+    useEffect(() => {
+        getMyProfile().then(p => setCurrentUser(p)).catch(() => {});
+    }, []);
     
     // Mapping configurations
     const [mappings, setMappings] = useState({
@@ -628,8 +633,26 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             for (let i = 0; i < parsedRecords.length; i++) {
                 const record = parsedRecords[i];
                 try {
-                    await createUser(record as Omit<User, 'id'>);
+                    const newUser = await createUser(record as Omit<User, 'id'>);
                     success++;
+
+                    if (newUser && newUser.id) {
+                        try {
+                            const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+                            const journalContent = `📥 ثبت مشتری جدید از طریق درون‌ریزی گروهی اکسل (منبع: ${record.reference || 'فایل اکسل'})
+🚗 خودروی درخواستی: ${record.CarModel || 'نامشخص'}
+📍 استان/شهر: ${record.Province || '-'}${record.City ? ` / ${record.City}` : ''}
+📝 توضیحات تکمیلی: ${record.Decription || 'فاقد توضیحات'}`;
+
+                            await createCustomerJournal({
+                                userId: newUser.id,
+                                content: journalContent,
+                                author: authorName
+                            });
+                        } catch (journalErr) {
+                            console.error('Failed to create customer journal log for imported user:', journalErr);
+                        }
+                    }
                 } catch (err) {
                     console.error('Import Row error:', err);
                     errors++;
