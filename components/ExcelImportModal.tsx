@@ -399,6 +399,12 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             let isOutbound = false;
 
             if (importType === 'VOIP') {
+                if (vReasonIdx > -1) {
+                    const reasonVal = String(row[vReasonIdx] || '').trim();
+                    if (reasonVal !== 'موفق') {
+                        return; // Skip if disconnection reason is not successful
+                    }
+                }
                 const rawType = vTypeIdx > -1 ? String(row[vTypeIdx] || '').trim() : '';
                 isOutbound = rawType.includes('خروجی') || rawType.toLowerCase().includes('out');
                 
