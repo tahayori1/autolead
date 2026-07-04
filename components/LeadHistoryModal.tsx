@@ -33,10 +33,14 @@ interface LeadDetailHistoryModalProps {
     error: string | null;
     onSendMessage: (message: string, type: 'SMS' | 'WHATSAPP') => Promise<void>;
     onRegisterOrder: (user: User) => void;
+    onEdit: (user: User) => void;
     cars: Car[];
     conditions: CarSaleCondition[];
     loggedInUser: MyProfile | null;
     onStatusChange?: (userId: number, newStatus: LeadStatus) => Promise<void>;
+    hasPrevious?: boolean;
+    hasNext?: boolean;
+    onNavigate?: (direction: 'prev' | 'next') => void;
 }
 
 const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ label, value }) => (
@@ -48,8 +52,8 @@ const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ labe
 
 const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({ 
     isOpen, onClose, lead, fullUserDetails, messages, isLoading, error, 
-    onSendMessage, onRegisterOrder, cars, conditions, loggedInUser,
-    onStatusChange
+    onSendMessage, onRegisterOrder, onEdit, cars, conditions, loggedInUser,
+    onStatusChange, hasPrevious = false, hasNext = false, onNavigate
 }) => {
     const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'SURVEYS'>('COMBINED_HISTORY');
     const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY'>('REGISTRATION');
@@ -365,36 +369,80 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl h-[90vh] flex flex-col overflow-hidden border border-slate-100 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
                     <header className="p-4 border-b border-slate-150 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-950 z-10">
-                        <div className="flex justify-between items-center mb-4">
-                            <div>
-                                <h2 className="text-lg font-extrabold text-slate-800 dark:text-white">
-                                   جزئیات و تاریخچه مشتری
-                                </h2>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400" dir="ltr">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                {/* Next & Previous Navigation */}
+                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex-shrink-0">
+                                    <button 
+                                        disabled={!hasPrevious}
+                                        type="button"
+                                        onClick={() => onNavigate && onNavigate('prev')}
+                                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${hasPrevious ? 'text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 bg-transparent' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'}`}
+                                        title="مشتری قبلی"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <span className="text-[10px] font-black hidden sm:inline">قبلی</span>
+                                    </button>
+
+                                    <button 
+                                        disabled={!hasNext}
+                                        type="button"
+                                        onClick={() => onNavigate && onNavigate('next')}
+                                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${hasNext ? 'text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 bg-transparent' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'}`}
+                                        title="مشتری بعدی"
+                                    >
+                                        <span className="text-[10px] font-black hidden sm:inline">بعدی</span>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-white truncate">
+                                       جزئیات و تاریخچه مشتری
+                                    </h2>
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 truncate" dir="ltr">
                                         {leadNumber} {leadName && `(${leadName})`}
                                     </p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+                                {/* Edit Customer Button */}
+                                <button 
+                                    onClick={() => (fullUserDetails || lead) && onEdit(fullUserDetails || lead)}
+                                    type="button"
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors flex items-center gap-1"
+                                    title="ویرایش اطلاعات مشتری"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    <span>ویرایش</span>
+                                </button>
+
                                 {/* Send Message to Customer Button */}
                                 <button 
                                     onClick={() => setIsSendMessageOpen(true)}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-900/50 hover:bg-sky-100 dark:hover:bg-sky-900 transition-colors flex items-center gap-1.5"
+                                    type="button"
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-900/50 hover:bg-sky-100 dark:hover:bg-sky-900 transition-colors flex items-center gap-1"
                                     title="ارسال پیام به مشتری"
                                 >
                                     <MessageSquare className="w-4 h-4" />
-                                    <span>ارسال پیام به مشتری</span>
+                                    <span className="hidden sm:inline">ارسال پیام</span>
                                 </button>
 
                                 <button 
                                     onClick={() => fullUserDetails && onRegisterOrder(fullUserDetails)} 
-                                    className="p-2 rounded-lg transition-colors bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 hover:bg-emerald-100 dark:hover:bg-emerald-900" 
+                                    type="button"
+                                    className="p-1.5 rounded-lg transition-colors bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 hover:bg-emerald-100 dark:hover:bg-emerald-900" 
                                     title="ثبت سفارش فروش"
                                 >
-                                    <ClipboardList className="w-5 h-5" />
+                                    <ClipboardList className="w-4 h-4" />
                                 </button>
-                                <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <button onClick={onClose} type="button" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
                                     <CloseIcon />
                                 </button>
                             </div>

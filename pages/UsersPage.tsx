@@ -245,6 +245,18 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setModalMessages([]);
         setModalFullUser(null);
     };
+
+    const handleNavigateLead = async (direction: 'prev' | 'next') => {
+        if (!selectedLead) return;
+        const currentIndex = sortedUsers.findIndex(u => u.id === selectedLead.id);
+        if (currentIndex === -1) return;
+        
+        let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+        if (nextIndex >= 0 && nextIndex < sortedUsers.length) {
+            const nextLead = sortedUsers[nextIndex];
+            await handleViewDetails(nextLead);
+        }
+    };
     
     const handleSave = async (userData: Omit<User, 'id'>) => {
         try {
@@ -645,6 +657,14 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     error={modalError}
                     onSendMessage={handleSendMessage}
                     onRegisterOrder={handleOpenOrderModal}
+                    onEdit={(user) => {
+                        // Close history modal first, then open edit modal
+                        setIsDetailModalOpen(false);
+                        handleEdit(user);
+                    }}
+                    hasPrevious={selectedLead ? sortedUsers.findIndex(u => u.id === selectedLead.id) > 0 : false}
+                    hasNext={selectedLead ? (sortedUsers.findIndex(u => u.id === selectedLead.id) > -1 && sortedUsers.findIndex(u => u.id === selectedLead.id) < sortedUsers.length - 1) : false}
+                    onNavigate={handleNavigateLead}
                     cars={cars}
                     conditions={conditions}
                     loggedInUser={loggedInUser}

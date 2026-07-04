@@ -200,13 +200,6 @@ const UserTable: React.FC<UserTableProps> = ({
                                 <td className="px-6 py-4">
                                     <div className="flex items-center justify-end gap-1">
                                         <button 
-                                            onClick={() => onRegisterOrder(user)} 
-                                            className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-                                            title="ثبت سفارش فروش"
-                                        >
-                                            <ClipboardListIcon className="w-5 h-5" />
-                                        </button>
-                                        <button 
                                             onClick={() => onViewDetails(user)} 
                                             className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30"
                                             title="گفتگو"
@@ -273,13 +266,6 @@ const UserTable: React.FC<UserTableProps> = ({
                             </div>
                             
                             <div className="flex flex-col gap-2">
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); onRegisterOrder(user); }} 
-                                    className="p-2 rounded-xl text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30" 
-                                    title="ثبت سفارش"
-                                >
-                                    <ClipboardListIcon className="w-5 h-5" />
-                                </button>
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); onViewDetails(user); }} 
                                     className="p-2 rounded-xl text-sky-600 bg-sky-50 dark:bg-sky-900/30"
