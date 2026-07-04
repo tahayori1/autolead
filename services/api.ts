@@ -138,6 +138,27 @@ export const createUserAccount = async (username: string, password: string): Pro
     }
 };
 
+export const syncPasswordChangeToWebhook = async (username: string, passwordHash: string): Promise<void> => {
+    ensureOnline();
+    const response = await fetch(`${API_BASE_URL}/auth/new`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ username, password: passwordHash }),
+    });
+
+    if (response.ok) {
+        return;
+    } else {
+        let errorData;
+        try {
+            errorData = await response.json();
+        } catch (e) {
+            errorData = { message: 'خطا در ارتباط با وب‌هوک همگام‌سازی رمز عبور.' };
+        }
+        throw new Error(errorData.message || `خطا در همگام‌سازی رمز عبور: ${response.status}`);
+    }
+};
+
 // --- Staff Management ---
 
 const USER_MGMT_URL = `${API_BASE_URL}/auth/user`;
@@ -247,6 +268,11 @@ export const saveStaffUser = async (user: Omit<Partial<StaffUser & MyProfile>, '
     } else {
         // This is a create. The temporary string id should not be sent.
         createdUser = await addApiUser(apiPayload);
+    }
+
+    // Sync password to webhook if password is set or changed
+    if (user.password && user.username) {
+        await syncPasswordChangeToWebhook(user.username, user.password);
     }
     
     // The permissions logic is separate and seems to work correctly.
@@ -827,7 +853,8 @@ export const updateSettings = async (settings: Partial<AppSettings>): Promise<vo
 export const updateUserCredentials = async (
     currentPasswordHash: string,
     newUsername: string,
-    newPasswordHash?: string
+    newPasswordHash?: string,
+    currentUsername?: string
 ): Promise<void> => {
     ensureOnline();
     const payload: any = {
@@ -847,7 +874,15 @@ export const updateUserCredentials = async (
         body: JSON.stringify(payload),
     });
     
-    return handleResponse(response);
+    await handleResponse(response);
+
+    // If password was changed, trigger password update webhook
+    if (newPasswordHash) {
+        const activeUsername = newUsername || currentUsername;
+        if (activeUsername) {
+            await syncPasswordChangeToWebhook(activeUsername, newPasswordHash);
+        }
+    }
 };
 
 // --- CRUD Services ---

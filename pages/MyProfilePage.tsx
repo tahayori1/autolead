@@ -151,7 +151,7 @@ const MyProfilePage: React.FC = () => {
             const newPasswordHash = credForm.newPassword ? await hashPassword(credForm.newPassword) : undefined;
             const newUsername = credForm.username !== profileData.username ? credForm.username : '';
 
-            await updateUserCredentials(currentPasswordHash, newUsername, newPasswordHash);
+            await updateUserCredentials(currentPasswordHash, newUsername, newPasswordHash, profileData?.username || '');
             showToast('اطلاعات ورود به‌روزرسانی شد. ممکن است لازم باشد دوباره وارد شوید.', 'success');
             setCredForm({ ...credForm, currentPassword: '', newPassword: '', confirmNewPassword: '' });
         } catch (err) {
