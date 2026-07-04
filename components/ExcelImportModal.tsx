@@ -41,6 +41,119 @@ const normalizePhoneNumber = (num: any): string => {
     return str;
 };
 
+const convertPersianToEnglishDigits = (str: string): string => {
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    let result = str;
+    for (let i = 0; i < 10; i++) {
+        result = result.replace(new RegExp(persianDigits[i], 'g'), String(i))
+                       .replace(new RegExp(arabicDigits[i], 'g'), String(i));
+    }
+    return result;
+};
+
+export function jalaliToGregorian(jy: number, jm: number, jd: number): [number, number, number] {
+    jy = parseInt(jy.toString(), 10);
+    jm = parseInt(jm.toString(), 10);
+    jd = parseInt(jd.toString(), 10);
+    var jy2 = (jy <= 979) ? jy + 621 : jy - 979;
+    var days = (365 * jy2) + (Math.floor(jy2 / 33) * 8) + Math.floor(((jy2 % 33) + 3) / 4) + 78 + jd + ((jm < 7) ? (jm - 1) * 31 : ((jm - 7) * 30) + 186);
+    var gy = 1600 + (400 * Math.floor(days / 146097));
+    days %= 146097;
+    var leap = true;
+    if (days >= 36525) {
+        days--;
+        gy += 100 * Math.floor(days / 36524);
+        days %= 36524;
+        if (days >= 365) {
+            days++;
+        } else {
+            leap = false;
+        }
+    }
+    gy += 4 * Math.floor(days / 1461);
+    days %= 1461;
+    if (days >= 366) {
+        leap = false;
+        days--;
+        gy += Math.floor(days / 365);
+        days %= 365;
+    }
+    var gd = days + 1;
+    var sal_a = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    var gm;
+    for (gm = 1; gm < 13; gm++) {
+        var v = sal_a[gm];
+        if (gd <= v) {
+            break;
+        }
+        gd -= v;
+    }
+    return [gy, gm, gd];
+}
+
+export function parseAndConvertJalaliToGregorian(dateVal: any): string {
+    if (dateVal === null || dateVal === undefined) return '';
+    
+    // If it's already a JS Date object
+    if (dateVal instanceof Date) {
+        if (!isNaN(dateVal.getTime())) {
+            return dateVal.toISOString().replace('.000Z', '').replace('Z', '');
+        }
+    }
+    
+    let str = String(dateVal).trim();
+    if (!str) return '';
+    
+    // Check if it's an Excel serial date number
+    const numVal = Number(str);
+    if (!isNaN(numVal) && numVal > 30000 && numVal < 100000) {
+        const jsDate = new Date((numVal - 25569) * 86400 * 1000);
+        if (!isNaN(jsDate.getTime())) {
+            return jsDate.toISOString().replace('.000Z', '').replace('Z', '');
+        }
+    }
+
+    str = convertPersianToEnglishDigits(str);
+
+    // Regex to match Year, Month, Day separated by / or - or . or space
+    const datePattern = /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/;
+    const match = str.match(datePattern);
+    
+    if (match) {
+        const year = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10);
+        const day = parseInt(match[3], 10);
+        
+        // Check if the year is in Jalali range
+        if (year >= 1300 && year <= 1499) {
+            const [gy, gm, gd] = jalaliToGregorian(year, month, day);
+            
+            // Try to extract time (HH:mm:ss or HH:mm)
+            const timeMatch = str.match(/(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+            let timeStr = '12:00:00';
+            if (timeMatch) {
+                const hh = String(timeMatch[1]).padStart(2, '0');
+                const mm = String(timeMatch[2]).padStart(2, '0');
+                const ss = timeMatch[3] ? String(timeMatch[3]).padStart(2, '0') : '00';
+                timeStr = `${hh}:${mm}:${ss}`;
+            }
+            
+            return `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}T${timeStr}`;
+        }
+    }
+    
+    // Fallback if not Jalali: check if standard Date can parse it
+    try {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            return d.toISOString().replace('.000Z', '').replace('Z', '');
+        }
+    } catch {}
+    
+    return str;
+}
+
 export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onClose, existingUsers, onImportSuccess }) => {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [importType, setImportType] = useState<ImportType>('INSTAGRAM');
@@ -56,7 +169,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         carModelCol: '',
         descCol: '',
         provinceCol: '',
-        cityCol: ''
+        cityCol: '',
+        registerTimeCol: ''
     });
 
     // Custom Batch Configurations
@@ -189,6 +303,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             });
         }
 
+        let regTime = '';
+
         // Generic fallback auto detection if not set yet
         headers.forEach(h => {
             const hClean = clean(h);
@@ -210,6 +326,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             if (!city && (hClean.includes('شهر') || hClean.includes('city'))) {
                 city = h;
             }
+            if (!regTime && (hClean.includes('تاریخ') || hClean.includes('ایجاد') || hClean.includes('ثبت') || hClean.includes('زمان') || hClean.includes('date') || hClean.includes('created') || hClean.includes('time') || hClean.includes('register'))) {
+                regTime = h;
+            }
         });
 
         setMappings({
@@ -218,7 +337,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             carModelCol: car || '',
             descCol: desc || '',
             provinceCol: prov || '',
-            cityCol: city || ''
+            cityCol: city || '',
+            registerTimeCol: regTime || ''
         });
     };
 
@@ -232,6 +352,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
         const descIdx = rawHeaders.indexOf(mappings.descCol);
         const provIdx = rawHeaders.indexOf(mappings.provinceCol);
         const cityIdx = rawHeaders.indexOf(mappings.cityCol);
+        const registerTimeIdx = rawHeaders.indexOf(mappings.registerTimeCol);
 
         // Specific match helper for exact headers
         const findColByCleanName = (names: string[]) => {
@@ -429,6 +550,27 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 return;
             }
 
+            let registerTimeStr = '';
+            if (registerTimeIdx > -1 && row[registerTimeIdx] !== undefined && row[registerTimeIdx] !== null && row[registerTimeIdx] !== '') {
+                registerTimeStr = parseAndConvertJalaliToGregorian(row[registerTimeIdx]);
+            } else if (importType === 'VOIP' && vDateIdx > -1 && row[vDateIdx]) {
+                registerTimeStr = parseAndConvertJalaliToGregorian(row[vDateIdx]);
+            } else if (importType === 'INSTAGRAM' && iDateIdx > -1 && row[iDateIdx]) {
+                registerTimeStr = parseAndConvertJalaliToGregorian(row[iDateIdx]);
+            }
+
+            if (!registerTimeStr) {
+                registerTimeStr = new Date().toISOString();
+            }
+
+            let isoCreated = new Date().toISOString();
+            try {
+                const parsedDate = new Date(registerTimeStr);
+                if (!isNaN(parsedDate.getTime())) {
+                    isoCreated = parsedDate.toISOString();
+                }
+            } catch {}
+
             parsed.push({
                 FullName: finalName,
                 Number: normalizedPhone,
@@ -438,11 +580,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 Decription: detailedDesc,
                 reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : 'پنل پیامکی'),
                 leadStatus: defaultStatus,
-                RegisterTime: new Date().toLocaleDateString('fa-IR'),
+                RegisterTime: registerTimeStr,
                 LastAction: 'ثبت از فایل اکسل',
                 IP: '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: isoCreated,
+                updatedAt: isoCreated,
                 crmIsSend: 0
             });
         });
@@ -655,7 +797,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                             {/* Columns Mapping Form */}
                             <div className="bg-slate-50 dark:bg-slate-900/30 p-5 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-4">
                                 <h4 className="text-xs font-black text-slate-700 dark:text-slate-300">۱. تطبیق فیلدها و ستون‌های اکسل:</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                     
                                     {/* Phone (Required) */}
                                     <div>
@@ -698,8 +840,47 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                                         </select>
                                     </div>
 
-                                    {/* Description */}
+                                    {/* Province */}
                                     <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">ستون استان</label>
+                                        <select 
+                                            value={mappings.provinceCol}
+                                            onChange={(e) => setMappings(prev => ({ ...prev, provinceCol: e.target.value }))}
+                                            className="w-full text-xs px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 dark:text-white"
+                                        >
+                                            <option value="">بدون ستون</option>
+                                            {rawHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* City */}
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">ستون شهر</label>
+                                        <select 
+                                            value={mappings.cityCol}
+                                            onChange={(e) => setMappings(prev => ({ ...prev, cityCol: e.target.value }))}
+                                            className="w-full text-xs px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 dark:text-white"
+                                        >
+                                            <option value="">بدون ستون</option>
+                                            {rawHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* Register Time / Creation Date */}
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">ستون تاریخ ایجاد / ثبت</label>
+                                        <select 
+                                            value={mappings.registerTimeCol}
+                                            onChange={(e) => setMappings(prev => ({ ...prev, registerTimeCol: e.target.value }))}
+                                            className="w-full text-xs px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 dark:text-white"
+                                        >
+                                            <option value="">بدون ستون (استفاده از زمان فعلی)</option>
+                                            {rawHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* Description */}
+                                    <div className="sm:col-span-2 md:col-span-3">
                                         <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">ستون توضیحات تکمیلی</label>
                                         <select 
                                             value={mappings.descCol}
