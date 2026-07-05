@@ -10,7 +10,7 @@ import ConditionSelectionModal from './ConditionSelectionModal';
 interface BroadcastModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSend: (message: string, type: 'SMS' | 'WHATSAPP', onProgress: (progress: { sent: number; errors: number }) => void) => Promise<{finalSuccess: number, finalErrors: number}>;
+    onSend: (message: string, type: 'SMS' | 'WHATSAPP' | 'BALE', onProgress: (progress: { sent: number; errors: number }) => void, botId?: number) => Promise<{finalSuccess: number, finalErrors: number}>;
     recipientCount: number;
     cars: Car[];
     conditions: CarSaleCondition[];
@@ -18,7 +18,8 @@ interface BroadcastModalProps {
 
 const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose, onSend, recipientCount, cars, conditions }) => {
     const [message, setMessage] = useState('');
-    const [messageType, setMessageType] = useState<'SMS' | 'WHATSAPP'>('WHATSAPP');
+    const [messageType, setMessageType] = useState<'SMS' | 'WHATSAPP' | 'BALE'>('WHATSAPP');
+    const [baleBotId, setBaleBotId] = useState<number>(1941315571);
     const [isSending, setIsSending] = useState(false);
     const [progress, setProgress] = useState<{ sent: number; errors: number } | null>(null);
     const [isFinished, setIsFinished] = useState(false);
@@ -59,7 +60,7 @@ const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose, onSend
 
         await onSend(message, messageType, (p) => {
             setProgress(p);
-        });
+        }, messageType === 'BALE' ? baleBotId : undefined);
         
         setIsFinished(true);
         setIsSending(false);
@@ -159,7 +160,30 @@ ${descriptionsText}`;
                                         <ChatAltIcon className="w-4 h-4" />
                                         پیامک
                                     </button>
+                                    <button 
+                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${messageType === 'BALE' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}
+                                        onClick={() => setMessageType('BALE')}
+                                        disabled={isSending}
+                                    >
+                                        <ChatIcon className="w-4 h-4 text-indigo-500" />
+                                        بله
+                                    </button>
                                 </div>
+
+                                {messageType === 'BALE' && (
+                                    <div className="space-y-1.5 p-3 mb-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                                        <label className="text-xs font-bold text-indigo-950">انتخاب ربات ارسال‌کننده بله:</label>
+                                        <select
+                                            value={baleBotId}
+                                            onChange={(e) => setBaleBotId(Number(e.target.value))}
+                                            disabled={isSending}
+                                            className="w-full px-3 py-2 border border-indigo-200 rounded-lg bg-white text-sm focus:ring-indigo-500 outline-none"
+                                        >
+                                            <option value={1941315571}>ربات کرمان موتور ۲۶۰۶ (1941315571)</option>
+                                            <option value={49108418}>ربات حسینی خودرو (49108418)</option>
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="p-3 mb-4 border rounded-lg bg-slate-50">
                                     <p className="text-sm font-semibold text-slate-600 mb-2">ارسال سریع (اختیاری):</p>

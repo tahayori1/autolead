@@ -494,7 +494,7 @@ export interface SecureTransaction {
 
 // --- Notification Center ---
 
-export type NotificationType = 'WHATSAPP' | 'SMS';
+export type NotificationType = 'WHATSAPP' | 'SMS' | 'BALE';
 export type NotificationStatus = 'SENT' | 'FAILED' | 'PENDING';
 
 export interface NotificationLog {

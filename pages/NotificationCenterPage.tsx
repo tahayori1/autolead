@@ -29,7 +29,8 @@ const NotificationCenterPage: React.FC = () => {
         type: 'WHATSAPP' as NotificationType,
         recipientName: '',
         recipientNumber: '',
-        message: ''
+        message: '',
+        botId: 1941315571
     });
 
     // Template Form State
@@ -67,10 +68,16 @@ const NotificationCenterPage: React.FC = () => {
         }
         
         try {
-            await sendNotification(sendForm.type, sendForm.recipientNumber, sendForm.recipientName || 'ناشناس', sendForm.message);
+            await sendNotification(
+                sendForm.type, 
+                sendForm.recipientNumber, 
+                sendForm.recipientName || 'ناشناس', 
+                sendForm.message, 
+                sendForm.type === 'BALE' ? sendForm.botId : undefined
+            );
             setToast({ message: 'پیام در صف ارسال قرار گرفت', type: 'success' });
             setIsSendModalOpen(false);
-            setSendForm({ type: 'WHATSAPP', recipientName: '', recipientNumber: '', message: '' });
+            setSendForm({ type: 'WHATSAPP', recipientName: '', recipientNumber: '', message: '', botId: 1941315571 });
             if (activeTab === 'LOGS') fetchData();
         } catch (err) {
             setToast({ message: 'خطا در ارسال پیام', type: 'error' });
@@ -259,7 +266,27 @@ const NotificationCenterPage: React.FC = () => {
                                 >
                                     پیامک
                                 </button>
+                                <button 
+                                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${sendForm.type === 'BALE' ? 'bg-white dark:bg-slate-600 shadow text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`}
+                                    onClick={() => setSendForm({...sendForm, type: 'BALE'})}
+                                >
+                                    بله
+                                </button>
                             </div>
+
+                            {sendForm.type === 'BALE' && (
+                                <div className="space-y-1.5 p-3 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl">
+                                    <label className="text-xs font-bold text-indigo-950 dark:text-indigo-300">انتخاب ربات ارسال‌کننده بله:</label>
+                                    <select
+                                        value={sendForm.botId}
+                                        onChange={(e) => setSendForm({...sendForm, botId: Number(e.target.value)})}
+                                        className="w-full px-3 py-2 border border-indigo-200 dark:border-indigo-900 rounded-lg bg-white dark:bg-slate-800 text-sm focus:ring-indigo-500 outline-none dark:text-white"
+                                    >
+                                        <option value={1941315571}>ربات کرمان موتور ۲۶۰۶ (1941315571)</option>
+                                        <option value={49108418}>ربات حسینی خودرو (49108418)</option>
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4">
                                 <input 

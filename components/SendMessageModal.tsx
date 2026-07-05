@@ -10,7 +10,7 @@ interface SendMessageModalProps {
     lead: User | null;
     cars: Car[];
     conditions: CarSaleCondition[];
-    onSendMessage: (message: string, type: 'SMS' | 'WHATSAPP') => Promise<void>;
+    onSendMessage: (message: string, type: 'SMS' | 'WHATSAPP' | 'BALE', botId?: number) => Promise<void>;
 }
 
 const SendMessageModal: React.FC<SendMessageModalProps> = ({
@@ -23,6 +23,8 @@ const SendMessageModal: React.FC<SendMessageModalProps> = ({
 }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [newMessage, setNewMessage] = useState('');
+    const [messageType, setMessageType] = useState<'SMS' | 'WHATSAPP' | 'BALE'>('WHATSAPP');
+    const [baleBotId, setBaleBotId] = useState<number>(1941315571);
     const [isSending, setIsSending] = useState(false);
     const [quickSendCarModel, setQuickSendCarModel] = useState('');
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
@@ -33,6 +35,7 @@ const SendMessageModal: React.FC<SendMessageModalProps> = ({
         if (isOpen && lead) {
             setQuickSendCarModel(lead.CarModel || '');
             setNewMessage('');
+            setMessageType('WHATSAPP');
             setValidationError(null);
         }
     }, [isOpen, lead]);
@@ -44,50 +47,41 @@ const SendMessageModal: React.FC<SendMessageModalProps> = ({
         }
     }, [newMessage]);
 
+    // Validate SMS constraints whenever message or type changes
+    useEffect(() => {
+        if (messageType === 'SMS') {
+            if (newMessage.length > 170) {
+                setValidationError('متن پیامک نمی‌تواند بیشتر از ۱۷۰ کاراکتر باشد.');
+            } else if (/(https?:\/\/[^\s]+)|(www\.[^\s]+)/i.test(newMessage)) {
+                setValidationError('ارسال لینک در پیامک مجاز نیست.');
+            } else {
+                setValidationError(null);
+            }
+        } else {
+            setValidationError(null);
+        }
+    }, [newMessage, messageType]);
+
     if (!isOpen || !lead) return null;
 
-    const handleSendSMS = async () => {
-        if (!newMessage.trim() || isSending) return;
-
-        if (newMessage.length > 170) {
-            setValidationError('متن پیامک نمی‌تواند بیشتر از ۱۷۰ کاراکتر باشد.');
-            return;
-        }
-
-        const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/i;
-        if (urlRegex.test(newMessage)) {
-            setValidationError('ارسال لینک در پیامک مجاز نیست.');
-            return;
-        }
+    const handleSendMessageSubmit = async () => {
+        if (!newMessage.trim() || isSending || validationError) return;
 
         setIsSending(true);
         try {
-            await onSendMessage(newMessage, 'SMS');
-            setSuccessToast('پیامک با موفقیت ارسال شد');
+            await onSendMessage(newMessage, messageType, messageType === 'BALE' ? baleBotId : undefined);
+            const channelLabels = {
+                'SMS': 'پیامک',
+                'WHATSAPP': 'واتساپ',
+                'BALE': 'پیام‌رسان بله'
+            };
+            setSuccessToast(`پیام با موفقیت از طریق ${channelLabels[messageType]} ارسال شد`);
             setNewMessage('');
             setTimeout(() => {
                 onClose();
             }, 1000);
         } catch (error: any) {
-            setValidationError(error.message || 'خطا در ارسال پیامک');
-        } finally {
-            setIsSending(false);
-        }
-    };
-
-    const handleSendWhatsApp = async () => {
-        if (!newMessage.trim() || isSending) return;
-
-        setIsSending(true);
-        try {
-            await onSendMessage(newMessage, 'WHATSAPP');
-            setSuccessToast('پیام واتساپ با موفقیت ارسال شد');
-            setNewMessage('');
-            setTimeout(() => {
-                onClose();
-            }, 1000);
-        } catch (error: any) {
-            setValidationError(error.message || 'خطا در ارسال واتساپ');
+            setValidationError(error.message || 'خطا در ارسال پیام');
         } finally {
             setIsSending(false);
         }
@@ -156,6 +150,53 @@ ${descriptionsText}`;
                     </header>
 
                     <main className="p-5 space-y-4 overflow-y-auto max-h-[70vh]">
+                        {/* Channel selector */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">روش ارسال پیام:</label>
+                            <div className="grid grid-cols-3 gap-2 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+                                <button
+                                    type="button"
+                                    onClick={() => setMessageType('WHATSAPP')}
+                                    disabled={isSending}
+                                    className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${messageType === 'WHATSAPP' ? 'bg-white dark:bg-slate-700 shadow text-green-600 dark:text-green-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                                >
+                                    واتساپ
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setMessageType('SMS')}
+                                    disabled={isSending}
+                                    className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${messageType === 'SMS' ? 'bg-white dark:bg-slate-700 shadow text-sky-600 dark:text-sky-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                                >
+                                    پیامک
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setMessageType('BALE')}
+                                    disabled={isSending}
+                                    className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${messageType === 'BALE' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                                >
+                                    بله
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Bale Bot Selection */}
+                        {messageType === 'BALE' && (
+                            <div className="space-y-1.5 p-3 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl">
+                                <label className="text-xs font-bold text-indigo-950 dark:text-indigo-300">انتخاب ربات ارسال‌کننده بله:</label>
+                                <select
+                                    value={baleBotId}
+                                    onChange={(e) => setBaleBotId(Number(e.target.value))}
+                                    disabled={isSending}
+                                    className="w-full px-3 py-2 border border-indigo-200 dark:border-indigo-900 rounded-lg bg-white dark:bg-slate-800 text-sm focus:ring-indigo-500 focus:border-indigo-500 dark:text-white outline-none"
+                                >
+                                    <option value={1941315571}>ربات کرمان موتور ۲۶۰۶ (1941315571)</option>
+                                    <option value={49108418}>ربات حسینی خودرو (49108418)</option>
+                                </select>
+                            </div>
+                        )}
+
                         {/* Quick options */}
                         <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
                             <div className="flex items-center justify-between mb-1">
@@ -217,14 +258,14 @@ ${descriptionsText}`;
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="متن پیام خود را اینجا بنویسید یا از دکمه‌های بالا برای درج سریع استفاده کنید..."
-                                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-800 dark:text-white outline-none transition resize-y min-h-[120px] max-h-80 text-sm"
+                                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 bg-white dark:bg-slate-800 dark:text-white outline-none transition resize-y min-h-[120px] max-h-80 text-sm ${validationError ? 'border-rose-500 focus:ring-rose-200 dark:border-rose-800' : 'border-slate-300 dark:border-slate-700 focus:ring-indigo-500 focus:border-indigo-500'}`}
                                 disabled={isSending}
                                 autoComplete="off"
                             />
                             {newMessage.length > 0 && (
                                 <div className="flex justify-between text-[11px] text-slate-500 px-1">
                                     <span>تعداد حروف: {newMessage.length} حرف</span>
-                                    {newMessage.length > 170 && (
+                                    {messageType === 'SMS' && newMessage.length > 170 && (
                                         <span className="text-rose-500 font-bold">بیش از ۱۷۰ کاراکتر (مخصوص پیامک نیست)</span>
                                     )}
                                 </div>
@@ -232,24 +273,33 @@ ${descriptionsText}`;
                         </div>
                     </main>
 
-                    <footer className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2.5 bg-slate-50 dark:bg-slate-900/50">
+                    <footer className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2.5 bg-slate-50 dark:bg-slate-900/50 justify-end">
                         <button
                             type="button"
-                            onClick={handleSendWhatsApp}
-                            disabled={isSending || !newMessage.trim()}
-                            className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold"
+                            onClick={onClose}
+                            disabled={isSending}
+                            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl transition-colors text-sm font-semibold disabled:opacity-40"
                         >
-                            <Send className="w-4 h-4" />
-                            <span>ارسال واتساپ</span>
+                            انصراف
                         </button>
                         <button
                             type="button"
-                            onClick={handleSendSMS}
-                            disabled={isSending || !newMessage.trim()}
-                            className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold"
+                            onClick={handleSendMessageSubmit}
+                            disabled={isSending || !newMessage.trim() || !!validationError}
+                            className={`px-6 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold text-white min-w-[120px] ${
+                                messageType === 'WHATSAPP' ? 'bg-green-600 hover:bg-green-700' :
+                                messageType === 'SMS' ? 'bg-sky-600 hover:bg-sky-700' :
+                                'bg-indigo-600 hover:bg-indigo-700'
+                            }`}
                         >
-                            <Smartphone className="w-4 h-4" />
-                            <span>ارسال پیامک</span>
+                            {isSending ? (
+                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                                <>
+                                    <Send className="w-4 h-4" />
+                                    <span>ارسال در {messageType === 'WHATSAPP' ? 'واتساپ' : messageType === 'SMS' ? 'پیامک' : 'بله'}</span>
+                                </>
+                            )}
                         </button>
                     </footer>
                 </div>

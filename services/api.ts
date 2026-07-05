@@ -1065,14 +1065,47 @@ export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
     });
 };
 
-export const sendNotification = async (type: 'WHATSAPP' | 'SMS', recipientNumber: string, recipientName: string, message: string): Promise<void> => {
-    // We try to use the real WhatsApp API for WhatsApp messages if configured
+export const sendNotification = async (type: 'WHATSAPP' | 'SMS' | 'BALE', recipientNumber: string, recipientName: string, message: string, botId?: number): Promise<void> => {
+    // We try to use the real APIs if configured
+    let success = true;
     if (type === 'WHATSAPP') {
         try {
             await sendMessage(recipientNumber, message);
         } catch (error) {
-            console.error("Real send failed, logging as failed.");
-            // Proceed to log it as failed or just log it
+            console.error("Real send failed, logging as failed.", error);
+            success = false;
+        }
+    } else if (type === 'BALE') {
+        try {
+            const finalBotId = botId || 1941315571;
+            await sendBaleMessage(finalBotId, recipientNumber, message);
+        } catch (error) {
+            console.error("Real Bale send failed, logging as failed.", error);
+            success = false;
+        }
+    } else if (type === 'SMS') {
+        try {
+            await sendSMS(recipientNumber, message);
+        } catch (error) {
+            console.error("Real SMS send failed, logging as failed.", error);
+            success = false;
+        }
+    }
+
+    if (success) {
+        // Automatically insert into Customer Timeline (CustomerJournal) if a matching customer exists
+        try {
+            const user = await getUserByNumber(recipientNumber);
+            if (user) {
+                const typeLabel = type === 'WHATSAPP' ? 'واتساپ' : type === 'BALE' ? 'بله' : 'پیامک';
+                await createCustomerJournal({
+                    userId: user.id,
+                    content: `ارسال موفق پیام (${typeLabel}) - متن پیام:\n${message}`,
+                    author: 'سیستم'
+                });
+            }
+        } catch (journalErr) {
+            console.error("Failed to write to customer journal", journalErr);
         }
     }
 
@@ -1082,9 +1115,9 @@ export const sendNotification = async (type: 'WHATSAPP' | 'SMS', recipientNumber
         recipientName,
         recipientNumber,
         message,
-        status: 'SENT', // Optimistic success
+        status: success ? 'SENT' : 'FAILED',
         sentAt: new Date().toLocaleString('fa-IR'),
-        sender: 'سیستم' // Could be current user
+        sender: 'سیستم'
     };
 
     const logs = getStoredLogs();
@@ -1092,6 +1125,17 @@ export const sendNotification = async (type: 'WHATSAPP' | 'SMS', recipientNumber
     localStorage.setItem('notificationLogs', JSON.stringify(logs));
     
     return Promise.resolve();
+};
+
+export const sendBaleMessage = async (botId: number, phoneNumber: string, message: string): Promise<any> => {
+    const response = await fetch('/api/bale/send', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ bot_id: botId, phone_number: phoneNumber, message }),
+    });
+    return handleResponse(response);
 };
 
 export const getMessageTemplates = async (): Promise<MessageTemplate[]> => {
