@@ -91,7 +91,7 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
         }
       };
 
-      const baleResponse = await fetch("https://safir.bale.ai/api/v3/send_message", {
+      const baleResponse = await fetch("https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/bale/send", {
         method: "POST",
         headers: {
           "api-access-key": apiAccessKey,
