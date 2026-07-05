@@ -31,7 +31,7 @@ interface LeadDetailHistoryModalProps {
     messages: LeadMessage[];
     isLoading: boolean;
     error: string | null;
-    onSendMessage: (message: string, type: 'SMS' | 'WHATSAPP') => Promise<void>;
+    onSendMessage: (message: string, type: 'SMS' | 'WHATSAPP' | 'BALE', botId?: number) => Promise<void>;
     onRegisterOrder: (user: User) => void;
     onEdit: (user: User) => void;
     cars: Car[];

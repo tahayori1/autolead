@@ -60,63 +60,6 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
     }
   });
 
-  // API endpoint for Bale messenger sending
-  app.post("/api/bale/send", async (req, res) => {
-    try {
-      const { bot_id, phone_number, message } = req.body;
-      if (!bot_id || !phone_number || !message) {
-        return res.status(400).json({ error: "پارامترهای bot_id، phone_number و message الزامی هستند." });
-      }
-
-      const apiAccessKey = process.env.BALE_API_ACCESS_KEY || "4dFS29KTcGgG3Got";
-
-      // Format the phone number as 989123456789
-      let formattedPhone = phone_number.replace(/\D/g, ''); // keep only digits
-      if (formattedPhone.startsWith('0098')) {
-        formattedPhone = formattedPhone.substring(4);
-      } else if (formattedPhone.startsWith('98')) {
-        formattedPhone = formattedPhone.substring(2);
-      } else if (formattedPhone.startsWith('0')) {
-        formattedPhone = formattedPhone.substring(1);
-      }
-      formattedPhone = '98' + formattedPhone;
-
-      const body = {
-        bot_id: Number(bot_id),
-        phone_number: formattedPhone,
-        message_data: {
-          message: {
-            text: message
-          }
-        }
-      };
-
-      const baleResponse = await fetch("https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/bale/send", {
-        method: "POST",
-        headers: {
-          "api-access-key": apiAccessKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (!baleResponse.ok) {
-        const errText = await baleResponse.text();
-        throw new Error(`خطای پیام‌رسان بله: ${errText}`);
-      }
-
-      const responseData = await baleResponse.json();
-      if (responseData.error_data) {
-        throw new Error(responseData.error_data.error_message || "خطا در ارسال پیام بله");
-      }
-
-      res.json(responseData);
-    } catch (error: any) {
-      console.error("Bale API Error:", error);
-      res.status(500).json({ error: error.message || "خطایی در ارسال پیام به بله رخ داد." });
-    }
-  });
-
   // Call Logs Memory Storage
   interface ServerCallLog {
     id: string;

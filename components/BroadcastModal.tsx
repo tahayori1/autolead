@@ -60,7 +60,7 @@ const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose, onSend
 
         await onSend(message, messageType, (p) => {
             setProgress(p);
-        }, messageType === 'BALE' ? baleBotId : undefined);
+        }, baleBotId);
         
         setIsFinished(true);
         setIsSending(false);
@@ -145,43 +145,60 @@ ${descriptionsText}`;
                             <>  
                                 <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-lg">
                                     <button 
-                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${messageType === 'WHATSAPP' ? 'bg-white shadow text-green-600' : 'text-slate-500'}`}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${messageType === 'WHATSAPP' ? 'bg-white shadow text-green-600' : 'text-slate-500'}`}
                                         onClick={() => setMessageType('WHATSAPP')}
                                         disabled={isSending}
                                     >
-                                        <ChatIcon className="w-4 h-4" />
+                                        <ChatIcon className="w-3.5 h-3.5" />
                                         واتساپ
                                     </button>
                                     <button 
-                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${messageType === 'SMS' ? 'bg-white shadow text-sky-600' : 'text-slate-500'}`}
-                                        onClick={() => setMessageType('SMS')}
-                                        disabled={isSending}
-                                    >
-                                        <ChatAltIcon className="w-4 h-4" />
-                                        پیامک
-                                    </button>
-                                    <button 
-                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${messageType === 'BALE' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${messageType === 'BALE' ? 'bg-white shadow text-violet-600' : 'text-slate-500'}`}
                                         onClick={() => setMessageType('BALE')}
                                         disabled={isSending}
                                     >
-                                        <ChatIcon className="w-4 h-4 text-indigo-500" />
+                                        <ChatIcon className="w-3.5 h-3.5 text-violet-500" />
                                         بله
+                                    </button>
+                                    <button 
+                                        className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${messageType === 'SMS' ? 'bg-white shadow text-sky-600' : 'text-slate-500'}`}
+                                        onClick={() => setMessageType('SMS')}
+                                        disabled={isSending}
+                                    >
+                                        <ChatAltIcon className="w-3.5 h-3.5" />
+                                        پیامک
                                     </button>
                                 </div>
 
                                 {messageType === 'BALE' && (
-                                    <div className="space-y-1.5 p-3 mb-4 bg-indigo-50 border border-indigo-100 rounded-lg">
-                                        <label className="text-xs font-bold text-indigo-950">انتخاب ربات ارسال‌کننده بله:</label>
-                                        <select
-                                            value={baleBotId}
-                                            onChange={(e) => setBaleBotId(Number(e.target.value))}
-                                            disabled={isSending}
-                                            className="w-full px-3 py-2 border border-indigo-200 rounded-lg bg-white text-sm focus:ring-indigo-500 outline-none"
-                                        >
-                                            <option value={1941315571}>ربات کرمان موتور ۲۶۰۶ (1941315571)</option>
-                                            <option value={49108418}>ربات حسینی خودرو (49108418)</option>
-                                        </select>
+                                    <div className="p-3 mb-4 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 rounded-xl space-y-2">
+                                        <label className="text-xs font-bold text-violet-700 dark:text-violet-300 block">
+                                            ربات ارسال‌کننده بله:
+                                        </label>
+                                        <div className="flex gap-4">
+                                            <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="baleBotIdBroadcast"
+                                                    value={1941315571}
+                                                    checked={baleBotId === 1941315571}
+                                                    onChange={() => setBaleBotId(1941315571)}
+                                                    className="text-violet-600 focus:ring-violet-500"
+                                                />
+                                                <span>کرمان موتور ۲۶۰۶</span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="baleBotIdBroadcast"
+                                                    value={49108418}
+                                                    checked={baleBotId === 49108418}
+                                                    onChange={() => setBaleBotId(49108418)}
+                                                    className="text-violet-600 focus:ring-violet-500"
+                                                />
+                                                <span>حسینی خودرو</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 )}
 

@@ -326,45 +326,37 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         const number = selectedLead.Number;
 
         try {
-            const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
             if (type === 'SMS') {
                 await sendSMS(number, message);
+                await createCustomerJournal({
+                    userId: selectedLead.id,
+                    author: loggedInUser?.FullName || 'سیستم',
+                    content: `💬 پیامک ارسال شد:\n${message}`,
+                });
                 showToast('پیامک با موفقیت ارسال شد', 'success');
-                try {
-                    await createCustomerJournal({
-                        userId: selectedLead.id,
-                        content: `ارسال موفق پیامک - متن پیام:\n${message}`,
-                        author: authorName
-                    });
-                } catch (je) { console.error(je); }
             } else if (type === 'WHATSAPP') {
                 await sendMessage(number, message);
+                await createCustomerJournal({
+                    userId: selectedLead.id,
+                    author: loggedInUser?.FullName || 'سیستم',
+                    content: `💬 پیام واتساپ ارسال شد:\n${message}`,
+                });
                 showToast('پیام واتساپ با موفقیت ارسال شد', 'success');
-                try {
-                    await createCustomerJournal({
-                        userId: selectedLead.id,
-                        content: `ارسال موفق پیام در واتساپ - متن پیام:\n${message}`,
-                        author: authorName
-                    });
-                } catch (je) { console.error(je); }
             } else if (type === 'BALE') {
-                const finalBotId = botId || 1941315571;
-                await sendBaleMessage(finalBotId, number, message);
+                await sendBaleMessage(number, message, botId || 1941315571);
+                await createCustomerJournal({
+                    userId: selectedLead.id,
+                    author: loggedInUser?.FullName || 'سیستم',
+                    content: `💬 پیام بله ارسال شد:\n${message}`,
+                });
                 showToast('پیام بله با موفقیت ارسال شد', 'success');
-                try {
-                    await createCustomerJournal({
-                        userId: selectedLead.id,
-                        content: `ارسال موفق پیام در بله - متن پیام:\n${message}`,
-                        author: authorName
-                    });
-                } catch (je) { console.error(je); }
             }
             
             const data = await getLeadHistory(number);
             const parseDate = (dateString: string) => new Date(dateString.replace(' ', 'T'));
             setModalMessages(data.sort((a, b) => parseDate(a.createdAt).getTime() - parseDate(b.createdAt).getTime()));
-        } catch (err) {
-            showToast('ارسال پیام با خطا مواجه شد', 'error');
+        } catch (err: any) {
+            showToast(err.message || 'ارسال پیام با خطا مواجه شد', 'error');
             throw err;
         }
     };
@@ -441,7 +433,6 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
 
         let successCount = 0;
         let errorCount = 0;
-        const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
 
         if (type === 'SMS') {
             const numbers = selectedUsers.map(u => u.Number).filter(n => n && n.trim().length > 0);
@@ -449,18 +440,19 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             
             try {
                 await sendBulkSMS(numbers, message);
-                successCount = numbers.length;
-                onProgress({ sent: successCount, errors: 0 });
-                // Log journal entry for each user
                 for (const user of selectedUsers) {
                     try {
                         await createCustomerJournal({
                             userId: user.id,
-                            content: `ارسال موفق پیامک - متن پیام:\n${message}`,
-                            author: authorName
+                            author: loggedInUser?.FullName || 'سیستم',
+                            content: `💬 پیامک گروهی ارسال شد:\n${message}`,
                         });
-                    } catch (je) { console.error(je); }
+                    } catch (err) {
+                        console.error(`Failed to log timeline journal for SMS user ${user.id}`, err);
+                    }
                 }
+                successCount = numbers.length;
+                onProgress({ sent: successCount, errors: 0 });
             } catch (err) {
                 console.error("Bulk SMS failed", err);
                 errorCount = numbers.length;
@@ -474,23 +466,18 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             try {
                 if (type === 'WHATSAPP') {
                     await sendMessage(user.Number, message);
-                    try {
-                        await createCustomerJournal({
-                            userId: user.id,
-                            content: `ارسال موفق پیام در واتساپ - متن پیام:\n${message}`,
-                            author: authorName
-                        });
-                    } catch (je) { console.error(je); }
+                    await createCustomerJournal({
+                        userId: user.id,
+                        author: loggedInUser?.FullName || 'سیستم',
+                        content: `💬 پیام واتساپ گروهی ارسال شد:\n${message}`,
+                    });
                 } else if (type === 'BALE') {
-                    const finalBotId = botId || 1941315571;
-                    await sendBaleMessage(finalBotId, user.Number, message);
-                    try {
-                        await createCustomerJournal({
-                            userId: user.id,
-                            content: `ارسال موفق پیام در بله - متن پیام:\n${message}`,
-                            author: authorName
-                        });
-                    } catch (je) { console.error(je); }
+                    await sendBaleMessage(user.Number, message, botId || 1941315571);
+                    await createCustomerJournal({
+                        userId: user.id,
+                        author: loggedInUser?.FullName || 'سیستم',
+                        content: `💬 پیام بله گروهی ارسال شد:\n${message}`,
+                    });
                 }
                 successCount++;
             } catch (err) {

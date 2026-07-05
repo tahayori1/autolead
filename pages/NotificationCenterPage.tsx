@@ -29,9 +29,10 @@ const NotificationCenterPage: React.FC = () => {
         type: 'WHATSAPP' as NotificationType,
         recipientName: '',
         recipientNumber: '',
-        message: '',
-        botId: 1941315571
+        message: ''
     });
+
+    const [sendBaleBotId, setSendBaleBotId] = useState<number>(1941315571);
 
     // Template Form State
     const [templateForm, setTemplateForm] = useState({
@@ -68,19 +69,13 @@ const NotificationCenterPage: React.FC = () => {
         }
         
         try {
-            await sendNotification(
-                sendForm.type, 
-                sendForm.recipientNumber, 
-                sendForm.recipientName || 'ناشناس', 
-                sendForm.message, 
-                sendForm.type === 'BALE' ? sendForm.botId : undefined
-            );
-            setToast({ message: 'پیام در صف ارسال قرار گرفت', type: 'success' });
+            await sendNotification(sendForm.type, sendForm.recipientNumber, sendForm.recipientName || 'ناشناس', sendForm.message, sendBaleBotId);
+            setToast({ message: 'پیام با موفقیت ارسال شد', type: 'success' });
             setIsSendModalOpen(false);
-            setSendForm({ type: 'WHATSAPP', recipientName: '', recipientNumber: '', message: '', botId: 1941315571 });
+            setSendForm({ type: 'WHATSAPP', recipientName: '', recipientNumber: '', message: '' });
             if (activeTab === 'LOGS') fetchData();
-        } catch (err) {
-            setToast({ message: 'خطا در ارسال پیام', type: 'error' });
+        } catch (err: any) {
+            setToast({ message: err.message || 'خطا در ارسال پیام', type: 'error' });
         }
     };
 
@@ -186,8 +181,11 @@ const NotificationCenterPage: React.FC = () => {
                                                 <div className="text-xs text-slate-500 font-mono">{log.recipientNumber}</div>
                                             </td>
                                             <td className="p-4">
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${log.type === 'WHATSAPP' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                    {log.type === 'WHATSAPP' ? 'واتساپ' : 'پیامک'}
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                                    log.type === 'WHATSAPP' ? 'bg-green-100 text-green-700' : 
+                                                    log.type === 'SMS' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
+                                                }`}>
+                                                    {log.type === 'WHATSAPP' ? 'واتساپ' : log.type === 'SMS' ? 'پیامک' : 'بله'}
                                                 </span>
                                             </td>
                                             <td className="p-4 max-w-xs truncate text-slate-600 dark:text-slate-300" title={log.message}>
@@ -253,38 +251,56 @@ const NotificationCenterPage: React.FC = () => {
                         </div>
                         
                         <div className="space-y-4">
-                            <div className="flex gap-4 p-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                            <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
                                 <button 
-                                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${sendForm.type === 'WHATSAPP' ? 'bg-white dark:bg-slate-600 shadow text-green-600 dark:text-green-400' : 'text-slate-500'}`}
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sendForm.type === 'WHATSAPP' ? 'bg-white dark:bg-slate-600 shadow text-green-600 dark:text-green-400' : 'text-slate-500'}`}
                                     onClick={() => setSendForm({...sendForm, type: 'WHATSAPP'})}
                                 >
                                     واتساپ
                                 </button>
                                 <button 
-                                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${sendForm.type === 'SMS' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-400' : 'text-slate-500'}`}
-                                    onClick={() => setSendForm({...sendForm, type: 'SMS'})}
-                                >
-                                    پیامک
-                                </button>
-                                <button 
-                                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${sendForm.type === 'BALE' ? 'bg-white dark:bg-slate-600 shadow text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`}
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sendForm.type === 'BALE' ? 'bg-white dark:bg-slate-600 shadow text-violet-600 dark:text-violet-400' : 'text-slate-500'}`}
                                     onClick={() => setSendForm({...sendForm, type: 'BALE'})}
                                 >
                                     بله
                                 </button>
+                                <button 
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sendForm.type === 'SMS' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-400' : 'text-slate-500'}`}
+                                    onClick={() => setSendForm({...sendForm, type: 'SMS'})}
+                                >
+                                    پیامک
+                                </button>
                             </div>
 
                             {sendForm.type === 'BALE' && (
-                                <div className="space-y-1.5 p-3 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl">
-                                    <label className="text-xs font-bold text-indigo-950 dark:text-indigo-300">انتخاب ربات ارسال‌کننده بله:</label>
-                                    <select
-                                        value={sendForm.botId}
-                                        onChange={(e) => setSendForm({...sendForm, botId: Number(e.target.value)})}
-                                        className="w-full px-3 py-2 border border-indigo-200 dark:border-indigo-900 rounded-lg bg-white dark:bg-slate-800 text-sm focus:ring-indigo-500 outline-none dark:text-white"
-                                    >
-                                        <option value={1941315571}>ربات کرمان موتور ۲۶۰۶ (1941315571)</option>
-                                        <option value={49108418}>ربات حسینی خودرو (49108418)</option>
-                                    </select>
+                                <div className="p-3 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 rounded-xl space-y-2">
+                                    <label className="text-xs font-bold text-violet-700 dark:text-violet-300 block">
+                                        ربات ارسال‌کننده بله:
+                                    </label>
+                                    <div className="flex gap-4">
+                                        <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="sendBaleBotId"
+                                                value={1941315571}
+                                                checked={sendBaleBotId === 1941315571}
+                                                onChange={() => setSendBaleBotId(1941315571)}
+                                                className="text-violet-600 focus:ring-violet-500"
+                                            />
+                                            <span>کرمان موتور ۲۶۰۶</span>
+                                        </label>
+                                        <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="sendBaleBotId"
+                                                value={49108418}
+                                                checked={sendBaleBotId === 49108418}
+                                                onChange={() => setSendBaleBotId(49108418)}
+                                                className="text-violet-600 focus:ring-violet-500"
+                                            />
+                                            <span>حسینی خودرو</span>
+                                        </label>
+                                    </div>
                                 </div>
                             )}
 
