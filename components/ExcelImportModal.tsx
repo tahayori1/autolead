@@ -434,12 +434,17 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
             // Priority to VOIP/Instagram specific phone columns if selected
             let rawPhone = '';
             let isOutbound = false;
+            let rowLeadStatus = defaultStatus;
 
             if (importType === 'VOIP') {
                 if (vReasonIdx > -1) {
                     const reasonVal = String(row[vReasonIdx] || '').trim();
-                    if (reasonVal !== 'موفق') {
-                        return; // Skip if disconnection reason is not successful
+                    if (reasonVal === 'بدون پاسخ') {
+                        rowLeadStatus = LeadStatus.NEW;
+                    } else if (reasonVal === 'موفق') {
+                        rowLeadStatus = LeadStatus.CONTACTED;
+                    } else {
+                        return; // Skip if disconnection reason is other than successful or no answer
                     }
                 }
                 const rawType = vTypeIdx > -1 ? String(row[vTypeIdx] || '').trim() : '';
@@ -682,7 +687,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 City: rawCity || '',
                 Decription: detailedDesc,
                 reference: batchRef || (importType === 'INSTAGRAM' ? 'اینستاگرام' : importType === 'VOIP' ? 'تماس VOIP' : importType === 'SITE' ? 'سایت' : 'پنل پیامکی'),
-                leadStatus: defaultStatus,
+                leadStatus: rowLeadStatus,
                 RegisterTime: registerTimeStr,
                 LastAction: lastActionValue,
                 IP: '',
