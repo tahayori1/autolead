@@ -12,7 +12,8 @@ import {
 import { 
     ChartBar, Users, Car as CarIcon, Map, Megaphone, 
     Calendar, Filter, TrendingUp, Activity, ShoppingCart,
-    Copy, Check, FileText, Layers, Award, BarChart3, HelpCircle
+    Copy, Check, FileText, Layers, Award, BarChart3, HelpCircle,
+    PhoneCall, CheckCircle2, Flame, Share2, FileSpreadsheet
 } from 'lucide-react';
 
 // Declare moment from global scope
@@ -269,6 +270,46 @@ const ReportsPage: React.FC = () => {
         copyToClipboard(text);
     };
 
+    // Advanced Custom Date Range Filters
+    const [useCustomRange, setUseCustomRange] = useState<boolean>(false);
+    
+    const [customStartYear, setCustomStartYear] = useState<string>('1405');
+    const [customStartMonth, setCustomStartMonth] = useState<string>('01');
+    const [customStartDay, setCustomStartDay] = useState<string>('01');
+
+    const [customEndYear, setCustomEndYear] = useState<string>('1405');
+    const [customEndMonth, setCustomEndMonth] = useState<string>('12');
+    const [customEndDay, setCustomEndDay] = useState<string>('29');
+
+    // Report customization states
+    const [reportTitle, setReportTitle] = useState<string>('گزارش جامع شاخص‌های کلیدی عملکرد (KPI)');
+    const [reportSignature, setReportSignature] = useState<string>('🚗 سیستم هوشمند مدیریت سرنخ‌های حسینی خودرو');
+    const [reportCustomNote, setReportCustomNote] = useState<string>('');
+    const [includeDetails, setIncludeDetails] = useState<boolean>(true);
+    const [includeSources, setIncludeSources] = useState<boolean>(true);
+    const [includeMetrics, setIncludeMetrics] = useState<boolean>(true);
+    const [previewPeriod, setPreviewPeriod] = useState<'today' | 'week' | '28days' | 'custom' | 'all'>('today');
+
+    // Set custom date defaults to current Persian month start/today
+    useEffect(() => {
+        try {
+            const now = moment().locale('fa');
+            const currentJYear = now.jYear().toString();
+            const currentJMonth = (now.jMonth() + 1).toString().padStart(2, '0');
+            const currentJDay = now.jDate().toString().padStart(2, '0');
+            
+            setCustomStartYear(currentJYear);
+            setCustomStartMonth(currentJMonth);
+            setCustomStartDay('01');
+            
+            setCustomEndYear(currentJYear);
+            setCustomEndMonth(currentJMonth);
+            setCustomEndDay(currentJDay);
+        } catch (e) {
+            console.error("Error setting custom date defaults", e);
+        }
+    }, []);
+
     // Filters
     const [selectedMonth, setSelectedMonth] = useState<string>('all');
     const [selectedDay, setSelectedDay] = useState<string>('all');
@@ -300,6 +341,7 @@ const ReportsPage: React.FC = () => {
         setTimeRange(range);
         setSelectedMonth('all');
         setSelectedDay('all');
+        setUseCustomRange(false);
     };
 
     const handleManualFilterChange = (type: 'month' | 'day', value: string) => {
@@ -310,7 +352,24 @@ const ReportsPage: React.FC = () => {
             setSelectedDay(value);
         }
         setTimeRange('all');
+        setUseCustomRange(false);
     };
+
+    const startMoment = useMemo(() => {
+        try {
+            return moment(`${customStartYear}/${customStartMonth}/${customStartDay}`, 'jYYYY/jMM/jDD').locale('fa').startOf('day');
+        } catch(e) {
+            return null;
+        }
+    }, [customStartYear, customStartMonth, customStartDay]);
+
+    const endMoment = useMemo(() => {
+        try {
+            return moment(`${customEndYear}/${customEndMonth}/${customEndDay}`, 'jYYYY/jMM/jDD').locale('fa').endOf('day');
+        } catch(e) {
+            return null;
+        }
+    }, [customEndYear, customEndMonth, customEndDay]);
 
     // --- Filter Users based on Date ---
     const filteredUsers = useMemo(() => {
@@ -323,6 +382,12 @@ const ReportsPage: React.FC = () => {
                 m = moment(dateStr.replace(' ', 'T')).locale('fa');
             } catch (e) {
                 return false;
+            }
+
+            if (useCustomRange) {
+                if (startMoment && !m.isSameOrAfter(startMoment, 'day')) return false;
+                if (endMoment && !m.isSameOrBefore(endMoment, 'day')) return false;
+                return true;
             }
 
             if (timeRange !== 'all') {
@@ -339,7 +404,190 @@ const ReportsPage: React.FC = () => {
 
             return true;
         });
-    }, [users, selectedMonth, selectedDay, timeRange]);
+    }, [users, selectedMonth, selectedDay, timeRange, useCustomRange, startMoment, endMoment]);
+
+    // --- Process Data for Reference (Source) Distribution ---
+    const referenceStats = useMemo(() => {
+        const counts: Record<string, number> = {};
+        filteredUsers.forEach(user => {
+            let ref = user.reference ? user.reference.trim() : '';
+            if (!ref || ref === '-' || ref === 'undefined' || ref === 'null') {
+                ref = 'نامشخص';
+            }
+            if (ref === 'صفحه شرایط' || ref === 'صفحه خام شرایط' || ref === 'سایت') {
+                ref = 'سایت و لندینگ‌پیج';
+            }
+            counts[ref] = (counts[ref] || 0) + 1;
+        });
+        return Object.entries(counts)
+            .map(([name, count]) => ({ name, value: count }))
+            .sort((a, b) => b.value - a.value);
+    }, [filteredUsers]);
+
+    // --- Dynamic Synchronous Report Text Generator ---
+    const getReportTextForPeriod = (
+        period: 'today' | 'week' | '28days' | 'custom' | 'all',
+        title = reportTitle,
+        signature = reportSignature,
+        customNote = reportCustomNote,
+        incDetails = includeDetails,
+        incSources = includeSources,
+        incMetrics = includeMetrics
+    ) => {
+        const nowStr = moment().locale('fa').format('YYYY/MM/DD HH:mm');
+        let dateLabel = '';
+        let targetStats = kpiStats.daily;
+
+        const getStatusCounts = (leadsList: User[]) => {
+            const counts: Record<string, number> = {
+                [LeadStatus.NEW]: 0,
+                [LeadStatus.CONTACTED]: 0,
+                [LeadStatus.MEETING]: 0,
+                [LeadStatus.NEGOTIATION]: 0,
+                [LeadStatus.WON]: 0,
+                [LeadStatus.LOST]: 0,
+                [LeadStatus.NO_ANSWER]: 0,
+            };
+            leadsList.forEach(u => {
+                const status = u.leadStatus || LeadStatus.NEW;
+                if (counts[status] !== undefined) counts[status]++;
+            });
+            return counts;
+        };
+
+        if (useCustomRange || period === 'custom') {
+            dateLabel = `بازه دلخواه (${customStartYear}/${customStartMonth}/${customStartDay} تا ${customEndYear}/${customEndMonth}/${customEndDay})`;
+            targetStats = {
+                count: filteredUsers.length,
+                status: getStatusCounts(filteredUsers)
+            };
+        } else if (period === 'today') {
+            dateLabel = `امروز (${nowStr})`;
+            targetStats = kpiStats.daily;
+        } else if (period === 'week') {
+            dateLabel = '۷ روز اخیر';
+            targetStats = kpiStats.weekly;
+        } else if (period === '28days') {
+            dateLabel = '۲۸ روز اخیر';
+            targetStats = kpiStats.month28;
+        } else {
+            dateLabel = 'کل دوره';
+            targetStats = {
+                count: users.length,
+                status: getStatusCounts(users)
+            };
+        }
+
+        const count = targetStats.count;
+        const status = targetStats.status;
+
+        let text = `📊 *${title}* 📊\n📅 دوره گزارش: ${dateLabel}\n⚡ تعداد کل سرنخ‌های ورودی: ${count.toLocaleString('fa-IR')} سرنخ\n`;
+
+        if (customNote.trim()) {
+            text += `\n📝 *یادداشت مدیر:* \n${customNote}\n`;
+        }
+
+        if (incDetails) {
+            text += `\n---\n🔍 *تفکیک وضعیت سرنخ‌ها:*
+🆕 جدید: ${status[LeadStatus.NEW].toLocaleString('fa-IR')}
+📞 تماس گرفته شده: ${status[LeadStatus.CONTACTED].toLocaleString('fa-IR')}
+👥 جلسه حضوری: ${status[LeadStatus.MEETING].toLocaleString('fa-IR')}
+💬 در حال مذاکره: ${status[LeadStatus.NEGOTIATION].toLocaleString('fa-IR')}
+🎉 موفق (خرید): ${status[LeadStatus.WON].toLocaleString('fa-IR')}
+❌ ناموفق: ${status[LeadStatus.LOST].toLocaleString('fa-IR')}
+☎️ پاسخ نداد: ${status[LeadStatus.NO_ANSWER].toLocaleString('fa-IR')}\n`;
+        }
+
+        if (incMetrics) {
+            const contactedTotal = count - (status[LeadStatus.NEW] || 0);
+            const contactRate = count > 0 ? (((count - (status[LeadStatus.NEW] || 0)) / count) * 100).toFixed(1) : '0';
+            const meetingRate = contactedTotal > 0 ? ((( (status[LeadStatus.MEETING] || 0) + (status[LeadStatus.NEGOTIATION] || 0) + (status[LeadStatus.WON] || 0) ) / contactedTotal) * 100).toFixed(1) : '0';
+            const winRate = count > 0 ? (((status[LeadStatus.WON] || 0) / count) * 100).toFixed(1) : '0';
+
+            text += `\n---\n📈 *شاخص‌های کلیدی عملکرد:*
+🎯 نرخ تماس اولیه: ${contactRate}%
+👥 نرخ تبدیل به جلسه: ${meetingRate}%
+✅ نرخ موفقیت نهایی: ${winRate}%\n`;
+        }
+
+        if (incSources && referenceStats.length > 0) {
+            text += `\n---\n📣 *کانال‌های ورودی اصلی:* \n`;
+            referenceStats.slice(0, 3).forEach((src, sIdx) => {
+                text += `${sIdx + 1}. ${src.name}: ${src.value.toLocaleString('fa-IR')} سرنخ\n`;
+            });
+        }
+
+        text += `\n---\n${signature}`;
+        return text;
+    };
+
+    // --- Memoized Live Preview Text ---
+    const generatedReportText = useMemo(() => {
+        return getReportTextForPeriod(previewPeriod);
+    }, [
+        previewPeriod, useCustomRange, customStartYear, customStartMonth, customStartDay,
+        customEndYear, customEndMonth, customEndDay, reportTitle, reportSignature,
+        reportCustomNote, includeDetails, includeSources, includeMetrics, kpiStats, users,
+        filteredUsers, referenceStats
+    ]);
+
+    // --- Standard Industry KPIs ---
+    const extendedKpis = useMemo(() => {
+        const total = filteredUsers.length;
+        if (total === 0) {
+            return {
+                contactRate: '0',
+                meetingRate: '0',
+                winRate: '0',
+                noAnswerRate: '0',
+                activePipelineRate: '0',
+                topSource: '---',
+                topSourceCount: 0,
+            };
+        }
+
+        const newLeads = filteredUsers.filter(u => (u.leadStatus || LeadStatus.NEW) === LeadStatus.NEW).length;
+        const contacted = filteredUsers.filter(u => (u.leadStatus || LeadStatus.NEW) === LeadStatus.CONTACTED).length;
+        const noAnswer = filteredUsers.filter(u => (u.leadStatus || LeadStatus.NEW) === LeadStatus.NO_ANSWER).length;
+        const meeting = filteredUsers.filter(u => (u.leadStatus || LeadStatus.NEW) === LeadStatus.MEETING).length;
+        const negotiation = filteredUsers.filter(u => (u.leadStatus || LeadStatus.NEW) === LeadStatus.NEGOTIATION).length;
+        const won = filteredUsers.filter(u => (u.leadStatus || LeadStatus.NEW) === LeadStatus.WON).length;
+
+        const contactedTotal = total - newLeads;
+        const contactRate = total > 0 ? (((total - newLeads) / total) * 100).toFixed(1) : '0';
+        const meetingRate = contactedTotal > 0 ? (((meeting + negotiation + won) / contactedTotal) * 100).toFixed(1) : '0';
+        const winRate = total > 0 ? ((won / total) * 100).toFixed(1) : '0';
+        const noAnswerRate = total > 0 ? ((noAnswer / total) * 100).toFixed(1) : '0';
+        const activePipelineRate = total > 0 ? (((contacted + meeting + negotiation) / total) * 100).toFixed(1) : '0';
+
+        // Top reference source
+        const sourceCounts: Record<string, number> = {};
+        filteredUsers.forEach(u => {
+            let ref = u.reference ? u.reference.trim() : 'نامشخص';
+            if (!ref || ref === '-' || ref === 'undefined' || ref === 'null') ref = 'نامشخص';
+            if (ref === 'صفحه شرایط' || ref === 'صفحه خام شرایط' || ref === 'سایت') ref = 'سایت و لندینگ‌پیج';
+            sourceCounts[ref] = (sourceCounts[ref] || 0) + 1;
+        });
+
+        let topSource = '---';
+        let topSourceCount = 0;
+        Object.entries(sourceCounts).forEach(([src, count]) => {
+            if (count > topSourceCount && src !== 'نامشخص') {
+                topSource = src;
+                topSourceCount = count;
+            }
+        });
+
+        return {
+            contactRate,
+            meetingRate,
+            winRate,
+            noAnswerRate,
+            activePipelineRate,
+            topSource,
+            topSourceCount
+        };
+    }, [filteredUsers]);
 
     // --- Process Data for Registration Trend ---
     const dailyRegistrations = useMemo(() => {
@@ -437,24 +685,6 @@ const ReportsPage: React.FC = () => {
             .slice(0, 10); // Top 10
     }, [filteredUsers]);
 
-    // --- Process Data for Reference (Source) Distribution ---
-    const referenceStats = useMemo(() => {
-        const counts: Record<string, number> = {};
-        filteredUsers.forEach(user => {
-            let ref = user.reference ? user.reference.trim() : '';
-            if (!ref || ref === '-' || ref === 'undefined' || ref === 'null') {
-                ref = 'نامشخص';
-            }
-            if (ref === 'صفحه شرایط' || ref === 'صفحه خام شرایط' || ref === 'سایت') {
-                ref = 'سایت و لندینگ‌پیج';
-            }
-            counts[ref] = (counts[ref] || 0) + 1;
-        });
-        return Object.entries(counts)
-            .map(([name, count]) => ({ name, value: count }))
-            .sort((a, b) => b.value - a.value);
-    }, [filteredUsers]);
-
     // --- Order Stats ---
     const orderStats = useMemo(() => {
         const completed = orders.filter(o => o.status === OrderStatus.COMPLETED).length;
@@ -550,6 +780,155 @@ const ReportsPage: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Global Date Filters Card */}
+            <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white dark:bg-slate-800 p-5 rounded-[24px] shadow-sm border border-slate-100 dark:border-slate-700/60"
+            >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                        <Filter className="w-5 h-5 text-indigo-500" />
+                        <div>
+                            <h4 className="text-sm font-black text-slate-800 dark:text-white">بازه زمانی گزارش و شاخص‌های KPI</h4>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">یک بازه پیش‌فرض یا تاریخ دلخواه شمسی را جهت فیلتر پویای کل آمار انتخاب نمایید.</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Quick Presets */}
+                        <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl">
+                            {[
+                                { id: 'all', label: 'کل دوره' },
+                                { id: 'today', label: 'امروز' },
+                                { id: 'week', label: 'هفته اخیر' },
+                                { id: '28days', label: '۲۸ روز اخیر' }
+                            ].map(range => (
+                                <button 
+                                    key={range.id}
+                                    onClick={() => {
+                                        handleTimeRangeChange(range.id as TimeRange);
+                                        setUseCustomRange(false);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${(!useCustomRange && timeRange === range.id) ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                                >
+                                    {range.label}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setUseCustomRange(true)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${useCustomRange ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+                            >
+                                📅 تاریخ دلخواه شمسی
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Custom Persian Date Range Pickers */}
+                {useCustomRange && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 md:grid-cols-2 gap-4"
+                    >
+                        {/* Start Date */}
+                        <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
+                            <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 block">شروع دوره گزارش:</span>
+                            <div className="grid grid-cols-3 gap-2">
+                                {/* Day */}
+                                <div className="space-y-1">
+                                    <label className="text-[9px] text-slate-400 font-bold block">روز</label>
+                                    <select 
+                                        value={customStartDay} 
+                                        onChange={(e) => setCustomStartDay(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+                                    >
+                                        {Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(d => (
+                                            <option key={d} value={d}>{d}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {/* Month */}
+                                <div className="space-y-1">
+                                    <label className="text-[9px] text-slate-400 font-bold block">ماه</label>
+                                    <select 
+                                        value={customStartMonth} 
+                                        onChange={(e) => setCustomStartMonth(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+                                    >
+                                        {PERSIAN_MONTHS.map((m, idx) => {
+                                            const mVal = (idx + 1).toString().padStart(2, '0');
+                                            return <option key={mVal} value={mVal}>{m}</option>;
+                                        })}
+                                    </select>
+                                </div>
+                                {/* Year */}
+                                <div className="space-y-1">
+                                    <label className="text-[9px] text-slate-400 font-bold block">سال</label>
+                                    <select 
+                                        value={customStartYear} 
+                                        onChange={(e) => setCustomStartYear(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+                                    >
+                                        <option value="1404">۱۴۰۴</option>
+                                        <option value="1405">۱۴۰۵</option>
+                                        <option value="1406">۱۴۰۶</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* End Date */}
+                        <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
+                            <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 block">پایان دوره گزارش:</span>
+                            <div className="grid grid-cols-3 gap-2">
+                                {/* Day */}
+                                <div className="space-y-1">
+                                    <label className="text-[9px] text-slate-400 font-bold block">روز</label>
+                                    <select 
+                                        value={customEndDay} 
+                                        onChange={(e) => setCustomEndDay(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+                                    >
+                                        {Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(d => (
+                                            <option key={d} value={d}>{d}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {/* Month */}
+                                <div className="space-y-1">
+                                    <label className="text-[9px] text-slate-400 font-bold block">ماه</label>
+                                    <select 
+                                        value={customEndMonth} 
+                                        onChange={(e) => setCustomEndMonth(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+                                    >
+                                        {PERSIAN_MONTHS.map((m, idx) => {
+                                            const mVal = (idx + 1).toString().padStart(2, '0');
+                                            return <option key={mVal} value={mVal}>{m}</option>;
+                                        })}
+                                    </select>
+                                </div>
+                                {/* Year */}
+                                <div className="space-y-1">
+                                    <label className="text-[9px] text-slate-400 font-bold block">سال</label>
+                                    <select 
+                                        value={customEndYear} 
+                                        onChange={(e) => setCustomEndYear(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+                                    >
+                                        <option value="1404">۱۴۰۴</option>
+                                        <option value="1405">۱۴۰۵</option>
+                                        <option value="1406">۱۴۰۶</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </motion.div>
 
             {/* Render conditional views */}
             {activeSubTab === 'kpis' ? (
@@ -661,6 +1040,109 @@ const ReportsPage: React.FC = () => {
                             </button>
                         </motion.div>
                     </div>
+
+                    {/* Advanced KPI Standards Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {[
+                            {
+                                label: 'نرخ پیگیری اولیه',
+                                value: `${extendedKpis.contactRate}%`,
+                                desc: 'نسبت تماس‌ها به کل لیدها',
+                                icon: PhoneCall,
+                                color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/30'
+                            },
+                            {
+                                label: 'نرخ تشکیل جلسه',
+                                value: `${extendedKpis.meetingRate}%`,
+                                desc: 'جلسات حضوری به تماس‌ها',
+                                icon: Award,
+                                color: 'text-violet-600 bg-violet-50 dark:bg-violet-950/30'
+                            },
+                            {
+                                label: 'نرخ موفقیت نهایی',
+                                value: `${extendedKpis.winRate}%`,
+                                desc: 'خرید موفق به کل لیدها',
+                                icon: CheckCircle2,
+                                color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30'
+                            },
+                            {
+                                label: 'نرخ عدم پاسخ‌دهی',
+                                value: `${extendedKpis.noAnswerRate}%`,
+                                desc: 'لیدهای بی‌پاسخ به کل',
+                                icon: HelpCircle,
+                                color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30'
+                            },
+                            {
+                                label: 'پایپ‌لاین فعال مذاکره',
+                                value: `${extendedKpis.activePipelineRate}%`,
+                                desc: 'لیدهای در حال پیشرفت',
+                                icon: Flame,
+                                color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30'
+                            }
+                        ].map((kpi, kIdx) => (
+                            <motion.div
+                                key={kIdx}
+                                initial={{ opacity: 0, y: 15 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.1 * kIdx }}
+                                className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex flex-col justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-xl ${kpi.color}`}>
+                                        <kpi.icon className="w-5 h-5" />
+                                    </div>
+                                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{kpi.label}</span>
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="text-2xl font-black text-slate-900 dark:text-white font-mono">{kpi.value}</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold mt-1">{kpi.desc}</p>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    {/* Sources (منابع ورودی مشتریان) Section */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700/60"
+                    >
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                <Share2 className="w-5 h-5 text-pink-500" />
+                                منابع ورودی مشتریان (کانال‌های جذب)
+                            </h3>
+                            <span className="text-[11px] text-slate-400 font-bold">نمای توزیع کانال‌های ورودی لیدها</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {referenceStats.slice(0, 8).map((src, sIdx) => {
+                                const total = filteredUsers.length;
+                                const percent = total > 0 ? ((src.value / total) * 100).toFixed(1) : '0';
+                                return (
+                                    <div key={sIdx} className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100/60 dark:border-slate-800 space-y-2">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="font-black text-slate-700 dark:text-slate-300">{src.name}</span>
+                                            <span className="font-mono font-black text-slate-500">{src.value.toLocaleString('fa-IR')} لید</span>
+                                        </div>
+                                        <div className="w-full bg-slate-200/60 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                            <div 
+                                                className="bg-gradient-to-r from-pink-500 to-indigo-500 h-full rounded-full" 
+                                                style={{ width: `${percent}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold">
+                                            <span>سهم از کل لیدها</span>
+                                            <span>{percent}%</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {referenceStats.length === 0 && (
+                                <p className="text-center text-xs text-slate-400 py-6 col-span-full">هیچ منبع ورودی ثبت نشده است.</p>
+                            )}
+                        </div>
+                    </motion.div>
 
                     {/* Lead Status Breakdown Table & Sales Funnel */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -823,6 +1305,144 @@ const ReportsPage: React.FC = () => {
                             </p>
                         </motion.div>
                     </div>
+
+                    {/* Interactive Report Simulator & Customizer Card */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700/60"
+                    >
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2.5 bg-gradient-to-tr from-pink-500 to-rose-500 rounded-2xl text-white">
+                                <FileSpreadsheet className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 dark:text-white">شخصی‌سازی و پیش‌نمایش کپی آمار 📊</h3>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold">متن گزارش کپی شده را به دلخواه خود با انواع بخش‌ها، امضا، عنوان و یادداشت سفارشی سازی کنید.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                            {/* Controls Panel */}
+                            <div className="xl:col-span-5 space-y-6">
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-black text-indigo-500">تنظیمات محتوا</h4>
+                                    
+                                    {/* Report Period Selector */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 block">بازه زمانی گزارش کپی:</label>
+                                        <select
+                                            value={previewPeriod}
+                                            onChange={(e) => setPreviewPeriod(e.target.value as any)}
+                                            className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none text-xs font-bold"
+                                        >
+                                            <option value="all">کل دوره</option>
+                                            <option value="today">امروز</option>
+                                            <option value="week">هفته اخیر</option>
+                                            <option value="28days">۲۸ روز اخیر</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Report Title */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 block">عنوان گزارش:</label>
+                                        <input
+                                            type="text"
+                                            value={reportTitle}
+                                            onChange={(e) => setReportTitle(e.target.value)}
+                                            placeholder="مثال: گزارش عملکرد فروش"
+                                            className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none text-xs font-bold animate-pulse"
+                                        />
+                                    </div>
+
+                                    {/* Custom Note */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 block">یادداشت اختصاصی (اضافه به بالای گزارش):</label>
+                                        <textarea
+                                            value={reportCustomNote}
+                                            onChange={(e) => setReportCustomNote(e.target.value)}
+                                            placeholder="یادداشت کوتاهی که تمایل دارید در ابتدا نوشته شود..."
+                                            rows={2}
+                                            className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none text-xs font-bold resize-none"
+                                        />
+                                    </div>
+
+                                    {/* Report Signature */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 block">امضا و تبریک پایانی:</label>
+                                        <input
+                                            type="text"
+                                            value={reportSignature}
+                                            onChange={(e) => setReportSignature(e.target.value)}
+                                            placeholder="مثال: با آرزوی موفقیت، مدیریت فروش"
+                                            className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none text-xs font-bold"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                                    <h4 className="text-xs font-black text-rose-500">گزینه‌های نمایش</h4>
+                                    
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={includeDetails}
+                                            onChange={(e) => setIncludeDetails(e.target.checked)}
+                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                                        />
+                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">درج آمار تفکیکی وضعیت سرنخ‌ها</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={includeSources}
+                                            onChange={(e) => setIncludeSources(e.target.checked)}
+                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                                        />
+                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">درج برترین منابع ورودی مشتریان (کانال‌ها)</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={includeMetrics}
+                                            onChange={(e) => setIncludeMetrics(e.target.checked)}
+                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                                        />
+                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">درج نرخ‌های پیشرفته KPI (تبدیل و پیگیری)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Chat Preview Simulator */}
+                            <div className="xl:col-span-7 flex flex-col h-full justify-between">
+                                <div className="space-y-2 mb-3">
+                                    <span className="text-[11px] font-black text-slate-400 block">پیش‌نمایش زنده در پیام‌رسان‌ها (بله / تلگرام / واتساپ):</span>
+                                    
+                                    <div className="bg-slate-900 text-slate-100 rounded-[24px] p-5 shadow-inner border border-slate-800 font-mono text-[11px] leading-relaxed relative overflow-hidden min-h-[300px]">
+                                        {/* Chat header style */}
+                                        <div className="absolute top-0 inset-x-0 bg-slate-800/80 px-4 py-2 border-b border-slate-800 text-[10px] text-slate-400 font-black flex justify-between items-center">
+                                            <span>کانال گزارشات هوشمند 📊</span>
+                                            <span className="text-[9px] opacity-60">امروز</span>
+                                        </div>
+                                        
+                                        <div className="pt-8 overflow-y-auto max-h-[360px] whitespace-pre-wrap select-all selection:bg-indigo-500 font-mono text-xs">
+                                            {generatedReportText}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => copyToClipboard(generatedReportText)}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-2xl text-xs shadow-lg shadow-indigo-500/10 flex items-center justify-center gap-2 active:scale-95 transition-all mt-2"
+                                >
+                                    <Copy className="w-4 h-4" />
+                                    کپی گزارش شخصی‌سازی شده با ایموجی 📋📊
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
                 </div>
             ) : (
                 <div className="space-y-8">
