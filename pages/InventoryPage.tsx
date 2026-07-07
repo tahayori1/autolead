@@ -9,11 +9,14 @@ import { ConditionStatus, SaleType, PayType } from '../types';
 import type { CarSaleCondition, Car } from '../types';
 import Spinner from '../components/Spinner';
 import Toast from '../components/Toast';
+import PersianDatePicker from '../components/PersianDatePicker';
 import { 
     Boxes, Search, Filter, RefreshCw, Copy, Download, 
     Plus, Minus, Check, AlertTriangle, AlertCircle, X, ChevronDown, CheckCircle2,
     Calendar, Layers, Palette, DollarSign, Clock, HelpCircle, ArrowUpDown, Eye, Building2, Ticket
 } from 'lucide-react';
+
+declare const moment: any;
 
 type SortConfig = { key: keyof CarSaleCondition; direction: 'ascending' | 'descending' } | null;
 type ActiveTab = 'warehouse' | 'transfer' | 'customer';
@@ -777,6 +780,10 @@ interface CopyInventorySettingsModalProps {
 
 const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({ isOpen, onClose, conditions, activeTab, onCopySuccess }) => {
     const [headerText, setHeaderText] = useState('');
+    const [headerTitle, setHeaderTitle] = useState('');
+    const [showDateInHeader, setShowDateInHeader] = useState(true);
+    const [useCustomDate, setUseCustomDate] = useState(false);
+    const [customDate, setCustomDate] = useState('');
     const [footerText, setFooterText] = useState('https://t.me/kermanmotor2606');
     
     // Toggleable fields to include in copied text
@@ -791,13 +798,33 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     // Selected conditions selection state
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
+    const toPersianDigits = (str: string) => {
+        const p = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+        return str.replace(/[0-9]/g, w => p[parseInt(w)]);
+    };
+
+    // Sync header title and date configurations to headerText
+    useEffect(() => {
+        let dateString = '';
+        if (showDateInHeader) {
+            if (useCustomDate && customDate) {
+                const parts = customDate.split(' ');
+                const jalaliDate = parts[0] || '';
+                const jalaliTime = parts[1] || '';
+                dateString = `\n📅 تاریخ: ${toPersianDigits(jalaliDate)}${jalaliTime ? ` - ساعت: ${toPersianDigits(jalaliTime)}` : ''}`;
+            } else {
+                const now = new Date();
+                const d = now.toLocaleDateString('fa-IR');
+                const t = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+                dateString = `\n📅 تاریخ: ${d} - ساعت: ${t}`;
+            }
+        }
+        setHeaderText(`${headerTitle}${dateString}`);
+    }, [headerTitle, showDateInHeader, useCustomDate, customDate]);
+
     // Initialize defaults when modal opens or tab changes
     useEffect(() => {
         if (isOpen) {
-            const now = new Date();
-            const date = now.toLocaleDateString('fa-IR');
-            const time = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-            
             let defaultTitle = '📋 لیست موجودی خودروها و شرایط فروش فعال';
             if (activeTab === 'warehouse') {
                 defaultTitle = '🏢 لیست موجودی خودروهای نمایشگاه و انبار شرکت';
@@ -807,7 +834,13 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 defaultTitle = '📣 لیست شرایط فروش و خودروهای آماده ثبت‌نام (مشتریان)';
             }
 
-            setHeaderText(`${defaultTitle}\n📅 تاریخ: ${date} - ساعت: ${time}`);
+            setHeaderTitle(defaultTitle);
+            
+            // Set customDate to now
+            const nowJalali = typeof moment !== 'undefined' ? moment().locale('fa').format('jYYYY/jMM/jDD HH:mm') : '';
+            setCustomDate(nowJalali);
+            setUseCustomDate(false);
+            setShowDateInHeader(true);
             
             // By default select all conditions passed to modal
             setSelectedIds(new Set(conditions.map(c => c.id)));
@@ -929,13 +962,69 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                     <div className="w-full md:w-5/12 bg-slate-50 dark:bg-slate-900/50 p-6 overflow-y-auto border-l border-slate-100 dark:border-slate-700 space-y-6">
                         {/* Header Text Input */}
                         <div className="space-y-1.5">
-                            <label className="block text-[11px] font-black text-slate-500">متن سرتیتر پیام:</label>
+                            <label className="block text-[11px] font-black text-slate-500">متن سرتیتر پیام (بدون تاریخ):</label>
                             <textarea 
-                                value={headerText}
-                                onChange={e => setHeaderText(e.target.value)}
-                                rows={3}
+                                value={headerTitle}
+                                onChange={e => setHeaderTitle(e.target.value)}
+                                rows={2}
                                 className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold outline-none focus:border-indigo-500"
                             />
+                        </div>
+
+                        {/* Custom Date Configuration */}
+                        <div className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm">
+                            <label className="block text-[11px] font-black text-slate-500">تنظیمات تاریخ و زمان پیام:</label>
+                            
+                            <div className="flex flex-col gap-2.5">
+                                <label className="flex items-center gap-2.5 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={showDateInHeader} 
+                                        onChange={e => setShowDateInHeader(e.target.checked)} 
+                                        className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
+                                    />
+                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">درج تاریخ و زمان در سربرگ</span>
+                                </label>
+
+                                {showDateInHeader && (
+                                    <>
+                                        <div className="flex gap-4 mt-1 border-t border-slate-100 dark:border-slate-700 pt-2.5">
+                                            <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                <input 
+                                                    type="radio" 
+                                                    name="dateType" 
+                                                    checked={!useCustomDate} 
+                                                    onChange={() => setUseCustomDate(false)} 
+                                                    className="text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span>تاریخ امروز و هم‌اکنون</span>
+                                            </label>
+                                            <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                <input 
+                                                    type="radio" 
+                                                    name="dateType" 
+                                                    checked={useCustomDate} 
+                                                    onChange={() => setUseCustomDate(true)} 
+                                                    className="text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span>تاریخ دلخواه شمسی 📅</span>
+                                            </label>
+                                        </div>
+
+                                        {useCustomDate && (
+                                            <div className="space-y-1.5 mt-2" dir="rtl">
+                                                <label className="block text-[10px] font-bold text-slate-400">انتخاب تاریخ و زمان دلخواه:</label>
+                                                <PersianDatePicker 
+                                                    value={customDate} 
+                                                    onChange={setCustomDate} 
+                                                    enableTime={true} 
+                                                    placeholder="تاریخ و زمان را انتخاب کنید" 
+                                                />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         </div>
 
                         {/* Toggle Switches */}
