@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Wallet, Clock, Sparkles, Layers, Phone, Info } from 'lucide-react';
+import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import ConditionsPage from './pages/ConditionsPage';
+import InventoryPage from './pages/InventoryPage';
 import AnnouncementsHubPage from './pages/AnnouncementsHubPage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
@@ -57,7 +58,7 @@ import { ClipboardListIcon } from './components/icons/ClipboardListIcon';
 import { getMyProfile } from './services/api';
 import type { MyProfile } from './types';
 
-export type ActiveView = 'home' | 'announcements' | 'conditions' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
+export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
 
 interface MenuItemProps {
     label: string;
@@ -198,6 +199,7 @@ const App: React.FC = () => {
         { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
         { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
         { view: 'conditions' as ActiveView, label: 'بخشنامه‌های فروش (شرایط)', icon: <ConditionsIcon className="w-5 h-5" /> },
+        { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
         { view: 'car-prices' as ActiveView, label: 'قیمت روز خودرو', icon: <PriceIcon className="w-5 h-5" /> },
         { view: 'users' as ActiveView, label: 'مدیریت مشتریان (CRM)', icon: <UsersIcon className="w-5 h-5" /> },
         { view: 'customer-club' as ActiveView, label: 'باشگاه مشتریان', icon: <BadgeIcon className="w-5 h-5" /> },
@@ -245,6 +247,7 @@ const App: React.FC = () => {
             items: [
                 { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
                 { view: 'conditions' as ActiveView, label: 'بخشنامه‌های فروش (شرایط)', icon: <ConditionsIcon className="w-5 h-5" /> },
+                { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
                 { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
                 { view: 'car-prices' as ActiveView, label: 'قیمت روز خودروها', icon: <PriceIcon className="w-5 h-5" /> },
             ]
@@ -496,6 +499,7 @@ const App: React.FC = () => {
                 {activeView === 'home' && <HomePage onNavigate={handleNavigate} />}
                 {activeView === 'announcements' && <AnnouncementsHubPage loggedInUser={currentUser} />}
                 {activeView === 'conditions' && <ConditionsPage />}
+                {activeView === 'inventory' && <InventoryPage />}
                 {activeView === 'users' && (
                     <UsersPage 
                         initialFilters={userPageInitialFilters} 
