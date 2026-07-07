@@ -12,10 +12,11 @@ import Toast from '../components/Toast';
 import { 
     Boxes, Search, Filter, RefreshCw, Copy, Download, 
     Plus, Minus, Check, AlertTriangle, AlertCircle, X, ChevronDown, CheckCircle2,
-    Calendar, Layers, Palette, DollarSign, Clock, HelpCircle, ArrowUpDown
+    Calendar, Layers, Palette, DollarSign, Clock, HelpCircle, ArrowUpDown, Eye, Building2, Ticket
 } from 'lucide-react';
 
 type SortConfig = { key: keyof CarSaleCondition; direction: 'ascending' | 'descending' } | null;
+type ActiveTab = 'warehouse' | 'transfer' | 'customer';
 
 const InventoryPage: React.FC = () => {
     const [conditions, setConditions] = useState<CarSaleCondition[]>([]);
@@ -23,6 +24,9 @@ const InventoryPage: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    // Tab state
+    const [activeTab, setActiveTab] = useState<ActiveTab>('warehouse');
 
     // Filter and Sort states
     const [searchTerm, setSearchTerm] = useState<string>('');
@@ -69,7 +73,6 @@ const InventoryPage: React.FC = () => {
         setConditions(prev => prev.map(c => c.id === condition.id ? { ...c, stock_quantity: newQty } : c));
 
         try {
-            // If stock becomes 0, optionally mark status as sold out, or keep it.
             let updatedStatus = condition.status;
             if (newQty === 0 && condition.status === ConditionStatus.AVAILABLE) {
                 updatedStatus = ConditionStatus.SOLD_OUT;
@@ -132,7 +135,6 @@ const InventoryPage: React.FC = () => {
         setConditions(prev => prev.map(c => c.id === condition.id ? { ...c, status: newStatus } : c));
 
         try {
-            // If status is set to AVAILABLE but stock was 0, default to 5 or keep as is.
             let finalStock = condition.stock_quantity;
             if (newStatus === ConditionStatus.AVAILABLE && condition.stock_quantity === 0) {
                 finalStock = 5; // Default some stock
@@ -164,14 +166,27 @@ const InventoryPage: React.FC = () => {
         setSortConfig({ key, direction });
     };
 
-    // Filter & search conditions
+    // Filter & search conditions based on selected tab and options
     const filteredConditions = useMemo(() => {
         const filtered = conditions.filter(c => {
             const matchesSearch = c.car_model.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                  (c.descriptions && c.descriptions.toLowerCase().includes(searchTerm.toLowerCase()));
             const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus;
-            const matchesSaleType = selectedSaleType === 'all' || c.sale_type === selectedSaleType;
-            return matchesSearch && matchesStatus && matchesSaleType;
+            
+            // Tab condition
+            let matchesTab = true;
+            if (activeTab === 'warehouse') {
+                // physical warehouse / showroom cars (new_market & used)
+                matchesTab = c.sale_type === SaleType.NEW_MARKET || c.sale_type === SaleType.USED;
+            } else if (activeTab === 'transfer') {
+                // transfer drafts (حواله)
+                matchesTab = c.sale_type === SaleType.TRANSFER;
+            } else if (activeTab === 'customer') {
+                // Customer Showcase: can see all or filter by selectedSaleType
+                matchesTab = selectedSaleType === 'all' || c.sale_type === selectedSaleType;
+            }
+
+            return matchesSearch && matchesStatus && matchesTab;
         });
 
         if (sortConfig !== null) {
@@ -193,16 +208,26 @@ const InventoryPage: React.FC = () => {
             });
         }
         return filtered;
-    }, [conditions, searchTerm, selectedStatus, selectedSaleType, sortConfig]);
+    }, [conditions, searchTerm, selectedStatus, selectedSaleType, activeTab, sortConfig]);
 
-    // Summary Metrics
+    // Summary Metrics per Tab
     const metrics = useMemo(() => {
-        const totalModels = conditions.length;
-        const totalStock = conditions.reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
-        const availableCount = conditions.filter(c => c.status === ConditionStatus.AVAILABLE).length;
-        const availableStock = conditions.filter(c => c.status === ConditionStatus.AVAILABLE).reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
-        const capacityFullCount = conditions.filter(c => c.status === ConditionStatus.CAPACITY_FULL).length;
-        const soldOutCount = conditions.filter(c => c.status === ConditionStatus.SOLD_OUT).length;
+        // Compute stats for current view's items
+        const tabItems = conditions.filter(c => {
+            if (activeTab === 'warehouse') {
+                return c.sale_type === SaleType.NEW_MARKET || c.sale_type === SaleType.USED;
+            } else if (activeTab === 'transfer') {
+                return c.sale_type === SaleType.TRANSFER;
+            }
+            return true; // customer sees all
+        });
+
+        const totalModels = tabItems.length;
+        const totalStock = tabItems.reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
+        const availableCount = tabItems.filter(c => c.status === ConditionStatus.AVAILABLE).length;
+        const availableStock = tabItems.filter(c => c.status === ConditionStatus.AVAILABLE).reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
+        const capacityFullCount = tabItems.filter(c => c.status === ConditionStatus.CAPACITY_FULL).length;
+        const soldOutCount = tabItems.filter(c => c.status === ConditionStatus.SOLD_OUT).length;
 
         return {
             totalModels,
@@ -212,7 +237,7 @@ const InventoryPage: React.FC = () => {
             capacityFullCount,
             soldOutCount
         };
-    }, [conditions]);
+    }, [conditions, activeTab]);
 
     // CSV Export
     const handleExportCSV = () => {
@@ -221,11 +246,10 @@ const InventoryPage: React.FC = () => {
             return;
         }
 
-        const headers = [
-            "شناسه", "مدل خودرو", "سال ساخت", "نوع فروش",
-            "نحوه پرداخت", "رنگ‌های موجود", "زمان تحویل",
-            "قیمت / پیش‌پرداخت", "تعداد موجودی", "وضعیت"
-        ];
+        // Customer view has no stock column to preserve privacy!
+        const headers = activeTab === 'customer' 
+            ? ["شناسه", "مدل خودرو", "سال ساخت", "نوع فروش", "نحوه پرداخت", "رنگ‌های موجود", "زمان تحویل", "قیمت / پیش‌پرداخت", "وضعیت"]
+            : ["شناسه", "مدل خودرو", "سال ساخت", "نوع فروش", "نحوه پرداخت", "رنگ‌های موجود", "زمان تحویل", "قیمت / پیش‌پرداخت", "تعداد موجودی", "وضعیت"];
 
         const escapeCSV = (value: any): string => {
             const str = String(value ?? '');
@@ -235,18 +259,24 @@ const InventoryPage: React.FC = () => {
             return str;
         };
 
-        const csvRows = filteredConditions.map(c => [
-            c.id,
-            c.car_model,
-            c.model,
-            c.sale_type,
-            c.pay_type,
-            c.colors.join(' - '),
-            c.delivery_time,
-            c.initial_deposit,
-            c.stock_quantity,
-            c.status
-        ].map(escapeCSV).join(','));
+        const csvRows = filteredConditions.map(c => {
+            const basicFields = [
+                c.id,
+                c.car_model,
+                c.model,
+                c.sale_type,
+                c.pay_type,
+                c.colors.join(' - '),
+                c.delivery_time,
+                c.initial_deposit,
+            ];
+
+            if (activeTab === 'customer') {
+                return [...basicFields, c.status].map(escapeCSV).join(',');
+            } else {
+                return [...basicFields, c.stock_quantity, c.status].map(escapeCSV).join(',');
+            }
+        });
 
         const csvContent = [headers.join(','), ...csvRows].join('\n');
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM for Excel RTL support
@@ -256,7 +286,12 @@ const InventoryPage: React.FC = () => {
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
         const date = new Date().toLocaleDateString('fa-IR').replace(/\//g, '-');
-        link.setAttribute("download", `لیست_موجودی_خودرو_${date}.csv`);
+        
+        let tabLabel = 'موجودی_انبار';
+        if (activeTab === 'transfer') tabLabel = 'موجودی_حواله';
+        if (activeTab === 'customer') tabLabel = 'موجودی_مشتریان_بدون_تعداد';
+
+        link.setAttribute("download", `لیست_${tabLabel}_${date}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -265,31 +300,6 @@ const InventoryPage: React.FC = () => {
         
         showToast('خروجی اکسل (CSV) با موفقیت دریافت شد.', 'success');
     };
-
-    if (loading) {
-        return (
-            <div className="flex h-96 justify-center items-center">
-                <Spinner />
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="p-8 text-center">
-                <div className="max-w-md mx-auto bg-white dark:bg-slate-800 p-6 rounded-2xl border border-rose-100 dark:border-rose-950/30 shadow-sm space-y-4">
-                    <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-                    <h3 className="text-base font-black text-slate-800 dark:text-white">{error}</h3>
-                    <button 
-                        onClick={fetchAllData}
-                        className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all"
-                    >
-                        تلاش مجدد
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="p-4 lg:p-8 space-y-6 text-right" dir="rtl">
@@ -301,8 +311,8 @@ const InventoryPage: React.FC = () => {
                             <Boxes className="w-6 h-6" />
                         </div>
                         <div>
-                            <h2 className="text-xl lg:text-2xl font-black text-slate-800 dark:text-white">لیست موجودی خودروها</h2>
-                            <p className="text-[11px] lg:text-xs text-slate-400 dark:text-slate-500 font-bold">مدیریت و نظارت بر تعداد موجودی، رنگ‌ها و وضعیت فروش انواع خودروها بر اساس بخشنامه‌ها</p>
+                            <h2 className="text-xl lg:text-2xl font-black text-slate-800 dark:text-white">پنل مدیریت موجودی خودروها</h2>
+                            <p className="text-[11px] lg:text-xs text-slate-400 dark:text-slate-500 font-bold">بخش‌بندی موجودی فیزیکی انبار، حواله‌ها و نمای ایمن مشتری بدون اعلام تعداد دقیق</p>
                         </div>
                     </div>
                 </div>
@@ -314,7 +324,7 @@ const InventoryPage: React.FC = () => {
                         className="flex-1 md:flex-initial bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50"
                     >
                         <Copy className="w-4 h-4 text-indigo-500" />
-                        کپی لیست موجودی 📋
+                        {activeTab === 'customer' ? 'کپی نسخه مشتریان (بدون تعداد) 📋' : 'کپی هوشمند آمار 📋'}
                     </button>
                     
                     <button
@@ -336,16 +346,67 @@ const InventoryPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* KPI Cards / Statistics */}
+            {/* Elegant Tab Selector */}
+            <div className="flex flex-wrap p-1 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-3xl border border-slate-200/50 dark:border-slate-800/40 gap-1 md:gap-0">
+                <button
+                    onClick={() => {
+                        setActiveTab('warehouse');
+                        setSearchTerm('');
+                    }}
+                    className={`flex-1 min-w-[120px] flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-xs font-black transition-all ${
+                        activeTab === 'warehouse'
+                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/40 dark:border-slate-700/50'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Building2 className="w-4 h-4" />
+                    <span>موجودی انبار و نمایشگاه 🏢</span>
+                </button>
+                
+                <button
+                    onClick={() => {
+                        setActiveTab('transfer');
+                        setSearchTerm('');
+                    }}
+                    className={`flex-1 min-w-[120px] flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-xs font-black transition-all ${
+                        activeTab === 'transfer'
+                            ? 'bg-white dark:bg-slate-800 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200/40 dark:border-slate-700/50'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Ticket className="w-4 h-4" />
+                    <span>موجودی حواله 🎫</span>
+                </button>
+
+                <button
+                    onClick={() => {
+                        setActiveTab('customer');
+                        setSearchTerm('');
+                    }}
+                    className={`flex-1 min-w-[120px] flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-xs font-black transition-all ${
+                        activeTab === 'customer'
+                            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/40 dark:border-slate-700/50'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Eye className="w-4 h-4" />
+                    <span>لیست موجودی مشتریان 👥 (بدون تعداد)</span>
+                </button>
+            </div>
+
+            {/* KPI Cards / Statistics dynamic per tab */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total Models */}
+                {/* Metric 1 */}
                 <motion.div 
+                    layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
                 >
                     <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">کل تیپ‌های خودرویی</span>
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">
+                            {activeTab === 'warehouse' ? 'تیپ‌های نمایشگاه و انبار' : activeTab === 'transfer' ? 'تعداد کل بخشنامه‌های حواله' : 'کل خودروهای قابل ارایه'}
+                        </span>
                         <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
                             {metrics.totalModels.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">تیپ</span>
                         </h4>
@@ -355,35 +416,56 @@ const InventoryPage: React.FC = () => {
                     </div>
                 </motion.div>
 
-                {/* Total Stock */}
-                <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
-                >
-                    <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">مجموع خودروهای انبار</span>
-                        <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
-                            {metrics.totalStock.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">دستگاه</span>
-                        </h4>
-                    </div>
-                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
-                        <Boxes className="w-6 h-6" />
-                    </div>
-                </motion.div>
+                {/* Metric 2 (Hidden or modified for customer tab to hide absolute count) */}
+                {activeTab !== 'customer' ? (
+                    <motion.div 
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                    >
+                        <div className="space-y-1.5">
+                            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">
+                                {activeTab === 'warehouse' ? 'مجموع خودروهای انبار' : 'مجموع تعداد حواله قابل واگذاری'}
+                            </span>
+                            <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                                {metrics.totalStock.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">{activeTab === 'warehouse' ? 'دستگاه' : 'فقره'}</span>
+                            </h4>
+                        </div>
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                            <Boxes className="w-6 h-6" />
+                        </div>
+                    </motion.div>
+                ) : (
+                    <motion.div 
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                    >
+                        <div className="space-y-1.5">
+                            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">روش‌های فروش فعال برای مشتری</span>
+                            <h4 className="text-2xl font-black text-emerald-600 font-mono">
+                                {conditions.length.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">کانال</span>
+                            </h4>
+                        </div>
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                            <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                    </motion.div>
+                )}
 
-                {/* Available Stock */}
+                {/* Metric 3 */}
                 <motion.div 
+                    layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
                     className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
                 >
                     <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">موجودی فعال (آماده فروش)</span>
-                        <h4 className="text-2xl font-black text-emerald-600 font-mono">
-                            {metrics.availableStock.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">دستگاه</span>
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">آماده واگذاری / موجود</span>
+                        <h4 className="text-2xl font-black text-emerald-600 font-mono font-bold">
+                            {metrics.availableCount.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">تیپ فعال</span>
                         </h4>
                     </div>
                     <div className="p-3 bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 rounded-2xl">
@@ -391,15 +473,15 @@ const InventoryPage: React.FC = () => {
                     </div>
                 </motion.div>
 
-                {/* Blocked / Out Of Stock */}
+                {/* Metric 4 */}
                 <motion.div 
+                    layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
                     className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
                 >
                     <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">اتمام موجودی / تکمیل ظرفیت</span>
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">اتمام ظرفیت / فروخته شد</span>
                         <h4 className="text-2xl font-black text-rose-500 font-mono">
                             {(metrics.soldOutCount + metrics.capacityFullCount).toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">مورد</span>
                         </h4>
@@ -449,23 +531,25 @@ const InventoryPage: React.FC = () => {
                         <ChevronDown className="w-3 h-3 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
 
-                    {/* Filter Sale Type */}
-                    <div className="w-full lg:w-48 relative">
-                        <Layers className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <select
-                            value={selectedSaleType}
-                            onChange={(e) => setSelectedSaleType(e.target.value as any)}
-                            className="w-full pr-9 pl-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-xs font-bold appearance-none cursor-pointer"
-                        >
-                            <option value="all">همه روش‌های فروش</option>
-                            <option value={SaleType.FACTORY_REGISTRATION}>ثبت‌نام کارخانه</option>
-                            <option value={SaleType.TRANSFER}>حواله</option>
-                            <option value={SaleType.LEASING}>لیزینگی</option>
-                            <option value={SaleType.NEW_MARKET}>صفر بازار</option>
-                            <option value={SaleType.USED}>کارکرده</option>
-                        </select>
-                        <ChevronDown className="w-3 h-3 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
+                    {/* Filter Sale Type (Only useful for customer tab as others are strict) */}
+                    {activeTab === 'customer' && (
+                        <div className="w-full lg:w-48 relative">
+                            <Layers className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <select
+                                value={selectedSaleType}
+                                onChange={(e) => setSelectedSaleType(e.target.value as any)}
+                                className="w-full pr-9 pl-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-xs font-bold appearance-none cursor-pointer"
+                            >
+                                <option value="all">همه روش‌های فروش</option>
+                                <option value={SaleType.FACTORY_REGISTRATION}>ثبت‌نام کارخانه</option>
+                                <option value={SaleType.TRANSFER}>حواله</option>
+                                <option value={SaleType.LEASING}>لیزینگی</option>
+                                <option value={SaleType.NEW_MARKET}>صفر بازار</option>
+                                <option value={SaleType.USED}>کارکرده</option>
+                            </select>
+                            <ChevronDown className="w-3 h-3 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -487,9 +571,9 @@ const InventoryPage: React.FC = () => {
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
-                                <th className="p-4">کانال جذب / نوع فروش</th>
+                                <th className="p-4">نوع عرضه / فروش</th>
                                 <th className="p-4">نحوه پرداخت</th>
-                                <th className="p-4">رنگ‌های موجود</th>
+                                <th className="p-4">رنگ‌های عرضه شده</th>
                                 <th className="p-4">زمان تحویل</th>
                                 <th onClick={() => handleSort('initial_deposit')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
                                     <div className="flex items-center gap-1.5 justify-start">
@@ -497,13 +581,18 @@ const InventoryPage: React.FC = () => {
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
-                                <th onClick={() => handleSort('stock_quantity')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors min-w-[160px]">
-                                    <div className="flex items-center gap-1.5 justify-start">
-                                        <span>موجودی انبار</span>
-                                        <ArrowUpDown className="w-3 h-3" />
-                                    </div>
-                                </th>
-                                <th className="p-4 min-w-[140px]">وضعیت خودرو</th>
+                                
+                                {/* Omit Stock Column completely in Customer facing Tab */}
+                                {activeTab !== 'customer' && (
+                                    <th onClick={() => handleSort('stock_quantity')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors min-w-[160px]">
+                                        <div className="flex items-center gap-1.5 justify-start">
+                                            <span>موجودی انبار</span>
+                                            <ArrowUpDown className="w-3 h-3" />
+                                        </div>
+                                    </th>
+                                )}
+
+                                <th className="p-4 min-w-[140px]">{activeTab === 'customer' ? 'وضعیت عرضه' : 'مدیریت وضعیت'}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-xs text-slate-700 dark:text-slate-300 font-medium">
@@ -517,7 +606,9 @@ const InventoryPage: React.FC = () => {
                                         {/* Car Model */}
                                         <td className="p-4">
                                             <div className="font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                                    activeTab === 'warehouse' ? 'bg-indigo-500' : activeTab === 'transfer' ? 'bg-sky-500' : 'bg-emerald-500'
+                                                }`}></span>
                                                 {condition.car_model}
                                             </div>
                                         </td>
@@ -573,52 +664,69 @@ const InventoryPage: React.FC = () => {
                                             }
                                         </td>
 
-                                        {/* INTERACTIVE STOCK COUNTER */}
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-1.5" dir="ltr">
-                                                <button
-                                                    onClick={() => handleStockChange(condition, 1)}
-                                                    className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                                                >
-                                                    <Plus className="w-3.5 h-3.5" />
-                                                </button>
-                                                
-                                                <input
-                                                    type="text"
-                                                    value={condition.stock_quantity === 0 ? '0' : condition.stock_quantity}
-                                                    onChange={(e) => handleDirectStockChange(condition, e.target.value)}
-                                                    className="w-12 py-1 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-center font-mono font-black text-xs"
-                                                />
+                                        {/* INTERACTIVE STOCK COUNTER (ONLY in admin/staff tabs, hidden in Customer view) */}
+                                        {activeTab !== 'customer' && (
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-1.5" dir="ltr">
+                                                    <button
+                                                        onClick={() => handleStockChange(condition, 1)}
+                                                        className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    
+                                                    <input
+                                                        type="text"
+                                                        value={condition.stock_quantity === 0 ? '0' : condition.stock_quantity}
+                                                        onChange={(e) => handleDirectStockChange(condition, e.target.value)}
+                                                        className="w-12 py-1 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-center font-mono font-black text-xs"
+                                                    />
 
-                                                <button
-                                                    onClick={() => handleStockChange(condition, -1)}
-                                                    disabled={condition.stock_quantity <= 0}
-                                                    className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                                                >
-                                                    <Minus className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
-                                        </td>
+                                                    <button
+                                                        onClick={() => handleStockChange(condition, -1)}
+                                                        disabled={condition.stock_quantity <= 0}
+                                                        className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                                    >
+                                                        <Minus className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        )}
 
-                                        {/* INTERACTIVE STATUS BADGE SELECTOR */}
+                                        {/* STATUS BADGE (Interactive in admin tabs, clean static view-only in customer tab) */}
                                         <td className="p-4">
-                                            <div className="relative">
-                                                <select
-                                                    value={condition.status}
-                                                    onChange={(e) => handleStatusChange(condition, e.target.value as ConditionStatus)}
-                                                    className={`px-2 py-1 rounded-lg text-[10px] font-black border-none outline-none cursor-pointer appearance-none ${
-                                                        isAvailable 
-                                                            ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' 
-                                                            : isCapacityFull
-                                                                ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
-                                                                : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400'
-                                                    }`}
-                                                >
-                                                    <option value={ConditionStatus.AVAILABLE}>🟢 موجود</option>
-                                                    <option value={ConditionStatus.CAPACITY_FULL}>🟡 تکمیل ظرفیت</option>
-                                                    <option value={ConditionStatus.SOLD_OUT}>🔴 فروخته شد</option>
-                                                </select>
-                                            </div>
+                                            {activeTab === 'customer' ? (
+                                                <span className={`px-3 py-1.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
+                                                    isAvailable 
+                                                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                                        : isCapacityFull
+                                                            ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
+                                                            : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
+                                                }`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                                        isAvailable ? 'bg-emerald-500' : isCapacityFull ? 'bg-amber-500' : 'bg-rose-500'
+                                                    }`}></span>
+                                                    {condition.status}
+                                                </span>
+                                            ) : (
+                                                <div className="relative">
+                                                    <select
+                                                        value={condition.status}
+                                                        onChange={(e) => handleStatusChange(condition, e.target.value as ConditionStatus)}
+                                                        className={`px-2 py-1 rounded-lg text-[10px] font-black border-none outline-none cursor-pointer appearance-none ${
+                                                            isAvailable 
+                                                                ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' 
+                                                                : isCapacityFull
+                                                                    ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
+                                                                    : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400'
+                                                        }`}
+                                                    >
+                                                        <option value={ConditionStatus.AVAILABLE}>🟢 موجود</option>
+                                                        <option value={ConditionStatus.CAPACITY_FULL}>🟡 تکمیل ظرفیت</option>
+                                                        <option value={ConditionStatus.SOLD_OUT}>🔴 فروخته شد</option>
+                                                    </select>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -626,9 +734,9 @@ const InventoryPage: React.FC = () => {
                             
                             {filteredConditions.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="p-12 text-center text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={activeTab === 'customer' ? 8 : 9} className="p-12 text-center text-slate-400 dark:text-slate-500 font-bold">
                                         <Boxes className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                                        هیچ خودرو یا بخشنامه‌ای با فیلترهای کنونی یافت نشد.
+                                        هیچ خودرویی با فیلترهای کنونی در این بخش یافت نشد.
                                     </td>
                                 </tr>
                             )}
@@ -642,6 +750,7 @@ const InventoryPage: React.FC = () => {
                 isOpen={isCopyModalOpen} 
                 onClose={() => setIsCopyModalOpen(false)} 
                 conditions={filteredConditions} 
+                activeTab={activeTab}
                 onCopySuccess={() => showToast('لیست موجودی با موفقیت در حافظه موقت کپی شد! 📋', 'success')}
             />
 
@@ -662,10 +771,11 @@ interface CopyInventorySettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
     conditions: CarSaleCondition[];
+    activeTab: ActiveTab;
     onCopySuccess: () => void;
 }
 
-const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({ isOpen, onClose, conditions, onCopySuccess }) => {
+const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({ isOpen, onClose, conditions, activeTab, onCopySuccess }) => {
     const [headerText, setHeaderText] = useState('');
     const [footerText, setFooterText] = useState('https://t.me/kermanmotor2606');
     
@@ -681,25 +791,41 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     // Selected conditions selection state
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-    // Initialize defaults when modal opens
+    // Initialize defaults when modal opens or tab changes
     useEffect(() => {
         if (isOpen) {
             const now = new Date();
             const date = now.toLocaleDateString('fa-IR');
             const time = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-            setHeaderText(`📋 لیست موجودی خودروها و شرایط فروش فعال\n📅 تاریخ: ${date} - ساعت: ${time}`);
+            
+            let defaultTitle = '📋 لیست موجودی خودروها و شرایط فروش فعال';
+            if (activeTab === 'warehouse') {
+                defaultTitle = '🏢 لیست موجودی خودروهای نمایشگاه و انبار شرکت';
+            } else if (activeTab === 'transfer') {
+                defaultTitle = '🎫 لیست حواله‌های ثبت‌نامی و آماده واگذاری';
+            } else if (activeTab === 'customer') {
+                defaultTitle = '📣 لیست شرایط فروش و خودروهای آماده ثبت‌نام (مشتریان)';
+            }
+
+            setHeaderText(`${defaultTitle}\n📅 تاریخ: ${date} - ساعت: ${time}`);
             
             // By default select all conditions passed to modal
             setSelectedIds(new Set(conditions.map(c => c.id)));
+            
+            // For customer facing, strictly hide and disable stock qty
+            if (activeTab === 'customer') {
+                setIncludeStockQty(false);
+            } else {
+                setIncludeStockQty(true);
+            }
         }
-    }, [isOpen, conditions]);
+    }, [isOpen, conditions, activeTab]);
 
     const handleToggleCondition = (id: number) => {
         setSelectedIds(prev => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
             else next.add(id);
-            return next;
             return next;
         });
     };
@@ -728,7 +854,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
             let lines = [title];
 
             if (includeSaleType && c.sale_type) {
-                lines.push(`🔹 کانال جذب/فروش: ${c.sale_type}`);
+                lines.push(`🔹 روش واگذاری: ${c.sale_type}`);
             }
             if (includePayType && c.pay_type) {
                 lines.push(`💳 نحوه پرداخت: ${c.pay_type}`);
@@ -743,13 +869,25 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 const label = c.pay_type === 'نقدی' ? 'قیمت' : 'پیش‌پرداخت';
                 lines.push(`💰 ${label}: ${c.initial_deposit.toLocaleString('fa-IR')} تومان`);
             }
-            if (includeStockQty) {
+
+            // Absolutely no quantity details for customer facing mode!
+            if (activeTab !== 'customer' && includeStockQty) {
                 if (c.status === ConditionStatus.SOLD_OUT) {
                     lines.push(`📦 وضعیت موجودی: 🔴 اتمام موجودی انبار`);
                 } else if (c.status === ConditionStatus.CAPACITY_FULL) {
                     lines.push(`📦 وضعیت موجودی: 🟡 تکمیل ظرفیت ثبت‌نام`);
                 } else {
-                    lines.push(`📦 تعداد موجودی انبار: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'} دستگاه`);
+                    const label = activeTab === 'transfer' ? 'حواله موجود' : 'دستگاه موجود در انبار';
+                    lines.push(`📦 ${label}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
+                }
+            } else if (activeTab === 'customer') {
+                // For customer, only mention status text safely without any numbers!
+                if (c.status === ConditionStatus.SOLD_OUT) {
+                    lines.push(`📦 وضعیت: 🔴 اتمام ظرفیت فروش`);
+                } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                    lines.push(`📦 وضعیت: 🟡 تکمیل ظرفیت موقت`);
+                } else {
+                    lines.push(`📦 وضعیت: 🟢 فعال و آماده ثبت‌نام`);
                 }
             }
 
@@ -758,7 +896,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
 
         return `${headerText}\n\n${rows.join('\n\n───────────────────\n\n')}\n\n${footerText}`;
     }, [
-        conditions, selectedIds, headerText, footerText,
+        conditions, selectedIds, headerText, footerText, activeTab,
         includeModelYear, includeSaleType, includePayType,
         includeColors, includeDeliveryTime, includePrice, includeStockQty
     ]);
@@ -778,8 +916,8 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 {/* Modal Header */}
                 <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
                     <div>
-                        <h3 className="text-lg lg:text-xl font-black text-slate-800 dark:text-white">شخصی‌سازی و کپی لیست موجودی 📊📋</h3>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">بخش‌ها و موجودی‌های مورد نظر خود را جهت کپی در پیام‌رسان‌ها گزینش نمایید.</p>
+                        <h3 className="text-lg lg:text-xl font-black text-slate-800 dark:text-white">شخصی‌سازی و کپی لیست {activeTab === 'customer' ? 'مشتریان (بدون تعداد)' : 'موجودی'} 📊📋</h3>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">بخش‌ها و موارد دلخواه را جهت کپی در پیام‌رسان‌ها گزینش نمایید.</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">
                         <X className="text-slate-500 w-5 h-5" />
@@ -826,12 +964,20 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                                 </label>
                                 <label className="flex items-center gap-2.5 cursor-pointer bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-sm">
                                     <input type="checkbox" checked={includePrice} onChange={e => setIncludePrice(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">قیمت نهایی / علی‌الحساب</span>
+                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">قیمت نهایی / پیش‌پرداخت</span>
                                 </label>
-                                <label className="flex items-center gap-2.5 cursor-pointer bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-sm col-span-2">
-                                    <input type="checkbox" checked={includeStockQty} onChange={e => setIncludeStockQty(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">نمایش تعداد دقیق موجودی (یا برچسب اتمام انبار)</span>
-                                </label>
+                                
+                                {activeTab !== 'customer' ? (
+                                    <label className="flex items-center gap-2.5 cursor-pointer bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-sm col-span-2">
+                                        <input type="checkbox" checked={includeStockQty} onChange={e => setIncludeStockQty(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
+                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">نمایش تعداد دقیق موجودی</span>
+                                    </label>
+                                ) : (
+                                    <div className="col-span-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-xs font-bold flex items-center gap-2">
+                                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                        <span>تعداد دقیق موجودی به دلیل نمای ایمن مشتری به طور خودکار فیلتر و حذف شده است.</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -874,10 +1020,10 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Preview Panel (Telegram Style Simulator) */}
+                    {/* Preview Panel (Telegram/Social Media Style Simulator) */}
                     <div className="flex-1 p-6 overflow-y-auto bg-slate-100 dark:bg-slate-900/60 flex flex-col justify-between">
                         <div className="space-y-2">
-                            <span className="text-[11px] font-black text-slate-400 block">پیش‌نمایش نهایی متن خروجی کپی شده:</span>
+                            <span className="text-[11px] font-black text-slate-400 block">پیش‌نمایش نهایی متن کپی شده:</span>
                             
                             <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-inner whitespace-pre-wrap text-xs leading-relaxed dark:text-slate-200 font-mono select-all selection:bg-indigo-100">
                                 {generatedText}
