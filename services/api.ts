@@ -578,7 +578,11 @@ export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' 
     
     return result;
 };
-
+export const getAllCustomerJournals = async (): Promise<CustomerJournal[]> => {
+    const response = await fetch(JOURNALS_URL, { headers: getAuthHeaders() });
+    const data = await handleResponse(response);
+    return Array.isArray(data) ? data : [];
+};
 
 // --- Cars ---
 export const getCars = async (): Promise<Car[]> => {
@@ -950,6 +954,8 @@ const AD_CAMPAIGNS_URL = `${API_BASE_URL}/AdCampaigns`;
 const USED_CARS_URL = `${API_BASE_URL}/UsedCars`;
 const CAR_ORDERS_URL = `${API_BASE_URL}/CarOrders`;
 const OVERTIME_URL = `${API_BASE_URL}/overtime`;
+const CRM_URL = `${API_BASE_URL}/crm`;
+const CALLOG_URL = `${API_BASE_URL}/calllog`;
 
 // Generic CRUD helper
 const createCrudService = <T>(url: string) => ({
@@ -1184,16 +1190,14 @@ export const deleteMessageTemplate = async (id: string): Promise<void> => {
 
 // --- CRM Call Logs Server Endpoints ---
 export const getCallLogs = async (): Promise<CrmCallLog[]> => {
-    const response = await fetch('/calllog');
+    const response = await fetch(CALLOG_URL, { headers: getAuthHeaders() });
     return handleResponse(response);
 };
 
 export const createCallLog = async (log: Omit<CrmCallLog, 'id'> & { id?: string }): Promise<CrmCallLog> => {
-    const response = await fetch('/calllog', {
+    const response = await fetch(CALLOG_URL, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(log),
     });
     const result = await handleResponse(response);
@@ -1211,11 +1215,9 @@ export const createCallLog = async (log: Omit<CrmCallLog, 'id'> & { id?: string 
 };
 
 export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
-    const response = await fetch('/calllog', {
+    const response = await fetch(CALLOG_URL, {
         method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(log),
     });
     return handleResponse(response);
@@ -1240,12 +1242,12 @@ export interface CrmStatusResponse {
 }
 
 export const getCrmStatus = async (): Promise<CrmStatusResponse> => {
-    const response = await fetch('/api/crm/status', { headers: getAuthHeaders() });
+    const response = await fetch(`${CRM_URL}/status`, { headers: getAuthHeaders() });
     return handleResponse(response);
 };
 
 export const sendCrmHeartbeat = async (leadId: number, username: string, fullName: string, isEditing: boolean): Promise<void> => {
-    await fetch('/api/crm/heartbeat', {
+    await fetch(`${CRM_URL}/heartbeat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1256,7 +1258,7 @@ export const sendCrmHeartbeat = async (leadId: number, username: string, fullNam
 };
 
 export const registerCrmActivity = async (leadId: number, username: string, fullName: string): Promise<void> => {
-    await fetch('/api/crm/activity', {
+    await fetch(`${CRM_URL}/activity`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1267,7 +1269,7 @@ export const registerCrmActivity = async (leadId: number, username: string, full
 };
 
 export const clearCrmLock = async (leadId: number): Promise<void> => {
-    await fetch('/api/crm/clear-lock', {
+    await fetch(`${CRM_URL}/clear-lock`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1278,15 +1280,11 @@ export const clearCrmLock = async (leadId: number): Promise<void> => {
 };
 
 export const clearAllCrmLocks = async (): Promise<void> => {
-    await fetch('/api/crm/clear-all-locks', {
+    await fetch(`${CRM_URL}/clear-all-locks`, {
         method: 'POST',
         headers: getAuthHeaders(),
     });
 };
 
-export const getAllCustomerJournals = async (): Promise<CustomerJournal[]> => {
-    const response = await fetch(`${API_BASE_URL}/CustomerJournals`, { headers: getAuthHeaders() });
-    const data = await handleResponse(response);
-    return Array.isArray(data) ? data : [];
-};
+
 
