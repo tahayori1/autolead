@@ -63,8 +63,8 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
 
     useEffect(() => {
         if (user) {
-            // Load status from local storage shim if present, otherwise use user prop or default
-            const localStatuses = JSON.parse(localStorage.getItem('crmStatuses') || '{}');
+            // Load status from session storage shim if present, otherwise use user prop or default
+            const localStatuses = JSON.parse(sessionStorage.getItem('crmStatuses') || '{}');
             const status = localStatuses[user.id] || user.leadStatus || LeadStatus.NEW;
             setFormState({ ...user, leadStatus: status });
         } else {

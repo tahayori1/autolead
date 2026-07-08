@@ -41,22 +41,22 @@ const FormField: React.FC<{ label: string, name: keyof DealershipInfo, value: st
     </div>
 );
 
+let sessionDealershipInfo: DealershipInfo = { ...initialFormState };
+
 const DealershipPage: React.FC = () => {
-    const [formState, setFormState] = useState<DealershipInfo>(initialFormState);
+    const [formState, setFormState] = useState<DealershipInfo>(sessionDealershipInfo);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     useEffect(() => {
-        // Simulate loading saved data
+        // Simulate loading saved data from session cache
         setLoading(true);
-        setTimeout(() => {
-            const savedData = localStorage.getItem('dealershipInfo');
-            if (savedData) {
-                setFormState(JSON.parse(savedData));
-            }
+        const timer = setTimeout(() => {
+            setFormState({ ...sessionDealershipInfo });
             setLoading(false);
-        }, 500);
+        }, 300);
+        return () => clearTimeout(timer);
     }, []);
 
     const showToast = (message: string, type: 'success' | 'error') => {
@@ -74,12 +74,12 @@ const DealershipPage: React.FC = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
-        // Simulate saving data
+        // Simulate saving data to session cache
         setTimeout(() => {
-            localStorage.setItem('dealershipInfo', JSON.stringify(formState));
+            sessionDealershipInfo = { ...formState };
             setIsSaving(false);
             showToast('اطلاعات نمایندگی با موفقیت ذخیره شد.', 'success');
-        }, 1000);
+        }, 500);
     };
 
     if (loading) {

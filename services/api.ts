@@ -1108,14 +1108,15 @@ export const updateUserProfileAsAdmin = async (userId: number, profile: Partial<
 
 // --- Notification Center ---
 
+let memoryMessageTemplates: MessageTemplate[] = [];
+let memoryNotificationLogs: NotificationLog[] = [];
+
 const getStoredTemplates = (): MessageTemplate[] => {
-    const stored = localStorage.getItem('messageTemplates');
-    return stored ? JSON.parse(stored) : [];
+    return memoryMessageTemplates;
 };
 
 const getStoredLogs = (): NotificationLog[] => {
-    const stored = localStorage.getItem('notificationLogs');
-    return stored ? JSON.parse(stored) : [];
+    return memoryNotificationLogs;
 };
 
 export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
@@ -1157,7 +1158,7 @@ export const sendNotification = async (type: 'WHATSAPP' | 'SMS' | 'BALE', recipi
 
     const logs = getStoredLogs();
     logs.unshift(newLog);
-    localStorage.setItem('notificationLogs', JSON.stringify(logs));
+    memoryNotificationLogs = logs;
     
     return Promise.resolve();
 };
@@ -1179,7 +1180,7 @@ export const saveMessageTemplate = async (template: Omit<MessageTemplate, 'id' |
     
     const templates = getStoredTemplates();
     templates.push(newTemplate);
-    localStorage.setItem('messageTemplates', JSON.stringify(templates));
+    memoryMessageTemplates = templates;
     
     return Promise.resolve(newTemplate);
 };
@@ -1187,7 +1188,7 @@ export const saveMessageTemplate = async (template: Omit<MessageTemplate, 'id' |
 export const deleteMessageTemplate = async (id: string): Promise<void> => {
     const templates = getStoredTemplates();
     const filtered = templates.filter(t => t.id !== id);
-    localStorage.setItem('messageTemplates', JSON.stringify(filtered));
+    memoryMessageTemplates = filtered;
     return Promise.resolve();
 };
 

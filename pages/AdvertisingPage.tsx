@@ -59,6 +59,9 @@ import {
 import type { Car, CarSaleCondition, AdCampaign, MyProfile } from '../types';
 import Spinner from '../components/Spinner';
 
+const inMemoryScreenshots = new Map<string, string>();
+let inMemoryLocalCampaigns: AdCampaign[] | null = null;
+
 interface AdvertisingPageProps {
     loggedInUser: MyProfile | null;
     initialTab?: 'writer' | 'campaigns' | 'titles' | 'hooks' | 'ctas' | 'contact';
@@ -288,9 +291,9 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
         setIsCampaignLoading(true);
         try {
             const data = await adCampaignsService.getAll();
-            // Load screenshots from localStorage fallback
+            // Load screenshots from in-memory fallback
             const enriched = data.map(camp => {
-                const storedScreenshot = localStorage.getItem(`campaign-screenshot-${camp.id}`);
+                const storedScreenshot = inMemoryScreenshots.get(`campaign-screenshot-${camp.id}`);
                 return {
                     ...camp,
                     screenshotUrl: storedScreenshot || (camp as any).screenshotUrl || ''
@@ -300,9 +303,8 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
         } catch (e) {
             console.warn("Failed to load campaigns from API, using mock/local storage backup", e);
             // Fallback to local storage campaigns
-            const localCamps = localStorage.getItem('localAdCampaigns');
-            if (localCamps) {
-                setCampaigns(JSON.parse(localCamps));
+            if (inMemoryLocalCampaigns) {
+                setCampaigns(inMemoryLocalCampaigns);
             } else {
                 // Pre-populate with realistic mock campaigns
                 const defaultCamps: AdCampaign[] = [
@@ -311,7 +313,7 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
                     { id: 103, title: 'تبلیغ کانال تلگرام قیمت روز خودرو', platform: 'OTHER', status: 'ACTIVE', budget: 20000000, spent: 8500000, startDate: '1405/03/01', impressions: 65000, leads: 98, notes: 'تبلیغات در کانال‌های بزرگ اخبار خودرویی تلگرام' },
                     { id: 104, title: 'بنر وبسایت باما جک S5', platform: 'WEBSITE', status: 'PAUSED', budget: 30000000, spent: 12000000, startDate: '1405/02/01', impressions: 95000, leads: 130, notes: 'بنر متحرک در صفحه اول خرید و فروش خودرو' }
                 ];
-                localStorage.setItem('localAdCampaigns', JSON.stringify(defaultCamps));
+                inMemoryLocalCampaigns = defaultCamps;
                 setCampaigns(defaultCamps);
             }
         } finally {
@@ -608,11 +610,11 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
                     savedCamp = payload as any; // Fallback to local mutation on API issue
                 }
                 
-                // Save screenshot in local storage backup
+                // Save screenshot in in-memory backup
                 if (campaignForm.screenshotUrl) {
-                    localStorage.setItem(`campaign-screenshot-${savedCamp.id}`, campaignForm.screenshotUrl);
+                    inMemoryScreenshots.set(`campaign-screenshot-${savedCamp.id}`, campaignForm.screenshotUrl);
                 } else {
-                    localStorage.removeItem(`campaign-screenshot-${savedCamp.id}`);
+                    inMemoryScreenshots.delete(`campaign-screenshot-${savedCamp.id}`);
                 }
                 
                 showToast("کمپین تبلیغاتی با موفقیت ویرایش شد.");
@@ -629,7 +631,7 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
                 }
                 
                 if (campaignForm.screenshotUrl) {
-                    localStorage.setItem(`campaign-screenshot-${savedCamp.id}`, campaignForm.screenshotUrl);
+                    inMemoryScreenshots.set(`campaign-screenshot-${savedCamp.id}`, campaignForm.screenshotUrl);
                 }
                 
                 showToast("کمپین تبلیغاتی جدید ثبت شد.");
@@ -651,15 +653,13 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
             try {
                 await adCampaignsService.delete(campaignToDelete.id);
             } catch {
-                // If API fails, delete from local storage array backup
-                const local = localStorage.getItem('localAdCampaigns');
-                if (local) {
-                    const parsed = JSON.parse(local).filter((c: any) => c.id !== campaignToDelete.id);
-                    localStorage.setItem('localAdCampaigns', JSON.stringify(parsed));
+                // If API fails, delete from in-memory array backup
+                if (inMemoryLocalCampaigns) {
+                    inMemoryLocalCampaigns = inMemoryLocalCampaigns.filter((c: any) => c.id !== campaignToDelete.id);
                 }
             }
             
-            localStorage.removeItem(`campaign-screenshot-${campaignToDelete.id}`);
+            inMemoryScreenshots.delete(`campaign-screenshot-${campaignToDelete.id}`);
             showToast("کمپین تبلیغاتی با موفقیت حذف شد.");
             setCampaignToDelete(null);
             await fetchCampaigns();

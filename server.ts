@@ -336,6 +336,97 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
   app.put("/api/SalaryAdvance", updateSalaryAdvance);
   app.delete("/api/SalaryAdvance", deleteSalaryAdvance);
 
+  // --- Leave Request Memory Storage ---
+  interface ServerLeaveRequest {
+    id: number;
+    requesterName: string;
+    type: 'HOURLY' | 'DAILY';
+    startDate: string;
+    endDate?: string;
+    hours?: number;
+    reason: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    createdAt: string;
+  }
+
+  let inMemoryLeaveRequests: ServerLeaveRequest[] = [
+    {
+      id: 1,
+      requesterName: 'امیررضا محمودی',
+      type: 'DAILY',
+      startDate: '2026-07-15',
+      endDate: '2026-07-17',
+      reason: 'شرکت در مراسم سالگرد فوت پدربزرگ و سفر به شهرستان',
+      status: 'PENDING',
+      createdAt: '1405/04/10',
+    },
+    {
+      id: 2,
+      requesterName: 'مریم اکبری',
+      type: 'HOURLY',
+      startDate: '2026-07-11',
+      hours: 3,
+      reason: 'مراجعه به پزشک متخصص جهت پیگیری آزمایشات درمانی',
+      status: 'APPROVED',
+      createdAt: '1405/04/05',
+    },
+    {
+      id: 3,
+      requesterName: 'سید رضا علوی',
+      type: 'DAILY',
+      startDate: '2026-07-01',
+      endDate: '2026-07-02',
+      reason: 'امور اداری ثبت سند ملک مسکونی و حضور در دفترخانه',
+      status: 'REJECTED',
+      createdAt: '1405/03/28',
+    }
+  ];
+
+  const getLeaveRequests = (req: any, res: any) => {
+    res.json(inMemoryLeaveRequests);
+  };
+
+  const createLeaveRequest = (req: any, res: any) => {
+    const item = req.body;
+    if (!item.id) {
+      item.id = Date.now();
+    }
+    inMemoryLeaveRequests.unshift(item as ServerLeaveRequest);
+    res.status(201).json(item);
+  };
+
+  const updateLeaveRequest = (req: any, res: any) => {
+    const item = req.body;
+    const index = inMemoryLeaveRequests.findIndex(x => x.id === Number(item.id));
+    if (index !== -1) {
+      inMemoryLeaveRequests[index] = { ...inMemoryLeaveRequests[index], ...item };
+      res.json(inMemoryLeaveRequests[index]);
+    } else {
+      res.status(404).json({ error: "درخواست مرخصی یافت نشد" });
+    }
+  };
+
+  const deleteLeaveRequest = (req: any, res: any) => {
+    const { id } = req.body;
+    const initialLength = inMemoryLeaveRequests.length;
+    inMemoryLeaveRequests = inMemoryLeaveRequests.filter(x => x.id !== Number(id));
+    if (inMemoryLeaveRequests.length < initialLength) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "درخواست مرخصی یافت نشد" });
+    }
+  };
+
+  app.get("/LeaveReguests", getLeaveRequests);
+  app.post("/LeaveReguests", createLeaveRequest);
+  app.put("/LeaveReguests", updateLeaveRequest);
+  app.delete("/LeaveReguests", deleteLeaveRequest);
+
+  app.get("/api/LeaveReguests", getLeaveRequests);
+  app.post("/api/LeaveReguests", createLeaveRequest);
+  app.put("/api/LeaveReguests", updateLeaveRequest);
+  app.delete("/api/LeaveReguests", deleteLeaveRequest);
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

@@ -130,25 +130,9 @@ const SalaryAdvancePage: React.FC = () => {
             setRequests(data);
         } catch (error) {
             console.error("Error fetching salary advances:", error);
-            const saved = localStorage.getItem('crm_salary_advances');
-            if (saved) {
-                try {
-                    setRequests(JSON.parse(saved));
-                } catch (e) {
-                    setRequests(INITIAL_REQUESTS);
-                }
-            } else {
-                setRequests(INITIAL_REQUESTS);
-            }
+            setRequests(INITIAL_REQUESTS);
         }
     };
-
-    // Save requests to local storage when changed (for offline backup)
-    useEffect(() => {
-        if (requests.length > 0) {
-            localStorage.setItem('crm_salary_advances', JSON.stringify(requests));
-        }
-    }, [requests]);
 
     // Fetch user profile info on mount
     const fetchUserData = async () => {
