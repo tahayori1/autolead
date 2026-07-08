@@ -4,10 +4,11 @@ import {
     getUsers, createUser, updateUser, deleteUser, getLeadHistory, 
     sendMessage, sendSMS, getUserByNumber, getCars, getConditions, 
     getReferences, carOrdersService, sendBulkSMS, getStaffUsers,
-    sendBaleMessage, createCustomerJournal
+    sendBaleMessage, createCustomerJournal, getAllCustomerJournals,
+    getCallLogs, getLeadSessions, registerLeadSession, deleteLeadSession
 } from '../services/api';
-import type { Reference } from '../services/api';
-import type { User, LeadMessage, Car, CarSaleCondition, MyProfile, StaffUser } from '../types';
+import type { Reference, LeadSessionInfo } from '../services/api';
+import type { User, LeadMessage, Car, CarSaleCondition, MyProfile, StaffUser, CustomerJournal, CrmCallLog } from '../types';
 import { OrderStatus, LeadStatus } from '../types';
 import UserTable from '../components/UserTable';
 import UserModal from '../components/UserModal';
@@ -37,7 +38,7 @@ declare const moment: any;
 const ITEMS_PER_PAGE = 50;
 
 type SortConfig = { key: keyof User; direction: 'ascending' | 'descending' } | null;
-type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; };
+type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; myLeadsOnly?: boolean; };
 
 interface UsersPageProps {
     initialFilters: { carModel?: string };
@@ -75,7 +76,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'updatedAt', direction: 'descending' });
-    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all' });
+    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false });
 
     const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -83,21 +84,29 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     // View Mode State
     const [viewMode, setViewMode] = useState<'LIST' | 'BOARD' | 'CALLS'>('LIST');
 
+    // New real-time CRM tracking state
+    const [allJournals, setAllJournals] = useState<CustomerJournal[]>([]);
+    const [allCallLogs, setAllCallLogs] = useState<CrmCallLog[]>([]);
+    const [activeSessions, setActiveSessions] = useState<LeadSessionInfo[]>([]);
+    const [currentViewingLeadId, setCurrentViewingLeadId] = useState<number | null>(null);
+
     useEffect(() => {
         setFilters(prev => ({ ...prev, carModel: initialFilters.carModel || 'all' }));
     }, [initialFilters]);
-
 
     const fetchAllData = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const [usersData, carsData, conditionsData, referencesData, staffData] = await Promise.all([
+            const [usersData, carsData, conditionsData, referencesData, staffData, journalsData, callLogsData, sessionsData] = await Promise.all([
                 getUsers(),
                 getCars(),
                 getConditions(),
                 getReferences(),
-                getStaffUsers()
+                getStaffUsers(),
+                getAllCustomerJournals(),
+                getCallLogs(),
+                getLeadSessions()
             ]);
             
             setUsers(usersData);
@@ -105,6 +114,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             setConditions(conditionsData);
             setReferences(referencesData);
             setStaffUsers(staffData);
+            setAllJournals(journalsData);
+            setAllCallLogs(callLogsData);
+            setActiveSessions(sessionsData);
         } catch (err) {
             setError('خطا در دریافت اطلاعات');
             showToast('خطا در دریافت اطلاعات', 'error');
@@ -116,6 +128,135 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
+
+    // Live state updates polling for locks, active session badges, and user-initiated events
+    useEffect(() => {
+        const pollCrmUpdates = async () => {
+            try {
+                const [sessionsData, journalsData, callLogsData] = await Promise.all([
+                    getLeadSessions(),
+                    getAllCustomerJournals(),
+                    getCallLogs()
+                ]);
+                setActiveSessions(sessionsData);
+                setAllJournals(journalsData);
+                setAllCallLogs(callLogsData);
+            } catch (e) {
+                console.error("Failed to poll CRM real-time updates", e);
+            }
+        };
+
+        const interval = setInterval(pollCrmUpdates, 5000); // 5 seconds polling
+        return () => clearInterval(interval);
+    }, []);
+
+    // Release active viewing session on unmount or when currentViewingLeadId changes
+    useEffect(() => {
+        return () => {
+            if (currentViewingLeadId !== null && loggedInUser) {
+                deleteLeadSession(currentViewingLeadId, loggedInUser.username).catch(e => {
+                    console.error("Cleanup session failure on unmount", e);
+                });
+            }
+        };
+    }, [currentViewingLeadId, loggedInUser]);
+
+    // Session Registration Helpers
+    const startViewingLead = async (leadId: number) => {
+        if (!loggedInUser) return;
+        
+        // Unregister previous if any
+        if (currentViewingLeadId !== null && currentViewingLeadId !== leadId) {
+            try {
+                await deleteLeadSession(currentViewingLeadId, loggedInUser.username);
+            } catch (e) {
+                console.error("Failed to unregister viewing session", e);
+            }
+        }
+
+        try {
+            const currentFullName = loggedInUser.FullName || loggedInUser.fullName || loggedInUser.username;
+            const updatedSessions = await registerLeadSession(leadId, loggedInUser.username, currentFullName);
+            setActiveSessions(updatedSessions);
+            setCurrentViewingLeadId(leadId);
+        } catch (e) {
+            console.error("Failed to register active viewing session", e);
+        }
+    };
+
+    const stopViewingLead = async () => {
+        if (!loggedInUser || currentViewingLeadId === null) return;
+        try {
+            await deleteLeadSession(currentViewingLeadId, loggedInUser.username);
+        } catch (e) {
+            console.error("Failed to release viewing session", e);
+        }
+        setCurrentViewingLeadId(null);
+    };
+
+    // Computes "My Leads Only" membership list
+    const myActiveLeadIds = useMemo(() => {
+        const ids = new Set<number>();
+        if (!loggedInUser) return ids;
+
+        const currentUsername = loggedInUser.username;
+        const currentFullName = loggedInUser.FullName || loggedInUser.fullName || loggedInUser.username;
+
+        allJournals.forEach(j => {
+            if (j.author === currentUsername || (currentFullName && j.author === currentFullName)) {
+                ids.add(j.userId);
+            }
+        });
+
+        allCallLogs.forEach(cl => {
+            if (cl.userId && (cl.agentName === currentUsername || (currentFullName && cl.agentName === currentFullName))) {
+                ids.add(cl.userId);
+            }
+        });
+
+        return ids;
+    }, [allJournals, allCallLogs, loggedInUser]);
+
+    // Computes leadActivitiesMap to show LOCK indicators
+    const leadActivitiesMap = useMemo(() => {
+        const map: Record<number, { author: string; authorFullName: string; type: 'journal' | 'call' | 'survey' }> = {};
+        if (!loggedInUser) return map;
+
+        const currentUsername = loggedInUser.username;
+        const currentFullName = loggedInUser.FullName || loggedInUser.fullName || loggedInUser.username;
+
+        // Populate by journals (timeline events / surveys / status changes)
+        allJournals.forEach(j => {
+            if (j.author && j.author !== currentUsername && j.author !== currentFullName) {
+                const staff = staffUsers.find(s => s.username === j.author || s.fullName === j.author);
+                const fullName = staff?.fullName || j.author;
+                
+                const isSurvey = j.content.includes('نظرسنجی') || j.content.includes('📝 گزارش نظرسنجی') || j.content.includes('🚗 نظرسنجی');
+                
+                map[j.userId] = {
+                    author: j.author,
+                    authorFullName: fullName,
+                    type: isSurvey ? 'survey' : 'journal'
+                };
+            }
+        });
+
+        // Populate by CRM Call logs
+        allCallLogs.forEach(cl => {
+            if (cl.userId && cl.agentName && cl.agentName !== currentUsername && cl.agentName !== currentFullName) {
+                const staff = staffUsers.find(s => s.username === cl.agentName || s.fullName === cl.agentName);
+                const fullName = staff?.fullName || cl.agentName;
+                
+                map[cl.userId] = {
+                    author: cl.agentName,
+                    authorFullName: fullName,
+                    type: 'call'
+                };
+            }
+        });
+
+        return map;
+    }, [allJournals, allCallLogs, staffUsers, loggedInUser]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -136,10 +277,12 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             const carModelMatch = filters.carModel === 'all' || user.CarModel === filters.carModel;
             const referenceMatch = filters.reference === 'all' || user.reference === filters.reference;
             const statusMatch = filters.status === 'all' || (user.leadStatus || LeadStatus.NEW) === filters.status;
+            
+            const myLeadsMatch = !filters.myLeadsOnly || myActiveLeadIds.has(user.id);
 
-            return queryMatch && carModelMatch && referenceMatch && statusMatch;
+            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch;
         });
-    }, [users, filters]);
+    }, [users, filters, myActiveLeadIds]);
 
     const sortedUsers = useMemo(() => {
         let usersCopy = [...filteredUsers];
@@ -209,6 +352,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setModalMessages([]);
         setModalFullUser(null);
         
+        // Register active viewing session
+        await startViewingLead(lead.id);
+        
         try {
             const historyPromise = getLeadHistory(lead.Number).catch(e => {
                 console.error("Failed to load history", e);
@@ -245,6 +391,8 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setSelectedLead(null);
         setModalMessages([]);
         setModalFullUser(null);
+        // Release active viewing session
+        stopViewingLead();
     };
 
     const handleNavigateLead = async (direction: 'prev' | 'next') => {
@@ -611,7 +759,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                             onFilterChange={(newFilters: any) => setFilters(prev => ({...prev, ...newFilters}))}
                             references={references}
                             onClear={() => {
-                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all' });
+                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false });
                                 onFiltersCleared();
                             }}
                         />
@@ -640,6 +788,8 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                                     onSelectAllChange={handleSelectAllChange}
                                     onRegisterOrder={handleOpenOrderModal}
                                     loggedInUser={loggedInUser}
+                                    leadActivitiesMap={leadActivitiesMap}
+                                    activeSessions={activeSessions}
                                 />
                                 {totalPages > 1 && (
                                     <Pagination
@@ -703,6 +853,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     onEdit={(user) => {
                         // Close history modal first, then open edit modal
                         setIsDetailModalOpen(false);
+                        stopViewingLead();
                         handleEdit(user);
                     }}
                     hasPrevious={selectedLead ? sortedUsers.findIndex(u => u.id === selectedLead.id) > 0 : false}
@@ -716,6 +867,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                         setModalFullUser(prev => prev && prev.id === userId ? { ...prev, leadStatus: newStatus } : prev);
                         setSelectedLead(prev => prev && prev.id === userId ? { ...prev, leadStatus: newStatus } : prev);
                     }}
+                    activeSessions={activeSessions}
                 />
             )}
             

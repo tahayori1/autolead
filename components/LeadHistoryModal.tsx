@@ -41,6 +41,7 @@ interface LeadDetailHistoryModalProps {
     hasPrevious?: boolean;
     hasNext?: boolean;
     onNavigate?: (direction: 'prev' | 'next') => void;
+    activeSessions?: any[];
 }
 
 const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ label, value }) => (
@@ -53,7 +54,8 @@ const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ labe
 const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({ 
     isOpen, onClose, lead, fullUserDetails, messages, isLoading, error, 
     onSendMessage, onRegisterOrder, onEdit, cars, conditions, loggedInUser,
-    onStatusChange, hasPrevious = false, hasNext = false, onNavigate
+    onStatusChange, hasPrevious = false, hasNext = false, onNavigate,
+    activeSessions = []
 }) => {
     const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'SURVEYS'>('COMBINED_HISTORY');
     const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY'>('REGISTRATION');
@@ -476,6 +478,18 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                     </header>
 
                     <main className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950/40 p-4 space-y-4">
+                        {/* Active Viewer Warnings */}
+                        {(() => {
+                            const activeViewers = (activeSessions || []).filter(s => s.leadId === lead?.id && s.username !== loggedInUser?.username);
+                            if (activeViewers.length === 0) return null;
+                            return (
+                                <div className="flex items-center gap-2.5 p-3 text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl text-amber-800 dark:text-amber-300 font-extrabold animate-pulse shadow-sm">
+                                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                                    <span>توجه: این سرنخ هم‌اکنون توسط کاربر «{activeViewers.map(v => v.fullName).join('، ')}» در حال مشاهده است.</span>
+                                </div>
+                            );
+                        })()}
+
                         {/* Customer Header Info */}
                         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-850 shadow-sm">
                             {fullUserDetails ? (

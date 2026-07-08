@@ -4,8 +4,8 @@ import type { Reference } from '../services/api';
 import { LeadStatus } from '../types';
 
 interface UserFilterPanelProps {
-    filters: { query: string, carModel: string, reference: string, status: LeadStatus | 'all' };
-    onFilterChange: (filters: { query: string, carModel: string, reference: string, status: LeadStatus | 'all' }) => void;
+    filters: { query: string, carModel: string, reference: string, status: LeadStatus | 'all', myLeadsOnly?: boolean };
+    onFilterChange: (filters: { query: string, carModel: string, reference: string, status: LeadStatus | 'all', myLeadsOnly?: boolean }) => void;
     onClear: () => void;
     references: Reference[];
 }
@@ -23,8 +23,8 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({ filters, onFilterChan
     };
 
     return (
-        <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <div className="lg:col-span-5">
+        <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
+            <div className="lg:col-span-6">
                 <label htmlFor="user-search" className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">جستجو</label>
                 <input
                     id="user-search"
@@ -80,6 +80,20 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({ filters, onFilterChan
                         <option key={ref.reference} value={ref.reference}>{ref.reference}</option>
                     ))}
                 </select>
+            </div>
+            <div className="flex items-center h-[42px]">
+                <button
+                    type="button"
+                    onClick={() => onFilterChange({ ...filters, myLeadsOnly: !filters.myLeadsOnly })}
+                    className={`w-full h-full px-3 py-2 text-xs sm:text-sm font-bold rounded-lg border transition-all flex items-center justify-center gap-1.5 ${
+                        filters.myLeadsOnly
+                            ? 'bg-sky-50 border-sky-300 text-sky-700 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-300 ring-2 ring-sky-500/20'
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-600/50'
+                    }`}
+                >
+                    <span className="text-sm">{filters.myLeadsOnly ? '👤' : '👥'}</span>
+                    <span>سرنخ‌های من</span>
+                </button>
             </div>
             <div className="flex items-center gap-2">
                  <button

@@ -130,6 +130,71 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
     }
   });
 
+  // CRM Lead Live Viewing Sessions Memory Storage
+  interface LeadSession {
+    leadId: number;
+    username: string;
+    fullName: string;
+    lastActive: number; // timestamp
+  }
+  let inMemoryLeadSessions: LeadSession[] = [];
+
+  const cleanupSessions = () => {
+    const expirationTime = 15000; // 15 seconds
+    const now = Date.now();
+    inMemoryLeadSessions = inMemoryLeadSessions.filter(s => now - s.lastActive < expirationTime);
+  };
+
+  // GET /api/lead-sessions
+  app.get("/api/lead-sessions", (req, res) => {
+    cleanupSessions();
+    res.json(inMemoryLeadSessions);
+  });
+
+  // POST /api/lead-sessions
+  app.post("/api/lead-sessions", (req, res) => {
+    const { leadId, username, fullName } = req.body;
+    if (!leadId || !username) {
+      return res.status(400).json({ error: "شناسه سرنخ و نام کاربری الزامی است" });
+    }
+    
+    cleanupSessions();
+
+    const now = Date.now();
+    const existingIndex = inMemoryLeadSessions.findIndex(s => s.leadId === Number(leadId) && s.username === username);
+    if (existingIndex !== -1) {
+      inMemoryLeadSessions[existingIndex].lastActive = now;
+      if (fullName) {
+        inMemoryLeadSessions[existingIndex].fullName = fullName;
+      }
+    } else {
+      inMemoryLeadSessions.push({
+        leadId: Number(leadId),
+        username,
+        fullName: fullName || username,
+        lastActive: now
+      });
+    }
+
+    res.json(inMemoryLeadSessions.filter(s => s.leadId === Number(leadId)));
+  });
+
+  // DELETE /api/lead-sessions
+  app.delete("/api/lead-sessions", (req, res) => {
+    const { leadId, username } = req.body;
+    if (!leadId) {
+      return res.status(400).json({ error: "شناسه سرنخ الزامی است" });
+    }
+
+    inMemoryLeadSessions = inMemoryLeadSessions.filter(s => {
+      const matchLead = s.leadId === Number(leadId);
+      const matchUser = username ? s.username === username : true;
+      return !(matchLead && matchUser);
+    });
+
+    res.json({ success: true });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
