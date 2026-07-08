@@ -237,6 +237,105 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
     }
   });
 
+  // --- Salary Advance Request Memory Storage ---
+  interface ServerSalaryAdvanceRequest {
+    id: number;
+    requesterName: string;
+    amount: number;
+    targetDate: string;
+    reason: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    createdAt: string;
+    notes?: string;
+  }
+
+  let inMemorySalaryAdvances: ServerSalaryAdvanceRequest[] = [
+    {
+      id: 1,
+      requesterName: 'امیررضا محمودی',
+      amount: 8000000,
+      targetDate: '2026-07-20',
+      reason: 'پرداخت قسط بیمه بدنه خودرو شخصی و هزینه‌های درمانی خانواده',
+      status: 'PENDING',
+      createdAt: '1405/03/25',
+    },
+    {
+      id: 2,
+      requesterName: 'مریم اکبری',
+      amount: 5000000,
+      targetDate: '2026-07-18',
+      reason: 'پیش‌پرداخت اجاره‌بهای منزل مسکونی و تمدید قرارداد سالانه',
+      status: 'APPROVED',
+      createdAt: '1405/03/20',
+      notes: 'مورد تایید است. از محل منابع تنخواه‌گردان دفتر مرکزی پرداخت شود.'
+    },
+    {
+      id: 3,
+      requesterName: 'سید رضا علوی',
+      amount: 12000000,
+      targetDate: '2026-07-16',
+      reason: 'خرید قطعات سخت‌افزاری کامپیوتر شخصی مورد استفاده در پروژه‌های شرکت',
+      status: 'REJECTED',
+      createdAt: '1405/03/18',
+      notes: 'با عرض معذرت، به دلیل نداشتن سقف کارکرد ماهیانه کافی در این دوره امکان پذیر نیست.'
+    },
+    {
+      id: 4,
+      requesterName: 'محمد رضایی',
+      amount: 6000000,
+      targetDate: '2026-07-14',
+      reason: 'هزینه‌های ثبت‌نام فرزند در کلاس‌های تابستانی و تهیه تجهیزات ورزشی',
+      status: 'APPROVED',
+      createdAt: '1405/03/15',
+      notes: 'توسط مدیریت عامل تایید شد.'
+    },
+  ];
+
+  const getSalaryAdvances = (req: any, res: any) => {
+    res.json(inMemorySalaryAdvances);
+  };
+
+  const createSalaryAdvance = (req: any, res: any) => {
+    const item = req.body;
+    if (!item.id) {
+      item.id = Date.now();
+    }
+    inMemorySalaryAdvances.unshift(item);
+    res.status(201).json(item);
+  };
+
+  const updateSalaryAdvance = (req: any, res: any) => {
+    const item = req.body;
+    const index = inMemorySalaryAdvances.findIndex(x => x.id === Number(item.id));
+    if (index !== -1) {
+      inMemorySalaryAdvances[index] = { ...inMemorySalaryAdvances[index], ...item };
+      res.json(inMemorySalaryAdvances[index]);
+    } else {
+      res.status(404).json({ error: "درخواست مساعده یافت نشد" });
+    }
+  };
+
+  const deleteSalaryAdvance = (req: any, res: any) => {
+    const { id } = req.body;
+    const initialLength = inMemorySalaryAdvances.length;
+    inMemorySalaryAdvances = inMemorySalaryAdvances.filter(x => x.id !== Number(id));
+    if (inMemorySalaryAdvances.length < initialLength) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "درخواست مساعده یافت نشد" });
+    }
+  };
+
+  app.get("/SalaryAdvance", getSalaryAdvances);
+  app.post("/SalaryAdvance", createSalaryAdvance);
+  app.put("/SalaryAdvance", updateSalaryAdvance);
+  app.delete("/SalaryAdvance", deleteSalaryAdvance);
+
+  app.get("/api/SalaryAdvance", getSalaryAdvances);
+  app.post("/api/SalaryAdvance", createSalaryAdvance);
+  app.put("/api/SalaryAdvance", updateSalaryAdvance);
+  app.delete("/api/SalaryAdvance", deleteSalaryAdvance);
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

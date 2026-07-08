@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { SalaryAdvanceRequest, MyProfile, SalaryAdvanceStatus } from '../types';
-import { getMyProfile } from '../services/api';
+import { getMyProfile, salaryAdvanceService } from '../services/api';
 import { 
     Wallet, 
     Plus, 
@@ -100,17 +100,7 @@ const INITIAL_REQUESTS: SalaryAdvanceRequest[] = [
 ];
 
 const SalaryAdvancePage: React.FC = () => {
-    const [requests, setRequests] = useState<SalaryAdvanceRequest[]>(() => {
-        const saved = localStorage.getItem('crm_salary_advances');
-        if (saved) {
-            try {
-                return JSON.parse(saved);
-            } catch (e) {
-                return INITIAL_REQUESTS;
-            }
-        }
-        return INITIAL_REQUESTS;
-    });
+    const [requests, setRequests] = useState<SalaryAdvanceRequest[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -134,9 +124,30 @@ const SalaryAdvancePage: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Save requests to local storage when changed
+    const fetchAllRequests = async () => {
+        try {
+            const data = await salaryAdvanceService.getAll();
+            setRequests(data);
+        } catch (error) {
+            console.error("Error fetching salary advances:", error);
+            const saved = localStorage.getItem('crm_salary_advances');
+            if (saved) {
+                try {
+                    setRequests(JSON.parse(saved));
+                } catch (e) {
+                    setRequests(INITIAL_REQUESTS);
+                }
+            } else {
+                setRequests(INITIAL_REQUESTS);
+            }
+        }
+    };
+
+    // Save requests to local storage when changed (for offline backup)
     useEffect(() => {
-        localStorage.setItem('crm_salary_advances', JSON.stringify(requests));
+        if (requests.length > 0) {
+            localStorage.setItem('crm_salary_advances', JSON.stringify(requests));
+        }
     }, [requests]);
 
     // Fetch user profile info on mount
@@ -151,8 +162,10 @@ const SalaryAdvancePage: React.FC = () => {
             } else {
                 setViewMode('MY_REQUESTS');
             }
+            await fetchAllRequests();
         } catch (error) {
             setToast({ message: 'خطا در دریافت اطلاعات کاربر متصل', type: 'error' });
+            await fetchAllRequests();
         } finally {
             setLoading(false);
         }
@@ -221,7 +234,7 @@ const SalaryAdvancePage: React.FC = () => {
     };
 
     // Save Salary Request
-    const handleSaveRequest = (e: React.FormEvent) => {
+    const handleSaveRequest = async (e: React.FormEvent) => {
         e.preventDefault();
         
         const rawAmount = getRawNumber(formData.amount);
@@ -242,8 +255,7 @@ const SalaryAdvancePage: React.FC = () => {
             }
         } catch (e) {}
 
-        const newRequest: SalaryAdvanceRequest = {
-            id: Date.now(),
+        const newRequest: Omit<SalaryAdvanceRequest, 'id'> = {
             requesterName: currentUserProfile.full_name || 'کاربر سیستم',
             amount: rawAmount,
             targetDate: toGregorian(formData.targetDate.trim()),
@@ -252,16 +264,32 @@ const SalaryAdvancePage: React.FC = () => {
             createdAt: currentDateStr
         };
 
-        setRequests(prev => [newRequest, ...prev]);
-        setIsModalOpen(false);
-        setToast({ message: 'درخواست مساعده رسمی شما با موفقیت ثبت شد و در صف بررسی قرار گرفت.', type: 'success' });
+        try {
+            setLoading(true);
+            await salaryAdvanceService.create(newRequest);
+            setIsModalOpen(false);
+            setToast({ message: 'درخواست مساعده رسمی شما با موفقیت ثبت شد و در صف بررسی قرار گرفت.', type: 'success' });
+            await fetchAllRequests();
+        } catch (error) {
+            setToast({ message: 'خطا در ثبت درخواست مساعده در سرور', type: 'error' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Delete a request
-    const handleDeleteRequest = (id: number) => {
+    const handleDeleteRequest = async (id: number) => {
         if (window.confirm('آیا مطمئن هستید که می‌خواهید این درخواست مساعده را حذف کنید؟')) {
-            setRequests(prev => prev.filter(req => req.id !== id));
-            setToast({ message: 'درخواست مساعده با موفقیت حذف شد.', type: 'success' });
+            try {
+                setLoading(true);
+                await salaryAdvanceService.delete(id);
+                setToast({ message: 'درخواست مساعده با موفقیت حذف شد.', type: 'success' });
+                await fetchAllRequests();
+            } catch (error) {
+                setToast({ message: 'خطا در حذف درخواست مساعده از سرور', type: 'error' });
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
@@ -273,26 +301,30 @@ const SalaryAdvancePage: React.FC = () => {
         setIsAdminNotesModalOpen(true);
     };
 
-    const handleConfirmReview = () => {
+    const handleConfirmReview = async () => {
         if (!selectedRequestForReview) return;
 
-        setRequests(prev => prev.map(req => {
-            if (req.id === selectedRequestForReview.id) {
-                return {
-                    ...req,
-                    status: reviewAction === 'APPROVE' ? 'APPROVED' : 'REJECTED',
-                    notes: adminNotesText.trim() || undefined
-                };
-            }
-            return req;
-        }));
+        const updatedRequest: SalaryAdvanceRequest = {
+            ...selectedRequestForReview,
+            status: reviewAction === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+            notes: adminNotesText.trim() || undefined
+        };
 
-        setIsAdminNotesModalOpen(false);
-        setSelectedRequestForReview(null);
-        setToast({ 
-            message: reviewAction === 'APPROVE' ? 'درخواست مساعده با موفقیت تایید شد.' : 'درخواست مساعده رد شد.', 
-            type: 'success' 
-        });
+        try {
+            setLoading(true);
+            await salaryAdvanceService.update(updatedRequest);
+            setIsAdminNotesModalOpen(false);
+            setSelectedRequestForReview(null);
+            setToast({ 
+                message: reviewAction === 'APPROVE' ? 'درخواست مساعده با موفقیت تایید شد.' : 'درخواست مساعده رد شد.', 
+                type: 'success' 
+            });
+            await fetchAllRequests();
+        } catch (error) {
+            setToast({ message: 'خطا در بروزرسانی وضعیت درخواست مساعده در سرور', type: 'error' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Stats calculations

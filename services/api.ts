@@ -30,7 +30,8 @@ import type {
     CarOrder,
     CustomerJournal,
     OvertimeRequest,
-    CrmCallLog
+    CrmCallLog,
+    SalaryAdvanceRequest
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -956,6 +957,7 @@ const CAR_ORDERS_URL = `${API_BASE_URL}/CarOrders`;
 const OVERTIME_URL = `${API_BASE_URL}/overtime`;
 const CRM_URL = `${API_BASE_URL}/crm`;
 const CALLOG_URL = `${API_BASE_URL}/calllog`;
+const SALARY_ADVANCE_URL = `${API_BASE_URL}/SalaryAdvance`;
 
 // Generic CRUD helper
 const createCrudService = <T>(url: string) => ({
@@ -1006,6 +1008,7 @@ export const usedCarsService = createCrudService<UsedCar>(USED_CARS_URL);
 export const carOrdersService = createCrudService<CarOrder>(CAR_ORDERS_URL);
 
 export const overtimeService = createCrudService<OvertimeRequest>(OVERTIME_URL);
+export const salaryAdvanceService = createCrudService<SalaryAdvanceRequest>(SALARY_ADVANCE_URL);
 
 // New method for uploading Excel
 export const importZeroCarDeliveryExcel = async (file: File): Promise<any> => {
