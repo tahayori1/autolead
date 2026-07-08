@@ -33,7 +33,7 @@ import type {
     CrmCallLog
 } from '../types';
 
-const API_BASE_URL = '/api-proxy';
+const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
 
 const handleResponse = async (response: Response) => {
     if (response.status === 401) {
@@ -1200,46 +1200,4 @@ export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
     });
     return handleResponse(response);
 };
-
-// --- Live Viewing Sessions & All Journals ---
-export const getAllCustomerJournals = async (): Promise<CustomerJournal[]> => {
-    const response = await fetch(JOURNALS_URL, { headers: getAuthHeaders() });
-    const data = await handleResponse(response);
-    return Array.isArray(data) ? data : [];
-};
-
-export interface LeadSessionInfo {
-    leadId: number;
-    username: string;
-    fullName: string;
-    lastActive: number;
-}
-
-export const getLeadSessions = async (): Promise<LeadSessionInfo[]> => {
-    const response = await fetch('/api/lead-sessions');
-    return handleResponse(response);
-};
-
-export const registerLeadSession = async (leadId: number, username: string, fullName: string): Promise<LeadSessionInfo[]> => {
-    const response = await fetch('/api/lead-sessions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ leadId, username, fullName }),
-    });
-    return handleResponse(response);
-};
-
-export const deleteLeadSession = async (leadId: number, username?: string): Promise<void> => {
-    const response = await fetch('/api/lead-sessions', {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ leadId, username }),
-    });
-    return handleResponse(response);
-};
-
 
