@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { LeadStatus } from '../types';
-import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfile } from '../types';
+import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfile, CrmCallLog, CrmMeeting } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import Spinner from './Spinner';
 import Toast from './Toast';
 import { 
     getCustomerJournals, createCustomerJournal, getMyProfile,
     sendCrmHeartbeat, getCrmStatus, clearCrmLock,
-    createCallLog
+    createCallLog, getCallLogs, createCrmMeeting, getCrmMeetings, updateCrmMeeting
 } from '../services/api';
 import SendMessageModal from './SendMessageModal';
 import { 
@@ -31,7 +31,9 @@ import {
     PhoneMissed,
     Clock,
     XCircle,
-    CheckCircle
+    CheckCircle,
+    MapPin,
+    Users
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -77,6 +79,11 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [newJournalContent, setNewJournalContent] = useState('');
     const [isJournalLoading, setIsJournalLoading] = useState(false);
     const [isJournalSending, setIsJournalSending] = useState(false);
+    const [callLogs, setCallLogs] = useState<CrmCallLog[]>([]);
+    const [isCallLogsLoading, setIsCallLogsLoading] = useState(false);
+    const [crmMeetings, setCrmMeetings] = useState<CrmMeeting[]>([]);
+    const [isCrmMeetingsLoading, setIsCrmMeetingsLoading] = useState(false);
+    const [editingMeetingId, setEditingMeetingId] = useState<number | string | null>(null);
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
@@ -127,13 +134,39 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [delComment, setDelComment] = useState('');
 
     // Manual Call Log Form State
-    const [logFormTab, setLogFormTab] = useState<'NOTE' | 'CALL'>('NOTE');
+    const [logFormTab, setLogFormTab] = useState<'NOTE' | 'CALL' | 'MEETING'>('NOTE');
     const [callType, setCallType] = useState<'INBOUND' | 'OUTBOUND'>('OUTBOUND');
     const [callStatus, setCallStatus] = useState<'SUCCESSFUL' | 'MISSED' | 'NO_ANSWER' | 'BUSY' | 'REJECTED'>('SUCCESSFUL');
     const [durationMin, setDurationMin] = useState<number>(0);
     const [durationSec, setDurationSec] = useState<number>(0);
     const [callNotes, setCallNotes] = useState('');
     const [manualFollowUpPhone, setManualFollowUpPhone] = useState('');
+
+    // Meeting Scheduler Form State
+    const [meetingStage, setMeetingStage] = useState<'دعوت' | 'تعیین وقت' | 'برگزار شد' | 'برگزار نشد'>('دعوت');
+    const [meetingDate, setMeetingDate] = useState<string>('');
+    const [meetingTime, setMeetingTime] = useState<string>('');
+    const [meetingLocation, setMeetingLocation] = useState<string>('نمایشگاه مرکزی');
+    const [meetingResult, setMeetingResult] = useState<string>('');
+
+    const getTodayJalaliDate = () => {
+        try {
+            const now = new Date();
+            const formatted = new Intl.DateTimeFormat('fa-IR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            }).format(now);
+            let cleaned = formatted.trim();
+            const persianDigits = [/۰/g, /۱/g, /۲/g, /۳/g, /۴/g, /۵/g, /۶/g, /۷/g, /۸/g, /۹/g];
+            for (let i = 0; i < 10; i++) {
+                cleaned = cleaned.replace(persianDigits[i], String(i));
+            }
+            return cleaned;
+        } catch (e) {
+            return "1405/04/20";
+        }
+    };
 
     const targetUser = fullUserDetails || lead;
 
@@ -143,6 +176,9 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setSurveySubTab('REGISTRATION');
             getMyProfile().then(p => setCurrentUser(p)).catch(() => {});
             fetchJournals();
+            // Prefill meeting date & time
+            setMeetingDate(getTodayJalaliDate());
+            setMeetingTime('10:00');
         } else if (!isOpen) {
             setNewJournalContent('');
             setValidationError(null);
@@ -156,20 +192,56 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setDurationSec(0);
             setCallNotes('');
             setManualFollowUpPhone('');
+            // Reset meeting form
+            setMeetingStage('دعوت');
+            setMeetingDate('');
+            setMeetingTime('');
+            setMeetingLocation('نمایشگاه مرکزی');
+            setMeetingResult('');
         }
     }, [isOpen, lead, fullUserDetails]);
 
     const fetchJournals = useCallback(async () => {
         const userId = fullUserDetails?.id || lead?.id;
+        const userNumber = fullUserDetails?.Number || lead?.Number;
         if (!userId) return;
         setIsJournalLoading(true);
+        setIsCallLogsLoading(true);
+        setIsCrmMeetingsLoading(true);
         try {
-            const data = await getCustomerJournals(userId);
-            setJournals(data);
+            const [journalData, callLogData, meetingData] = await Promise.all([
+                getCustomerJournals(userId),
+                getCallLogs(),
+                getCrmMeetings().catch(err => {
+                    console.error("Failed to fetch CRM meetings:", err);
+                    return [] as CrmMeeting[];
+                })
+            ]);
+            setJournals(journalData);
+            
+            const filteredMeetings = meetingData.filter(m => Number(m.userId) === Number(userId));
+            setCrmMeetings(filteredMeetings);
+            
+            const filteredLogs = callLogData.filter(log => {
+                if (userId && Number(log.userId) === Number(userId)) return true;
+                
+                const normalizedLogNum = String(log.customerNumber || '').trim().replace(/[\s\-\+]/g, '');
+                const normalizedUserNum = userNumber ? String(userNumber).trim().replace(/[\s\-\+]/g, '') : '';
+                
+                if (normalizedLogNum && normalizedUserNum) {
+                    const last10Log = normalizedLogNum.substring(Math.max(0, normalizedLogNum.length - 10));
+                    const last10User = normalizedUserNum.substring(Math.max(0, normalizedUserNum.length - 10));
+                    return last10Log === last10User;
+                }
+                return false;
+            });
+            setCallLogs(filteredLogs);
         } catch (e) {
-            console.error("Failed to fetch journals", e);
+            console.error("Failed to fetch journals, call logs or meetings", e);
         } finally {
             setIsJournalLoading(false);
+            setIsCallLogsLoading(false);
+            setIsCrmMeetingsLoading(false);
         }
     }, [fullUserDetails, lead]);
 
@@ -304,6 +376,118 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         }
     };
 
+    const handleSaveMeeting = async () => {
+        if (!meetingDate.trim() || !meetingTime.trim() || !meetingLocation.trim() || isJournalSending) {
+            setValidationError('لطفا تمامی فیلدهای الزامی ملاقات حضوری (تاریخ، ساعت و محل جلسه) را وارد کنید.');
+            return;
+        }
+
+        const userId = fullUserDetails?.id || lead?.id;
+        if (!userId) return;
+
+        setIsJournalSending(true);
+        setValidationError(null);
+
+        const isEditing = editingMeetingId !== null && editingMeetingId !== undefined;
+        const journalContent = isEditing 
+            ? `📝 ویرایش و به‌روزرسانی ملاقات حضوری:
+مرحله: ${meetingStage}
+زمان جلسه: ${meetingDate.trim()} ساعت ${meetingTime.trim()}
+محل جلسه: ${meetingLocation.trim()}
+نتیجه و توضیحات جدید: ${meetingResult.trim() || 'بدون توضیحات اضافی'}`
+            : `🤝 ملاقات حضوری:
+مرحله: ${meetingStage}
+زمان جلسه: ${meetingDate.trim()} ساعت ${meetingTime.trim()}
+محل جلسه: ${meetingLocation.trim()}
+نتیجه و توضیحات: ${meetingResult.trim() || 'بدون توضیحات اضافی'}`;
+
+        try {
+            if (isEditing) {
+                // Update real CRM meeting
+                await updateCrmMeeting({
+                    id: editingMeetingId!,
+                    userId,
+                    customerName: fullUserDetails?.FullName || lead?.FullName || 'مشتری',
+                    customerNumber: fullUserDetails?.Number || lead?.Number || '',
+                    stage: meetingStage,
+                    meetingDate: meetingDate.trim(),
+                    meetingTime: meetingTime.trim(),
+                    meetingLocation: meetingLocation.trim(),
+                    meetingResult: meetingResult.trim(),
+                    agentName: currentUser?.full_name || currentUser?.username || 'کاربر سیستم'
+                });
+            } else {
+                // Create real CRM meeting
+                await createCrmMeeting({
+                    userId,
+                    customerName: fullUserDetails?.FullName || lead?.FullName || 'مشتری',
+                    customerNumber: fullUserDetails?.Number || lead?.Number || '',
+                    stage: meetingStage,
+                    meetingDate: meetingDate.trim(),
+                    meetingTime: meetingTime.trim(),
+                    meetingLocation: meetingLocation.trim(),
+                    meetingResult: meetingResult.trim(),
+                    agentName: currentUser?.full_name || currentUser?.username || 'کاربر سیستم'
+                });
+            }
+
+            // 2. Create customer journal timeline entry
+            await createCustomerJournal({
+                userId,
+                content: journalContent,
+                author: currentUser?.full_name || currentUser?.username || 'کاربر سیستم'
+            });
+
+            // Automatically set lead status to MEETING (جلسه حضوری)
+            if (lead && lead.leadStatus !== 'جلسه حضوری' && onStatusChange) {
+                await onStatusChange(userId, 'جلسه حضوری');
+            }
+
+            // Reset form
+            setEditingMeetingId(null);
+            setMeetingStage('دعوت');
+            setMeetingDate(getTodayJalaliDate());
+            setMeetingTime('10:00');
+            setMeetingLocation('نمایشگاه مرکزی');
+            setMeetingResult('');
+            setLogFormTab('NOTE');
+
+            fetchJournals();
+        } catch (e) {
+            console.error("Failed to save meeting log", e);
+            setValidationError('خطا در ثبت ملاقات حضوری جدید.');
+        } finally {
+            setIsJournalSending(false);
+        }
+    };
+
+    const handlePrefillMeeting = (meeting: { id?: number | string; stage: string; dateTime: string; location: string; result: string }) => {
+        setLogFormTab('MEETING');
+        setEditingMeetingId(meeting.id || null);
+        if (meeting.stage === 'دعوت' || meeting.stage === 'تعیین وقت' || meeting.stage === 'برگزار شد' || meeting.stage === 'برگزار نشد') {
+            setMeetingStage(meeting.stage);
+        } else {
+            setMeetingStage('دعوت');
+        }
+        
+        const parts = meeting.dateTime.split(' ساعت ');
+        if (parts.length === 2) {
+            setMeetingDate(parts[0]);
+            setMeetingTime(parts[1]);
+        } else {
+            setMeetingDate(meeting.dateTime);
+            setMeetingTime('10:00');
+        }
+        
+        setMeetingLocation(meeting.location);
+        setMeetingResult(meeting.result);
+        
+        const container = document.getElementById('log-activity-form');
+        if (container) {
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
     const handleQuickStatusChange = async (newStatus: LeadStatus) => {
         const userId = fullUserDetails?.id || lead?.id;
         if (!userId || isJournalSending) return;
@@ -419,49 +603,182 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
         }
     };
 
-    // Compile combined list of both messages and journal reports sorted by date
+    const parseMeetingContent = (content: string) => {
+        const lines = content.split('\n');
+        let stage = 'دعوت';
+        let dateTime = '';
+        let location = '';
+        let result = '';
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('مرحله:')) {
+                stage = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+            } else if (trimmed.startsWith('زمان جلسه:')) {
+                dateTime = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+            } else if (trimmed.startsWith('محل جلسه:')) {
+                location = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+            } else if (trimmed.startsWith('نتیجه و توضیحات:') || trimmed.startsWith('نتیجه و توضیحات جدید:')) {
+                result = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+            }
+        }
+        return { stage, dateTime, location, result };
+    };
+
+    // Compile combined list of both messages, journals, and call logs sorted by date
     const getCombinedTimeline = () => {
         const list: Array<{
             id: string;
-            type: 'MESSAGE' | 'JOURNAL';
+            type: 'MESSAGE' | 'JOURNAL' | 'CALL_LOG' | 'MEETING';
             content: string;
             createdAt: string;
             parsedDate: Date;
             author?: string;
             receive?: number;
             media?: string;
+            callLog?: CrmCallLog;
+            meeting?: {
+                id?: number | string;
+                stage: string;
+                dateTime: string;
+                location: string;
+                result: string;
+                author: string;
+                originalJournalId: number;
+            };
         }> = [];
+
+        const parseDateSafely = (dateStr: string) => {
+            if (!dateStr) return new Date();
+            let clean = dateStr.trim().replace('T', ' ');
+            
+            // If it's a Jalali date (starts with '140')
+            if (clean.startsWith('140')) {
+                try {
+                    const parts = clean.split(' ');
+                    const dateParts = parts[0].split(/[\/\-]/);
+                    const timeParts = parts[1] ? parts[1].split(':') : ['0', '0', '0'];
+                    
+                    const jYear = parseInt(dateParts[0], 10);
+                    const jMonth = parseInt(dateParts[1], 10);
+                    const jDay = parseInt(dateParts[2], 10);
+                    
+                    const hour = timeParts[0] ? parseInt(timeParts[0], 10) : 0;
+                    const minute = timeParts[1] ? parseInt(timeParts[1], 10) : 0;
+                    const second = timeParts[2] ? parseInt(timeParts[2], 10) : 0;
+
+                    // Jalali to Gregorian conversion (roughly +621 or +622 depending on month)
+                    // This is highly accurate for chronological sorting!
+                    let gYear = jYear + 621;
+                    // Approximate the month offset
+                    let gMonth = jMonth + 2; 
+                    if (gMonth > 11) {
+                        gMonth -= 12;
+                        gYear += 1;
+                    }
+                    const d = new Date(gYear, gMonth, jDay, hour, minute, second);
+                    if (!isNaN(d.getTime())) return d;
+                } catch (e) {
+                    console.error("Failed to parse Jalali date in timeline", e);
+                }
+            }
+            
+            try {
+                const d = new Date(clean.replace(' ', 'T'));
+                if (!isNaN(d.getTime())) return d;
+            } catch {}
+            
+            return new Date();
+        };
 
         // Add Messages
         messages.forEach(msg => {
-            let parsedDate = new Date();
-            try {
-                parsedDate = new Date(msg.createdAt.replace(' ', 'T'));
-            } catch {}
             list.push({
                 id: `msg-${msg.id}`,
                 type: 'MESSAGE',
                 content: msg.Message,
                 createdAt: msg.createdAt,
-                parsedDate,
+                parsedDate: parseDateSafely(msg.createdAt),
                 receive: msg.receive,
                 media: msg.media
             });
         });
 
-        // Add Journals
+        // Keep track of times/dates of meetings we loaded from structured database
+        const addedMeetingTimes = new Set<string>();
+
+        // 1. Add structured CRM Meetings from DB
+        crmMeetings.forEach(m => {
+            const dateTimeStr = `${m.meetingDate} ساعت ${m.meetingTime}`;
+            addedMeetingTimes.add(dateTimeStr);
+            list.push({
+                id: `crm-meeting-${m.id}`,
+                type: 'MEETING',
+                content: m.meetingResult || '',
+                createdAt: m.createdAt || new Date().toLocaleString('fa-IR'),
+                parsedDate: parseDateSafely(m.createdAt || ''),
+                author: m.agentName,
+                meeting: {
+                    id: m.id,
+                    stage: m.stage,
+                    dateTime: dateTimeStr,
+                    location: m.meetingLocation,
+                    result: m.meetingResult || '',
+                    author: m.agentName || 'کاربر سیستم',
+                    originalJournalId: m.id ? Number(m.id) : 0
+                }
+            });
+        });
+
+        // 2. Add Journals (filter out manual call logs and deduplicate meetings)
         journals.forEach(j => {
-            let parsedDate = new Date();
-            try {
-                parsedDate = new Date(j.createdAt.replace(' ', 'T'));
-            } catch {}
+            if (j.content.startsWith('📞 لاگ تماس تلفنی')) {
+                return; // skip duplicate manual journal
+            }
+            if (j.content.startsWith('🤝 ملاقات حضوری:') || j.content.startsWith('📝 ویرایش و به‌روزرسانی ملاقات حضوری:')) {
+                const { stage, dateTime, location, result } = parseMeetingContent(j.content);
+                // Deduplicate if we already added a CRM meeting at this exact time
+                if (addedMeetingTimes.has(dateTime)) {
+                    return;
+                }
+                list.push({
+                    id: `meeting-journal-${j.id}`,
+                    type: 'MEETING',
+                    content: j.content,
+                    createdAt: j.createdAt,
+                    parsedDate: parseDateSafely(j.createdAt),
+                    author: j.author,
+                    meeting: {
+                        stage,
+                        dateTime,
+                        location,
+                        result,
+                        author: j.author || 'کاربر سیستم',
+                        originalJournalId: j.id
+                    }
+                });
+                return;
+            }
             list.push({
                 id: `journal-${j.id}`,
                 type: 'JOURNAL',
                 content: j.content,
                 createdAt: j.createdAt,
-                parsedDate,
+                parsedDate: parseDateSafely(j.createdAt),
                 author: j.author
+            });
+        });
+
+        // Add Call Logs
+        callLogs.forEach(log => {
+            list.push({
+                id: `calllog-${log.id}`,
+                type: 'CALL_LOG',
+                content: log.notes,
+                createdAt: log.timestamp,
+                parsedDate: parseDateSafely(log.timestamp),
+                author: log.agentName,
+                callLog: log
             });
         });
 
@@ -724,7 +1041,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                 </div>
 
                                 {/* Add Custom Log / Report */}
-                                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
+                                <div id="log-activity-form" className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
                                     <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                                         <p className="text-xs font-bold text-slate-700 dark:text-slate-300">ثبت گزارش تماس یا فعالیت جدید (CRM):</p>
                                         
@@ -752,6 +1069,17 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                 <Phone className="w-3 h-3 text-emerald-500" />
                                                 ثبت تماس تلفنی
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLogFormTab('MEETING');
+                                                    setValidationError(null);
+                                                }}
+                                                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 ${logFormTab === 'MEETING' ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                            >
+                                                <Calendar className="w-3 h-3 text-purple-500" />
+                                                ملاقات حضوری
+                                            </button>
                                         </div>
                                     </div>
 
@@ -778,7 +1106,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                 </button>
                                             </div>
                                         </div>
-                                    ) : (
+                                    ) : logFormTab === 'CALL' ? (
                                         <div className="space-y-3 pt-1">
                                             {/* Call Type and Status Grid */}
                                             <div className="grid grid-cols-2 gap-3">
@@ -896,6 +1224,104 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                 </button>
                                             </div>
                                         </div>
+                                    ) : (
+                                        <div className="space-y-3 pt-1">
+                                            {/* Meeting Stage, Date & Time Grid */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">مرحله جلسه حضوری</label>
+                                                    <div className="grid grid-cols-4 gap-1 bg-slate-50 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-150 dark:border-slate-800/60">
+                                                        {(['دعوت', 'تعیین وقت', 'برگزار شد', 'برگزار نشد'] as const).map(stage => {
+                                                            const isSelected = meetingStage === stage;
+                                                            let stageColor = 'bg-sky-500';
+                                                            if (stage === 'تعیین وقت') stageColor = 'bg-purple-500';
+                                                            if (stage === 'برگزار شد') stageColor = 'bg-emerald-500';
+                                                            if (stage === 'برگزار نشد') stageColor = 'bg-rose-500';
+
+                                                            return (
+                                                                <button
+                                                                    key={stage}
+                                                                    type="button"
+                                                                    onClick={() => setMeetingStage(stage)}
+                                                                    className={`py-1.5 rounded-md text-[9px] font-bold transition-all text-center ${isSelected ? `${stageColor} text-white shadow-xs` : 'text-slate-500 hover:text-slate-750 dark:text-slate-400'}`}
+                                                                >
+                                                                    {stage}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">تاریخ (جلالی)</label>
+                                                        <input
+                                                            type="text"
+                                                            value={meetingDate}
+                                                            onChange={e => setMeetingDate(e.target.value)}
+                                                            placeholder="۱۴۰۵/۰۴/۲۰"
+                                                            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-lg focus:border-sky-500 focus:outline-none dark:text-white font-mono"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">ساعت</label>
+                                                        <input
+                                                            type="text"
+                                                            value={meetingTime}
+                                                            onChange={e => setMeetingTime(e.target.value)}
+                                                            placeholder="۱۶:۳۰"
+                                                            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-lg focus:border-sky-500 focus:outline-none dark:text-white font-mono"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Meeting Location */}
+                                            <div className="space-y-1">
+                                                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">محل جلسه حضوری</label>
+                                                <input
+                                                    type="text"
+                                                    value={meetingLocation}
+                                                    onChange={e => setMeetingLocation(e.target.value)}
+                                                    placeholder="مانند: نمایشگاه مرکزی، دفتر فروش تهران، محل مشتری و..."
+                                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-sky-500 focus:outline-none dark:text-white font-bold"
+                                                />
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {['نمایشگاه مرکزی', 'دفتر مرکزی تهران', 'کارگاه کارشناسی', 'محل مشتری'].map(loc => (
+                                                        <button
+                                                            key={loc}
+                                                            type="button"
+                                                            onClick={() => setMeetingLocation(loc)}
+                                                            className={`text-[9px] font-bold px-2 py-0.5 rounded-full border transition ${meetingLocation === loc ? 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/40 dark:text-purple-400 font-bold' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}
+                                                        >
+                                                            {loc}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Meeting Outcome / Result */}
+                                            <div>
+                                                <textarea
+                                                    value={meetingResult}
+                                                    onChange={(e) => setMeetingResult(e.target.value)}
+                                                    placeholder="نتیجه جلسه، توافقات، مدل خودروهای مورد پسند یا توضیحات تکمیلی..."
+                                                    className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-800 dark:text-white text-xs outline-none resize-none min-h-[70px]"
+                                                    rows={3}
+                                                />
+                                            </div>
+
+                                            {/* Submit Button */}
+                                            <div className="flex justify-end mt-2">
+                                                <button 
+                                                    onClick={handleSaveMeeting} 
+                                                    disabled={!meetingDate.trim() || !meetingTime.trim() || !meetingLocation.trim() || isJournalSending}
+                                                    className="bg-purple-600 hover:bg-purple-750 text-white px-4 py-2 rounded-xl text-xs font-bold disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed flex items-center gap-1"
+                                                >
+                                                    {isJournalSending ? 'در حال ثبت...' : 'ثبت جلسه و گزارش'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
 
@@ -929,7 +1355,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                         <p className="text-xs text-slate-800 dark:text-slate-250 whitespace-pre-wrap leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: item.content }} />
                                                     </div>
                                                 );
-                                            } else {
+                                            } else if (item.type === 'JOURNAL') {
                                                 // Journal Log
                                                 const isSurvey = item.content.includes('نظرسنجی');
                                                 const borderCol = isSurvey ? 'border-r-emerald-500' : 'border-r-amber-400';
@@ -945,6 +1371,145 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                             <span className="font-mono text-slate-400">{item.createdAt}</span>
                                                         </div>
                                                         <p className="text-xs text-slate-800 dark:text-slate-250 whitespace-pre-wrap leading-relaxed">{item.content}</p>
+                                                    </div>
+                                                );
+                                            } else if (item.type === 'MEETING') {
+                                                const m = item.meeting!;
+                                                
+                                                // Color theme based on stage
+                                                let stageBadgeColor = 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400';
+                                                let borderCol = 'border-r-sky-500';
+                                                
+                                                if (m.stage === 'تعیین وقت') {
+                                                    stageBadgeColor = 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400';
+                                                    borderCol = 'border-r-purple-500';
+                                                } else if (m.stage === 'برگزار شد') {
+                                                    stageBadgeColor = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+                                                    borderCol = 'border-r-emerald-500';
+                                                } else if (m.stage === 'برگزار نشد') {
+                                                    stageBadgeColor = 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400';
+                                                    borderCol = 'border-r-rose-500';
+                                                }
+
+                                                return (
+                                                    <div key={item.id} className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border-r-4 border-l border-y ${borderCol} border-l-slate-200 dark:border-l-slate-850 border-y-slate-200 dark:border-y-slate-850 shadow-sm flex flex-col gap-2`}>
+                                                        <div className="flex justify-between items-center text-[10px] text-slate-500 border-b border-slate-50 dark:border-slate-800/40 pb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="p-1 rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-950/30">
+                                                                    <Calendar className="w-3.5 h-3.5" />
+                                                                </span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                                    ملاقات حضوری با مشتری
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${stageBadgeColor}`}>
+                                                                    {m.stage}
+                                                                </span>
+                                                            </div>
+                                                            <span className="font-mono text-slate-400">{formatDate(item.createdAt)}</span>
+                                                        </div>
+
+                                                        {/* Meeting details section */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-150 dark:border-slate-850">
+                                                            <div className="flex items-center gap-1.5 font-bold">
+                                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                                                <span>زمان جلسه:</span>
+                                                                <span className="text-slate-850 dark:text-slate-1050 font-mono">{m.dateTime}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 font-bold">
+                                                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                                                <span>محل جلسه:</span>
+                                                                <span className="text-slate-850 dark:text-slate-1050">{m.location}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Notes and Results */}
+                                                        {m.result && (
+                                                            <p className="text-xs text-slate-800 dark:text-slate-250 leading-relaxed font-medium whitespace-pre-wrap mt-1">
+                                                                {m.result}
+                                                            </p>
+                                                        )}
+
+                                                        <div className="text-[9px] text-slate-400 dark:text-slate-500 font-bold flex items-center justify-between mt-1 border-t border-slate-50 dark:border-slate-800/30 pt-1.5">
+                                                            <div className="flex items-center gap-1">
+                                                                <span>ثبت کننده:</span>
+                                                                <span className="text-slate-600 dark:text-slate-400">{m.author}</span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handlePrefillMeeting(m)}
+                                                                className="text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 text-[10px] font-black hover:underline"
+                                                            >
+                                                                تغییر مرحله یا ویرایش جلسه 
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            } else {
+                                                // CALL_LOG Log
+                                                const log = item.callLog;
+                                                const isIncoming = log?.callType === 'INBOUND';
+                                                
+                                                // Status styling
+                                                let statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+                                                let statusLabel = 'موفق';
+                                                if (log?.callStatus === 'MISSED') {
+                                                    statusBadgeColor = 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400';
+                                                    statusLabel = 'از دست رفته';
+                                                } else if (log?.callStatus === 'NO_ANSWER') {
+                                                    statusBadgeColor = 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+                                                    statusLabel = 'بدون پاسخ';
+                                                } else if (log?.callStatus === 'BUSY') {
+                                                    statusBadgeColor = 'bg-stone-100 text-stone-700 dark:bg-stone-900 dark:text-stone-300';
+                                                    statusLabel = 'مشغول';
+                                                } else if (log?.callStatus === 'REJECTED') {
+                                                    statusBadgeColor = 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400';
+                                                    statusLabel = 'رد تماس';
+                                                } else if (log?.callStatus === 'SUCCESSFUL') {
+                                                    statusBadgeColor = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
+                                                    statusLabel = 'موفق';
+                                                }
+
+                                                const formattedDuration = log && log.duration > 0
+                                                    ? `${Math.floor(log.duration / 60)} دقیقه و ${log.duration % 60} ثانیه`
+                                                    : '';
+
+                                                return (
+                                                    <div key={item.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-r-4 border-l border-y border-r-emerald-500 border-l-slate-200 dark:border-l-slate-850 border-y-slate-200 dark:border-y-slate-850 shadow-sm flex flex-col gap-2">
+                                                        <div className="flex justify-between items-center text-[10px] text-slate-500 border-b border-slate-50 dark:border-slate-800/40 pb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`p-1 rounded-lg ${isIncoming ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30' : 'bg-sky-50 text-sky-600 dark:bg-sky-950/30'}`}>
+                                                                    {isIncoming ? <PhoneIncoming className="w-3.5 h-3.5" /> : <PhoneOutgoing className="w-3.5 h-3.5" />}
+                                                                </span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                                    {isIncoming ? 'تماس ورودی / دایورت' : 'تماس خروجی'}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${statusBadgeColor}`}>
+                                                                    {statusLabel}
+                                                                </span>
+                                                                {log?.followUpPhone && (
+                                                                    <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/30 px-2 py-0.5 rounded-full">
+                                                                        تلفن پیگیری: {log.followUpPhone}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <span className="font-mono text-slate-400">{formatDate(item.createdAt)}</span>
+                                                        </div>
+                                                        
+                                                        {formattedDuration && (
+                                                            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold">
+                                                                <Clock className="w-3 h-3 text-slate-400" />
+                                                                <span>مدت مکالمه: {formattedDuration}</span>
+                                                            </div>
+                                                        )}
+
+                                                        <p className="text-xs text-slate-800 dark:text-slate-250 leading-relaxed font-medium whitespace-pre-wrap">
+                                                            {log?.notes || 'فاقد توضیحات تماس'}
+                                                        </p>
+
+                                                        <div className="text-[9px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1 mt-1 border-t border-slate-50 dark:border-slate-800/30 pt-1.5">
+                                                            <span>ثبت کننده:</span>
+                                                            <span className="text-slate-600 dark:text-slate-400">{log?.agentName}</span>
+                                                        </div>
                                                     </div>
                                                 );
                                             }

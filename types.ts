@@ -590,3 +590,18 @@ export interface CrmCallLog {
     timestamp: string; // "jYYYY/jMM/jDD HH:mm"
 }
 
+export interface CrmMeeting {
+    id?: string | number;
+    userId: number;
+    customerName: string;
+    customerNumber: string;
+    stage: 'دعوت' | 'تعیین وقت' | 'برگزار شد' | 'برگزار نشد';
+    meetingDate: string;
+    meetingTime: string;
+    meetingLocation: string;
+    meetingResult?: string;
+    agentName: string;
+    createdAt?: string;
+}
+
+

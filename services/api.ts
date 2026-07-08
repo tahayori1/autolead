@@ -31,7 +31,8 @@ import type {
     CustomerJournal,
     OvertimeRequest,
     CrmCallLog,
-    SalaryAdvanceRequest
+    SalaryAdvanceRequest,
+    CrmMeeting
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -1223,6 +1224,46 @@ export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(log),
+    });
+    return handleResponse(response);
+};
+
+// --- CRM Meetings ---
+const CRM_MEETINGS_URL = `${API_BASE_URL}/crmMeetings`;
+
+export const getCrmMeetings = async (): Promise<CrmMeeting[]> => {
+    const response = await fetch(CRM_MEETINGS_URL, { headers: getAuthHeaders() });
+    const data = await handleResponse(response);
+    return Array.isArray(data) ? data : [];
+};
+
+export const createCrmMeeting = async (meeting: Omit<CrmMeeting, 'id'> & { id?: string | number }): Promise<CrmMeeting> => {
+    ensureOnline();
+    const response = await fetch(CRM_MEETINGS_URL, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(meeting),
+    });
+    const result = await handleResponse(response);
+    
+    // Register lock/activity on local Express server if userId exists
+    if (meeting.userId) {
+        try {
+            await registerCrmActivity(Number(meeting.userId), meeting.agentName, meeting.agentName);
+        } catch (e) {
+            console.warn("Failed to register CRM activity for meeting:", e);
+        }
+    }
+    
+    return result;
+};
+
+export const updateCrmMeeting = async (meeting: CrmMeeting): Promise<CrmMeeting> => {
+    ensureOnline();
+    const response = await fetch(CRM_MEETINGS_URL, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(meeting),
     });
     return handleResponse(response);
 };

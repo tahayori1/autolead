@@ -42,6 +42,30 @@ const normalizePhoneNumber = (num: any): string => {
     return str;
 };
 
+const formatTo98Phone = (num: any): string => {
+    if (!num) return '';
+    let str = String(num).trim().replace(/[\s\-\+]/g, '');
+    
+    // Convert Persian/Arabic digits to English
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    for (let i = 0; i < 10; i++) {
+        str = str.replace(new RegExp(persianDigits[i], 'g'), String(i))
+                 .replace(new RegExp(arabicDigits[i], 'g'), String(i));
+    }
+
+    // Strip non-digit chars
+    str = str.replace(/\D/g, '');
+
+    if (str.startsWith('0')) {
+        str = '98' + str.substring(1);
+    } else if (!str.startsWith('98') && str.length > 0) {
+        str = '98' + str;
+    }
+    
+    return str;
+};
+
 const convertPersianToEnglishDigits = (str: string): string => {
     const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
     const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -568,23 +592,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
 
                 // Calculate followUpPhone for VOIP import
                 let voipFollowUpPhone: string | undefined = undefined;
-                if (vDestIdx > -1 && row[vDestIdx]) {
-                    let destNum = String(row[vDestIdx]).trim();
-                    if (destNum.startsWith('98')) {
-                        destNum = '0' + destNum.substring(2);
+                if (isOutbound) {
+                    const rawSrcNum = vSourceIdx > -1 ? String(row[vSourceIdx] || '').trim() : '';
+                    if (rawSrcNum) {
+                        voipFollowUpPhone = formatTo98Phone(rawSrcNum);
                     }
-                    voipFollowUpPhone = destNum;
-                    
-                    if (vQueueIdx > -1 && row[vQueueIdx]) {
-                        const queueVal = String(row[vQueueIdx]).trim();
-                        if (queueVal) {
-                            voipFollowUpPhone += ` (صف: ${queueVal})`;
-                        }
-                    }
-                } else if (vQueueIdx > -1 && row[vQueueIdx]) {
-                    const queueVal = String(row[vQueueIdx]).trim();
-                    if (queueVal) {
-                        voipFollowUpPhone = `صف: ${queueVal}`;
+                } else {
+                    const rawDstNum = vDestIdx > -1 ? String(row[vDestIdx] || '').trim() : '';
+                    if (rawDstNum) {
+                        voipFollowUpPhone = formatTo98Phone(rawDstNum);
                     }
                 }
 

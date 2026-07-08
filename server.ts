@@ -184,6 +184,24 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
 
   let inMemoryCallLogs: ServerCallLog[] = [];
 
+  const isDuplicateLog = (log1: any, log2: any) => {
+    if (!log1 || !log2) return false;
+    const num1 = String(log1.customerNumber || '').trim().replace(/[\s\-\+]/g, '');
+    const num2 = String(log2.customerNumber || '').trim().replace(/[\s\-\+]/g, '');
+    
+    const last10_1 = num1.length >= 10 ? num1.substring(num1.length - 10) : num1;
+    const last10_2 = num2.length >= 10 ? num2.substring(num2.length - 10) : num2;
+    
+    // Compare timestamps normalized to minutes
+    const ts1 = String(log1.timestamp || '').trim().replace('T', ' ').substring(0, 16);
+    const ts2 = String(log2.timestamp || '').trim().replace('T', ' ').substring(0, 16);
+    
+    const type1 = String(log1.callType || '').toUpperCase();
+    const type2 = String(log2.callType || '').toUpperCase();
+
+    return last10_1 === last10_2 && ts1 === ts2 && type1 === type2;
+  };
+
   // GET /calllog
   app.get("/calllog", (req, res) => {
     res.json(inMemoryCallLogs);
@@ -192,6 +210,13 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
   // POST /calllog
   app.post("/calllog", (req, res) => {
     const log = req.body;
+    
+    // Check for duplicate
+    const existing = inMemoryCallLogs.find(item => isDuplicateLog(item, log));
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
     if (!log.id) {
       log.id = `call-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     }
@@ -219,6 +244,13 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
   // POST /api/calllog
   app.post("/api/calllog", (req, res) => {
     const log = req.body;
+    
+    // Check for duplicate
+    const existing = inMemoryCallLogs.find(item => isDuplicateLog(item, log));
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
     if (!log.id) {
       log.id = `call-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     }
