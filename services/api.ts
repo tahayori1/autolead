@@ -567,7 +567,16 @@ export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' 
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
     });
-    return handleResponse(response);
+    const result = await handleResponse(response);
+    
+    // Register lock/activity on local Express server
+    try {
+        await registerCrmActivity(Number(journal.userId), journal.author, journal.author);
+    } catch (e) {
+        console.warn("Failed to register CRM activity for journal:", e);
+    }
+    
+    return result;
 };
 
 
@@ -1187,7 +1196,18 @@ export const createCallLog = async (log: Omit<CrmCallLog, 'id'> & { id?: string 
         },
         body: JSON.stringify(log),
     });
-    return handleResponse(response);
+    const result = await handleResponse(response);
+    
+    // Register lock/activity on local Express server if userId exists
+    if (log.userId) {
+        try {
+            await registerCrmActivity(Number(log.userId), log.agentName, log.agentName);
+        } catch (e) {
+            console.warn("Failed to register CRM activity for call log:", e);
+        }
+    }
+    
+    return result;
 };
 
 export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
@@ -1199,5 +1219,74 @@ export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
         body: JSON.stringify(log),
     });
     return handleResponse(response);
+};
+
+// --- CRM Live Status & Locks ---
+
+export interface CrmStatusResponse {
+    activeViews: Array<{
+        leadId: number;
+        username: string;
+        fullName: string;
+        isEditing: boolean;
+        lastActive: number;
+    }>;
+    locks: Array<{
+        leadId: number;
+        username: string;
+        fullName: string;
+        timestamp: number;
+    }>;
+}
+
+export const getCrmStatus = async (): Promise<CrmStatusResponse> => {
+    const response = await fetch('/api/crm/status', { headers: getAuthHeaders() });
+    return handleResponse(response);
+};
+
+export const sendCrmHeartbeat = async (leadId: number, username: string, fullName: string, isEditing: boolean): Promise<void> => {
+    await fetch('/api/crm/heartbeat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ leadId, username, fullName, isEditing }),
+    });
+};
+
+export const registerCrmActivity = async (leadId: number, username: string, fullName: string): Promise<void> => {
+    await fetch('/api/crm/activity', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ leadId, username, fullName }),
+    });
+};
+
+export const clearCrmLock = async (leadId: number): Promise<void> => {
+    await fetch('/api/crm/clear-lock', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ leadId }),
+    });
+};
+
+export const clearAllCrmLocks = async (): Promise<void> => {
+    await fetch('/api/crm/clear-all-locks', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+    });
+};
+
+export const getAllCustomerJournals = async (): Promise<CustomerJournal[]> => {
+    const response = await fetch(`${API_BASE_URL}/CustomerJournals`, { headers: getAuthHeaders() });
+    const data = await handleResponse(response);
+    return Array.isArray(data) ? data : [];
 };
 

@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, LeadStatus } from '../types';
+import { User, LeadStatus, MyProfile } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
+import { sendCrmHeartbeat } from '../services/api';
 
 interface UserModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (user: Omit<User, 'id'>) => void;
     user: User | null;
+    loggedInUser: MyProfile | null;
 }
 
 const CAR_MODELS = [
@@ -31,9 +33,33 @@ const initialFormState: Omit<User, 'id'> = {
     updatedAt: new Date().toISOString(),
 };
 
-const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user }) => {
+const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, loggedInUser }) => {
     const [formState, setFormState] = useState(initialFormState);
     const [errors, setErrors] = useState<Record<string, string>>({});
+
+    // Send heartbeat when editing a lead
+    useEffect(() => {
+        if (!isOpen || !user || !loggedInUser) return;
+
+        const username = loggedInUser.username || 'ناشناس';
+        const fullName = loggedInUser.FullName || loggedInUser.full_name || 'کاربر سیستم';
+        const leadId = Number(user.id);
+
+        const sendHeartbeat = async () => {
+            try {
+                await sendCrmHeartbeat(leadId, username, fullName, true);
+            } catch (err) {
+                console.warn("CRM Edit Heartbeat failed:", err);
+            }
+        };
+
+        sendHeartbeat();
+        const timer = setInterval(sendHeartbeat, 3000);
+
+        return () => {
+            clearInterval(timer);
+        };
+    }, [isOpen, user, loggedInUser]);
 
     useEffect(() => {
         if (user) {

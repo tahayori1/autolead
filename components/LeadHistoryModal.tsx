@@ -4,7 +4,10 @@ import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfi
 import { CloseIcon } from './icons/CloseIcon';
 import Spinner from './Spinner';
 import Toast from './Toast';
-import { getCustomerJournals, createCustomerJournal, getMyProfile } from '../services/api';
+import { 
+    getCustomerJournals, createCustomerJournal, getMyProfile,
+    sendCrmHeartbeat, getCrmStatus, clearCrmLock 
+} from '../services/api';
 import SendMessageModal from './SendMessageModal';
 import { 
     MessageSquare, 
@@ -68,6 +71,34 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [isJournalSending, setIsJournalSending] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
+    const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
+
+    // Polling and heartbeat for viewing status
+    useEffect(() => {
+        if (!isOpen || !lead || !loggedInUser) return;
+
+        const username = loggedInUser.username || 'ناشناس';
+        const fullName = loggedInUser.FullName || loggedInUser.full_name || 'کاربر سیستم';
+        const leadId = Number(lead.id);
+
+        const sendHeartbeatAndFetch = async () => {
+            try {
+                // Send heartbeat (isEditing is false in details modal, true in edit modal)
+                await sendCrmHeartbeat(leadId, username, fullName, false);
+                const status = await getCrmStatus();
+                setCrmStatus(status);
+            } catch (err) {
+                console.warn("CRM Live Status Heartbeat failed:", err);
+            }
+        };
+
+        sendHeartbeatAndFetch();
+        const timer = setInterval(sendHeartbeatAndFetch, 3000);
+
+        return () => {
+            clearInterval(timer);
+        };
+    }, [isOpen, lead, loggedInUser]);
 
     // Registration Survey State
     const [regQ1Type, setRegQ1Type] = useState<'internet' | 'presence' | ''>('');
@@ -476,6 +507,59 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                     </header>
 
                     <main className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950/40 p-4 space-y-4">
+                        {/* Live Notices */}
+                        {(() => {
+                            if (!lead || !currentUser) return null;
+                            const otherViewers = (crmStatus?.activeViews || []).filter(
+                                (v: any) => v.leadId === Number(lead.id) && v.username !== currentUser.username
+                            );
+                            const otherEditors = otherViewers.filter((v: any) => v.isEditing);
+                            const otherReaders = otherViewers.filter((v: any) => !v.isEditing);
+                            const leadLock = (crmStatus?.locks || []).find(
+                                (l: any) => l.leadId === Number(lead.id)
+                            );
+
+                            return (
+                                <>
+                                    {otherEditors.length > 0 && (
+                                        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded-xl flex items-center gap-2 text-xs font-bold shadow-sm">
+                                            <AlertCircle className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" />
+                                            <span>این سرنخ در حال حاضر توسط <strong>{otherEditors.map((e: any) => e.fullName).join(', ')}</strong> در حال ویرایش است.</span>
+                                        </div>
+                                    )}
+                                    {otherReaders.length > 0 && (
+                                        <div className="p-3 bg-sky-50/80 dark:bg-sky-950/30 text-sky-800 dark:text-sky-300 border border-sky-150 dark:border-sky-900/40 rounded-xl flex items-center gap-2 text-xs font-bold shadow-sm">
+                                            <Info className="w-4.5 h-4.5 text-sky-600 dark:text-sky-400" />
+                                            <span>این سرنخ توسط فرد دیگری (<strong>{otherReaders.map((r: any) => r.fullName).join(', ')}</strong>) در حال مشاهده است.</span>
+                                        </div>
+                                    )}
+                                    {leadLock && (
+                                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-center justify-between gap-2 text-xs font-bold shadow-sm">
+                                            <div className="flex items-center gap-2">
+                                                <svg className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                                <span>این سرنخ قفل است؛ فعالیت ثبت شده توسط: <strong>{leadLock.fullName}</strong></span>
+                                            </div>
+                                            {(currentUser.isAdmin === 1 || loggedInUser?.isAdmin === 1) && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={async () => {
+                                                        await clearCrmLock(Number(lead.id));
+                                                        const status = await getCrmStatus();
+                                                        setCrmStatus(status);
+                                                    }}
+                                                    className="px-2 py-1 bg-rose-600 text-white hover:bg-rose-750 rounded-md transition text-[10px] shadow-sm font-black flex-shrink-0 mr-2"
+                                                >
+                                                    حذف قفل (مدیریت)
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
+
                         {/* Customer Header Info */}
                         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-850 shadow-sm">
                             {fullUserDetails ? (

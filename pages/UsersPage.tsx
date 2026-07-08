@@ -4,7 +4,8 @@ import {
     getUsers, createUser, updateUser, deleteUser, getLeadHistory, 
     sendMessage, sendSMS, getUserByNumber, getCars, getConditions, 
     getReferences, carOrdersService, sendBulkSMS, getStaffUsers,
-    sendBaleMessage, createCustomerJournal
+    sendBaleMessage, createCustomerJournal,
+    getCrmStatus, getCallLogs, getAllCustomerJournals
 } from '../services/api';
 import type { Reference } from '../services/api';
 import type { User, LeadMessage, Car, CarSaleCondition, MyProfile, StaffUser } from '../types';
@@ -37,7 +38,7 @@ declare const moment: any;
 const ITEMS_PER_PAGE = 50;
 
 type SortConfig = { key: keyof User; direction: 'ascending' | 'descending' } | null;
-type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; };
+type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; myLeadsOnly?: boolean; };
 
 interface UsersPageProps {
     initialFilters: { carModel?: string };
@@ -75,13 +76,24 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'updatedAt', direction: 'descending' });
-    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all' });
+    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false });
 
     const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
     
     // View Mode State
     const [viewMode, setViewMode] = useState<'LIST' | 'BOARD' | 'CALLS'>('LIST');
+
+    // CRM live status and polling states
+    const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
+    const [callLogs, setCallLogs] = useState<any[]>([]);
+    const [customerJournals, setCustomerJournals] = useState<any[]>([]);
+
+    // Auto-refresh states
+    const [refreshMode, setRefreshMode] = useState<'off' | '5s' | '30s' | '1m' | 'custom'>('off');
+    const [customRefreshSeconds, setCustomRefreshSeconds] = useState<number>(10);
+    const [nextRefreshCountdown, setNextRefreshCountdown] = useState<number | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
     useEffect(() => {
         setFilters(prev => ({ ...prev, carModel: initialFilters.carModel || 'all' }));
@@ -92,12 +104,15 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setLoading(true);
         setError(null);
         try {
-            const [usersData, carsData, conditionsData, referencesData, staffData] = await Promise.all([
+            const [usersData, carsData, conditionsData, referencesData, staffData, statusData, callsData, journalsData] = await Promise.all([
                 getUsers(),
                 getCars(),
                 getConditions(),
                 getReferences(),
-                getStaffUsers()
+                getStaffUsers(),
+                getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
+                getCallLogs().catch(() => []),
+                getAllCustomerJournals().catch(() => [])
             ]);
             
             setUsers(usersData);
@@ -105,6 +120,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             setConditions(conditionsData);
             setReferences(referencesData);
             setStaffUsers(staffData);
+            setCrmStatus(statusData);
+            setCallLogs(callsData);
+            setCustomerJournals(journalsData);
         } catch (err) {
             setError('خطا در دریافت اطلاعات');
             showToast('خطا در دریافت اطلاعات', 'error');
@@ -112,6 +130,81 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             setLoading(false);
         }
     }, []);
+
+    // Auto-refresh timer mappings
+    const getIntervalSeconds = useCallback(() => {
+        switch (refreshMode) {
+            case '5s': return 5;
+            case '30s': return 30;
+            case '1m': return 60;
+            case 'custom': return customRefreshSeconds > 0 ? customRefreshSeconds : 10;
+            default: return null;
+        }
+    }, [refreshMode, customRefreshSeconds]);
+
+    // Set countdown when mode or settings change
+    useEffect(() => {
+        const secs = getIntervalSeconds();
+        if (secs !== null) {
+            setNextRefreshCountdown(secs);
+        } else {
+            setNextRefreshCountdown(null);
+        }
+    }, [refreshMode, customRefreshSeconds, getIntervalSeconds]);
+
+    // Tick countdown and trigger silent data fetch
+    useEffect(() => {
+        if (nextRefreshCountdown === null) return;
+
+        const timer = setInterval(() => {
+            setNextRefreshCountdown(prev => {
+                if (prev === null) return null;
+                if (prev <= 1) {
+                    // Trigger silent refresh
+                    setIsRefreshing(true);
+                    Promise.all([
+                        getUsers(),
+                        getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
+                        getCallLogs().catch(() => []),
+                        getAllCustomerJournals().catch(() => [])
+                    ]).then(([usersData, statusData, callsData, journalsData]) => {
+                        setUsers(usersData);
+                        setCrmStatus(statusData);
+                        setCallLogs(callsData);
+                        setCustomerJournals(journalsData);
+                    }).catch(err => {
+                        console.error("Auto refresh failed", err);
+                    }).finally(() => {
+                        setIsRefreshing(false);
+                    });
+
+                    // Reset countdown
+                    return getIntervalSeconds() || 10;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [nextRefreshCountdown, getIntervalSeconds]);
+
+    // Manual Refresh handler
+    const handleManualRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        try {
+            await fetchAllData();
+            showToast('اطلاعات با موفقیت بروزرسانی شد', 'success');
+        } catch (err) {
+            showToast('خطا در بروزرسانی اطلاعات', 'error');
+        } finally {
+            setIsRefreshing(false);
+            // Reset countdown if active
+            const secs = getIntervalSeconds();
+            if (secs !== null) {
+                setNextRefreshCountdown(secs);
+            }
+        }
+    }, [fetchAllData, getIntervalSeconds]);
 
     useEffect(() => {
         fetchAllData();
@@ -124,6 +217,37 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     const filteredUsers = useMemo(() => {
         const lowercasedQuery = filters.query.toLowerCase();
+
+        // Find all user IDs that current user worked on
+        const workedLeadIds = new Set<number>();
+        
+        const currentFullName = loggedInUser?.FullName || '';
+        const currentUsername = loggedInUser?.username || '';
+        const currentFullNameAlt = loggedInUser?.full_name || '';
+
+        // 1. From Customer Journals
+        customerJournals.forEach(j => {
+            const isMatch = (currentFullName && j.author === currentFullName) ||
+                            (currentUsername && j.author === currentUsername) ||
+                            (currentFullNameAlt && j.author === currentFullNameAlt);
+            if (isMatch) {
+                workedLeadIds.add(Number(j.userId));
+            }
+        });
+
+        // 2. From Call Logs
+        callLogs.forEach(c => {
+            const isMatch = (currentFullName && c.agentName === currentFullName) ||
+                            (currentUsername && c.agentName === currentUsername) ||
+                            (currentFullNameAlt && c.agentName === currentFullNameAlt);
+            if (isMatch) {
+                const found = users.find(u => u.Number === c.customerNumber);
+                if (found) {
+                    workedLeadIds.add(Number(found.id));
+                }
+            }
+        });
+
         return users.filter(user => {
             const queryMatch = filters.query === '' ||
                 (user.FullName?.toLowerCase().includes(lowercasedQuery)) ||
@@ -137,9 +261,11 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             const referenceMatch = filters.reference === 'all' || user.reference === filters.reference;
             const statusMatch = filters.status === 'all' || (user.leadStatus || LeadStatus.NEW) === filters.status;
 
-            return queryMatch && carModelMatch && referenceMatch && statusMatch;
+            const myLeadsMatch = !filters.myLeadsOnly || workedLeadIds.has(Number(user.id));
+
+            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch;
         });
-    }, [users, filters]);
+    }, [users, filters, customerJournals, callLogs, loggedInUser]);
 
     const sortedUsers = useMemo(() => {
         let usersCopy = [...filteredUsers];
@@ -611,9 +737,16 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                             onFilterChange={(newFilters: any) => setFilters(prev => ({...prev, ...newFilters}))}
                             references={references}
                             onClear={() => {
-                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all' });
+                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false });
                                 onFiltersCleared();
                             }}
+                            refreshMode={refreshMode}
+                            onRefreshModeChange={setRefreshMode}
+                            customRefreshSeconds={customRefreshSeconds}
+                            onCustomRefreshSecondsChange={setCustomRefreshSeconds}
+                            nextRefreshCountdown={nextRefreshCountdown}
+                            onManualRefresh={handleManualRefresh}
+                            isRefreshing={isRefreshing}
                         />
                     )}
                 </div>
@@ -640,6 +773,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                                     onSelectAllChange={handleSelectAllChange}
                                     onRegisterOrder={handleOpenOrderModal}
                                     loggedInUser={loggedInUser}
+                                    crmStatus={crmStatus}
                                 />
                                 {totalPages > 1 && (
                                     <Pagination
@@ -657,6 +791,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                                 onStatusChange={handleStatusChange}
                                 onViewDetails={handleViewDetails}
                                 loggedInUser={loggedInUser}
+                                crmStatus={crmStatus}
                             />
                         ) : (
                             <CrmCallLogs 
@@ -675,6 +810,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     onClose={() => setIsModalOpen(false)}
                     onSave={handleSave}
                     user={currentUser}
+                    loggedInUser={loggedInUser}
                 />
             )}
 

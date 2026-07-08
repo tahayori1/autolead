@@ -9,6 +9,113 @@ async function startServer() {
   // Middleware
   app.use(express.json());
 
+  // CRM Active Views & Locks Storage
+  interface CrmActiveView {
+    leadId: number;
+    username: string;
+    fullName: string;
+    isEditing: boolean;
+    lastActive: number;
+  }
+
+  interface CrmLock {
+    leadId: number;
+    username: string;
+    fullName: string;
+    timestamp: number;
+  }
+
+  let crmActiveViews: CrmActiveView[] = [];
+  let crmLocks: CrmLock[] = [];
+
+  // Cleanup helper for expired active views
+  const cleanExpiredActiveViews = () => {
+    const now = Date.now();
+    crmActiveViews = crmActiveViews.filter(v => now - v.lastActive < 8000);
+  };
+
+  // Heartbeat endpoint
+  app.post("/api/crm/heartbeat", (req, res) => {
+    const { leadId, username, fullName, isEditing } = req.body;
+    if (!leadId || !username) {
+      return res.status(400).json({ error: "Missing leadId or username" });
+    }
+
+    cleanExpiredActiveViews();
+
+    const existingIndex = crmActiveViews.findIndex(
+      v => v.leadId === Number(leadId) && v.username === username
+    );
+
+    if (existingIndex !== -1) {
+      crmActiveViews[existingIndex].lastActive = Date.now();
+      crmActiveViews[existingIndex].isEditing = !!isEditing;
+      crmActiveViews[existingIndex].fullName = fullName || username;
+    } else {
+      crmActiveViews.push({
+        leadId: Number(leadId),
+        username,
+        fullName: fullName || username,
+        isEditing: !!isEditing,
+        lastActive: Date.now()
+      });
+    }
+
+    res.json({ success: true });
+  });
+
+  // Register Activity (Locks)
+  app.post("/api/crm/activity", (req, res) => {
+    const { leadId, username, fullName } = req.body;
+    if (!leadId || !username) {
+      return res.status(400).json({ error: "Missing leadId or username" });
+    }
+
+    const existingIndex = crmLocks.findIndex(l => l.leadId === Number(leadId));
+    if (existingIndex !== -1) {
+      crmLocks[existingIndex] = {
+        leadId: Number(leadId),
+        username,
+        fullName: fullName || username,
+        timestamp: Date.now()
+      };
+    } else {
+      crmLocks.push({
+        leadId: Number(leadId),
+        username,
+        fullName: fullName || username,
+        timestamp: Date.now()
+      });
+    }
+
+    res.json({ success: true });
+  });
+
+  // Get CRM status (Locks and Active Views)
+  app.get("/api/crm/status", (req, res) => {
+    cleanExpiredActiveViews();
+    res.json({
+      activeViews: crmActiveViews,
+      locks: crmLocks
+    });
+  });
+
+  // Clear Lock
+  app.post("/api/crm/clear-lock", (req, res) => {
+    const { leadId } = req.body;
+    if (!leadId) {
+      return res.status(400).json({ error: "Missing leadId" });
+    }
+    crmLocks = crmLocks.filter(l => l.leadId !== Number(leadId));
+    res.json({ success: true, locks: crmLocks });
+  });
+
+  // Clear All Locks
+  app.post("/api/crm/clear-all-locks", (req, res) => {
+    crmLocks = [];
+    res.json({ success: true });
+  });
+
   // API endpoint for Gemini generation
   app.post("/api/generate-ad", async (req, res) => {
     try {

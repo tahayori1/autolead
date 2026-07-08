@@ -25,12 +25,13 @@ interface UserTableProps {
     onSelectAllChange: (selectAll: boolean) => void;
     onRegisterOrder: (user: User) => void;
     loggedInUser: MyProfile | null;
+    crmStatus?: { activeViews: any[]; locks: any[] };
 }
 
 const UserTable: React.FC<UserTableProps> = ({ 
     users, onEdit, onDelete, onViewDetails, onSort, sortConfig, 
     selectedUserIds, onSelectionChange, onSelectAllChange,
-    onRegisterOrder, loggedInUser
+    onRegisterOrder, loggedInUser, crmStatus
 }) => {
     const getStatusBadge = (status?: LeadStatus) => {
         const value = status || LeadStatus.NEW;
@@ -182,10 +183,48 @@ const UserTable: React.FC<UserTableProps> = ({
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-100 to-blue-100 dark:from-sky-900 dark:to-blue-900 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-bold shadow-sm">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-100 to-blue-100 dark:from-sky-900 dark:to-blue-900 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-bold shadow-sm relative">
                                             {getInitials(user.FullName)}
+                                            {/* Viewing Eye indicator */}
+                                            {(() => {
+                                                const viewers = (crmStatus?.activeViews || []).filter((v: any) => v.leadId === Number(user.id));
+                                                if (viewers.length > 0) {
+                                                    const isEditing = viewers.some((v: any) => v.isEditing);
+                                                    return (
+                                                        <span 
+                                                            className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shadow-sm font-bold ${isEditing ? 'bg-amber-500 animate-pulse' : 'bg-sky-500'}`}
+                                                            title={isEditing ? `در حال ویرایش توسط: ${viewers.map((v: any) => v.fullName).join(', ')}` : `در حال مشاهده توسط: ${viewers.map((v: any) => v.fullName).join(', ')}`}
+                                                        >
+                                                            {isEditing ? '✏️' : '👁️'}
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">{user.FullName}</span>
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                                {user.FullName}
+                                                {/* Lock icon next to customer's name */}
+                                                {(() => {
+                                                    const lock = (crmStatus?.locks || []).find((l: any) => l.leadId === Number(user.id));
+                                                    if (lock) {
+                                                        return (
+                                                            <span 
+                                                                className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 px-1.5 py-0.5 rounded"
+                                                                title={`قفل شده توسط: ${lock.fullName}`}
+                                                            >
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                                </svg>
+                                                                {lock.fullName}
+                                                            </span>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </span>
+                                        </div>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 font-mono font-medium text-slate-600 dark:text-slate-400" dir="ltr">{user.Number}</td>
@@ -247,7 +286,32 @@ const UserTable: React.FC<UserTableProps> = ({
 
                             <div className="flex-1 min-w-0" onClick={() => onViewDetails(user)}>
                                 <div className="flex justify-between items-start">
-                                    <h3 className="font-bold text-slate-900 dark:text-white text-base truncate">{user.FullName}</h3>
+                                    <h3 className="font-bold text-slate-900 dark:text-white text-base truncate flex items-center gap-1.5 flex-wrap">
+                                        {user.FullName}
+                                        {/* Mobile eye */}
+                                        {(() => {
+                                            const viewers = (crmStatus?.activeViews || []).filter((v: any) => v.leadId === Number(user.id));
+                                            if (viewers.length > 0) {
+                                                const isEditing = viewers.some((v: any) => v.isEditing);
+                                                return (
+                                                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isEditing ? 'bg-amber-500 animate-pulse' : 'bg-sky-500'}`} title="کاربر فعال" />
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+                                        {/* Mobile Lock */}
+                                        {(() => {
+                                            const lock = (crmStatus?.locks || []).find((l: any) => l.leadId === Number(user.id));
+                                            if (lock) {
+                                                return (
+                                                    <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 rounded flex items-center gap-0.5">
+                                                        🔒 {lock.fullName}
+                                                    </span>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+                                    </h3>
                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-700 px-2 py-0.5 rounded-full flex-shrink-0 font-mono">{formatDate(user.updatedAt)}</span>
                                 </div>
                                 

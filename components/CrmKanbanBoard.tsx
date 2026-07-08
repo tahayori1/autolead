@@ -10,6 +10,7 @@ interface CrmKanbanBoardProps {
     onStatusChange: (userId: number, newStatus: LeadStatus) => void;
     onViewDetails: (user: User) => void;
     loggedInUser: MyProfile | null;
+    crmStatus?: { activeViews: any[]; locks: any[] };
 }
 
 const COLUMNS: { status: LeadStatus; label: string; color: string; bg: string }[] = [
@@ -21,7 +22,7 @@ const COLUMNS: { status: LeadStatus; label: string; color: string; bg: string }[
     { status: LeadStatus.LOST, label: 'ناموفق', color: 'border-red-300', bg: 'bg-red-50' },
 ];
 
-const CrmKanbanBoard: React.FC<CrmKanbanBoardProps> = ({ users, onStatusChange, onViewDetails, loggedInUser }) => {
+const CrmKanbanBoard: React.FC<CrmKanbanBoardProps> = ({ users, onStatusChange, onViewDetails, loggedInUser, crmStatus }) => {
     
     const handleDragStart = (e: React.DragEvent, user: User) => {
         e.dataTransfer.setData('userId', user.id.toString());
@@ -75,8 +76,37 @@ const CrmKanbanBoard: React.FC<CrmKanbanBoardProps> = ({ users, onStatusChange, 
                                     className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md group transition-all cursor-grab active:cursor-grabbing"
                                 >
                                     <div className="flex justify-between items-start mb-2">
-                                        <div className="font-bold text-slate-800 dark:text-white text-sm truncate max-w-[180px]">
-                                            {user.FullName}
+                                        <div className="font-bold text-slate-800 dark:text-white text-sm truncate max-w-[180px] flex items-center gap-1 flex-wrap">
+                                            <span>{user.FullName}</span>
+                                            {/* Viewing eye indicator */}
+                                            {(() => {
+                                                const viewers = (crmStatus?.activeViews || []).filter((v: any) => v.leadId === Number(user.id));
+                                                if (viewers.length > 0) {
+                                                    const isEditing = viewers.some((v: any) => v.isEditing);
+                                                    return (
+                                                        <span 
+                                                            className={`w-2 h-2 rounded-full inline-block ${isEditing ? 'bg-amber-500 animate-pulse' : 'bg-sky-500'}`} 
+                                                            title={isEditing ? `در حال ویرایش توسط: ${viewers.map((v: any) => v.fullName).join(', ')}` : `در حال مشاهده توسط: ${viewers.map((v: any) => v.fullName).join(', ')}`}
+                                                        />
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+                                            {/* Lock icon */}
+                                            {(() => {
+                                                const lock = (crmStatus?.locks || []).find((l: any) => l.leadId === Number(user.id));
+                                                if (lock) {
+                                                    return (
+                                                        <span 
+                                                            className="text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 px-1 py-0.5 rounded flex items-center gap-0.5"
+                                                            title={`قفل شده توسط: ${lock.fullName}`}
+                                                        >
+                                                            🔒 {lock.fullName}
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                         <button 
                                             onClick={() => onViewDetails(user)}

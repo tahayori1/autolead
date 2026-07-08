@@ -4,10 +4,19 @@ import type { Reference } from '../services/api';
 import { LeadStatus } from '../types';
 
 interface UserFilterPanelProps {
-    filters: { query: string, carModel: string, reference: string, status: LeadStatus | 'all' };
-    onFilterChange: (filters: { query: string, carModel: string, reference: string, status: LeadStatus | 'all' }) => void;
+    filters: { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; myLeadsOnly?: boolean };
+    onFilterChange: (filters: any) => void;
     onClear: () => void;
     references: Reference[];
+
+    // Auto Refresh properties
+    refreshMode: 'off' | '5s' | '30s' | '1m' | 'custom';
+    onRefreshModeChange: (mode: 'off' | '5s' | '30s' | '1m' | 'custom') => void;
+    customRefreshSeconds: number;
+    onCustomRefreshSecondsChange: (seconds: number) => void;
+    nextRefreshCountdown: number | null;
+    onManualRefresh: () => void;
+    isRefreshing: boolean;
 }
 
 const CAR_MODELS = [
@@ -15,7 +24,11 @@ const CAR_MODELS = [
     'KMC J7', 'KMC X5', 'KMC SR3', 'KMC EAGLE', 'KMC SHADOW', 'KMC SR6'
 ];
 
-const UserFilterPanel: React.FC<UserFilterPanelProps> = ({ filters, onFilterChange, onClear, references }) => {
+const UserFilterPanel: React.FC<UserFilterPanelProps> = ({ 
+    filters, onFilterChange, onClear, references,
+    refreshMode, onRefreshModeChange, customRefreshSeconds, onCustomRefreshSecondsChange,
+    nextRefreshCountdown, onManualRefresh, isRefreshing
+}) => {
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -89,6 +102,74 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({ filters, onFilterChan
                 >
                     پاک کردن فیلترها
                 </button>
+            </div>
+
+            {/* Filter Extra Actions Row */}
+            <div className="lg:col-span-5 flex flex-wrap items-center justify-between gap-4 mt-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-150 dark:border-slate-700/60 shadow-inner w-full">
+                {/* My Leads Filter Switch */}
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input 
+                        type="checkbox" 
+                        name="myLeadsOnly" 
+                        className="sr-only peer"
+                        checked={!!filters.myLeadsOnly}
+                        onChange={(e) => onFilterChange({ ...filters, myLeadsOnly: e.target.checked })}
+                    />
+                    <div className="w-11 h-6 bg-slate-350 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
+                    <span className="mr-3 text-xs font-bold text-slate-800 dark:text-slate-200">⭐ سرنخ‌های من</span>
+                </label>
+
+                {/* Auto Refresh Area */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">🔄 به‌روزرسانی خودکار:</span>
+                    <select
+                        className="px-3 py-1.5 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-sky-500"
+                        value={refreshMode}
+                        onChange={(e) => onRefreshModeChange(e.target.value as any)}
+                    >
+                        <option value="off">خاموش</option>
+                        <option value="5s">۵ ثانیه</option>
+                        <option value="30s">۳۰ ثانیه</option>
+                        <option value="1m">۱ دقیقه</option>
+                        <option value="custom">سفارشی</option>
+                    </select>
+
+                    {refreshMode === 'custom' && (
+                        <div className="flex items-center gap-1">
+                            <input 
+                                type="number" 
+                                min="2" 
+                                className="w-14 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 rounded-lg text-center font-bold"
+                                value={customRefreshSeconds}
+                                onChange={(e) => onCustomRefreshSecondsChange(Number(e.target.value))}
+                                title="ثانیه"
+                            />
+                            <span className="text-[10px] text-slate-500">ثانیه</span>
+                        </div>
+                    )}
+
+                    {nextRefreshCountdown !== null && (
+                        <span className="text-xs font-mono bg-sky-50 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/40 text-sky-600 dark:text-sky-300 px-2 py-1 rounded-md">
+                            {nextRefreshCountdown}s
+                        </span>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={onManualRefresh}
+                        disabled={isRefreshing}
+                        className={`px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-slate-300 text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5`}
+                    >
+                        {isRefreshing ? (
+                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3 3L22 4" />
+                            </svg>
+                        )}
+                        <span>بروزرسانی دستی</span>
+                    </button>
+                </div>
             </div>
         </div>
     );
