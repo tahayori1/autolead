@@ -6,7 +6,8 @@ import Spinner from './Spinner';
 import Toast from './Toast';
 import { 
     getCustomerJournals, createCustomerJournal, getMyProfile,
-    sendCrmHeartbeat, getCrmStatus, clearCrmLock 
+    sendCrmHeartbeat, getCrmStatus, clearCrmLock,
+    createCallLog
 } from '../services/api';
 import SendMessageModal from './SendMessageModal';
 import { 
@@ -23,7 +24,14 @@ import {
     Smile, 
     AlertCircle,
     Calendar,
-    Send
+    Send,
+    Phone,
+    PhoneIncoming,
+    PhoneOutgoing,
+    PhoneMissed,
+    Clock,
+    XCircle,
+    CheckCircle
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -118,6 +126,14 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [delQ6, setDelQ6] = useState<number>(0);
     const [delComment, setDelComment] = useState('');
 
+    // Manual Call Log Form State
+    const [logFormTab, setLogFormTab] = useState<'NOTE' | 'CALL'>('NOTE');
+    const [callType, setCallType] = useState<'INBOUND' | 'OUTBOUND'>('OUTBOUND');
+    const [callStatus, setCallStatus] = useState<'SUCCESSFUL' | 'MISSED' | 'NO_ANSWER' | 'BUSY' | 'REJECTED'>('SUCCESSFUL');
+    const [durationMin, setDurationMin] = useState<number>(0);
+    const [durationSec, setDurationSec] = useState<number>(0);
+    const [callNotes, setCallNotes] = useState('');
+
     const targetUser = fullUserDetails || lead;
 
     useEffect(() => {
@@ -131,6 +147,13 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setValidationError(null);
             resetRegSurvey();
             resetDelSurvey();
+            // Reset manual call log form
+            setLogFormTab('NOTE');
+            setCallType('OUTBOUND');
+            setCallStatus('SUCCESSFUL');
+            setDurationMin(0);
+            setDurationSec(0);
+            setCallNotes('');
         }
     }, [isOpen, lead, fullUserDetails]);
 
@@ -191,6 +214,86 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         } catch (e) {
             console.error("Failed to add journal", e);
             setValidationError('خطا در ثبت گزارش جدید.');
+        } finally {
+            setIsJournalSending(false);
+        }
+    };
+
+    const handleSaveManualCallLog = async () => {
+        if (!callNotes.trim() || isJournalSending) return;
+        const userId = fullUserDetails?.id || lead?.id;
+        if (!userId) return;
+
+        setIsJournalSending(true);
+        setValidationError(null);
+
+        const durationTotal = callStatus === 'SUCCESSFUL' ? (durationMin * 60 + durationSec) : 0;
+        
+        let pTime = '1405/03/28 12:00';
+        try {
+            const now = new Date();
+            const formatted = new Intl.DateTimeFormat('fa-IR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(now);
+            
+            // Convert Persian digits to English digits
+            let cleaned = formatted.replace(/،/g, '').replace(/\s+/g, ' ');
+            const persianDigits = [/۰/g, /۱/g, /۲/g, /۳/g, /۴/g, /۵/g, /۶/g, /۷/g, /۸/g, /۹/g];
+            for (let i = 0; i < 10; i++) {
+                cleaned = cleaned.replace(persianDigits[i], String(i));
+            }
+            pTime = cleaned;
+        } catch (e) {
+            console.error(e);
+        }
+
+        try {
+            // 1. Create Call Log via API
+            await createCallLog({
+                userId,
+                customerName: targetUser?.FullName || 'ناشناس',
+                customerNumber: targetUser?.Number || '',
+                callType,
+                callStatus,
+                duration: durationTotal,
+                agentName: currentUser?.full_name || currentUser?.username || 'کاربر سیستم',
+                notes: callNotes.trim(),
+                timestamp: pTime
+            });
+
+            // 2. Add Journal Entry for the customer history timeline
+            const callTypeLabel = callType === 'INBOUND' ? 'ورودی' : 'خروجی';
+            let callStatusLabel = 'موفق';
+            if (callStatus === 'MISSED') callStatusLabel = 'از دست رفته';
+            else if (callStatus === 'NO_ANSWER') callStatusLabel = 'بدون پاسخ';
+            else if (callStatus === 'BUSY') callStatusLabel = 'مشغول';
+            else if (callStatus === 'REJECTED') callStatusLabel = 'رد تماس';
+
+            const durationStr = durationTotal > 0 ? ` (مدت زمان مکالمه: ${durationMin} دقیقه و ${durationSec} ثانیه)` : '';
+            const journalContent = `📞 لاگ تماس تلفنی ${callTypeLabel} [وضعیت: ${callStatusLabel}]${durationStr}:\n${callNotes.trim()}`;
+
+            await createCustomerJournal({
+                userId,
+                content: journalContent,
+                author: currentUser?.full_name || currentUser?.username || 'کاربر سیستم'
+            });
+
+            // 3. Reset form and refresh list
+            setCallNotes('');
+            setDurationMin(0);
+            setDurationSec(0);
+            setLogFormTab('NOTE'); // Go back to note tab
+
+            window.dispatchEvent(new Event('crm_call_logs_updated'));
+            fetchJournals();
+        } catch (e) {
+            console.error("Failed to save manual call log", e);
+            setValidationError('خطا در ثبت لاگ تماس تلفنی جدید.');
         } finally {
             setIsJournalSending(false);
         }
@@ -616,24 +719,159 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                 </div>
 
                                 {/* Add Custom Log / Report */}
-                                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">ثبت گزارش تماس یا فعالیت جدید (CRM):</p>
-                                    <textarea
-                                        value={newJournalContent}
-                                        onChange={(e) => setNewJournalContent(e.target.value)}
-                                        placeholder="شرح تماس، توافقات یا مکالمه تلفنی با مشتری را اینجا بنویسید..."
-                                        className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-800 dark:text-white text-xs outline-none resize-none mb-3 min-h-[70px]"
-                                        rows={3}
-                                    />
-                                    <div className="flex justify-end">
-                                        <button 
-                                            onClick={handleAddJournal} 
-                                            disabled={!newJournalContent.trim() || isJournalSending}
-                                            className="bg-sky-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-sky-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed flex items-center gap-1"
-                                        >
-                                            {isJournalSending ? 'در حال ثبت...' : 'ثبت گزارش'}
-                                        </button>
+                                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
+                                    <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">ثبت گزارش تماس یا فعالیت جدید (CRM):</p>
+                                        
+                                        {/* Sub-tab selection */}
+                                        <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200/50 dark:border-slate-750">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLogFormTab('NOTE');
+                                                    setValidationError(null);
+                                                }}
+                                                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 ${logFormTab === 'NOTE' ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                            >
+                                                <FileText className="w-3 h-3 text-sky-500" />
+                                                یادداشت متنی
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLogFormTab('CALL');
+                                                    setValidationError(null);
+                                                }}
+                                                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 ${logFormTab === 'CALL' ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                            >
+                                                <Phone className="w-3 h-3 text-emerald-500" />
+                                                ثبت تماس تلفنی
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {validationError && (
+                                        <p className="text-[11px] font-bold text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/20 p-2 rounded-lg border border-rose-100 dark:border-rose-900/40">{validationError}</p>
+                                    )}
+
+                                    {logFormTab === 'NOTE' ? (
+                                        <div>
+                                            <textarea
+                                                value={newJournalContent}
+                                                onChange={(e) => setNewJournalContent(e.target.value)}
+                                                placeholder="شرح فعالیت، یادداشت یا کار متفرقه مشتری را اینجا بنویسید..."
+                                                className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-800 dark:text-white text-xs outline-none resize-none min-h-[70px]"
+                                                rows={3}
+                                            />
+                                            <div className="flex justify-end mt-2">
+                                                <button 
+                                                    onClick={handleAddJournal} 
+                                                    disabled={!newJournalContent.trim() || isJournalSending}
+                                                    className="bg-sky-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-sky-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed flex items-center gap-1"
+                                                >
+                                                    {isJournalSending ? 'در حال ثبت...' : 'ثبت یادداشت'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 pt-1">
+                                            {/* Call Type and Status Grid */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">نوع تماس</label>
+                                                    <div className="grid grid-cols-2 gap-1 bg-slate-50 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-100 dark:border-slate-800/80">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setCallType('INBOUND')}
+                                                            className={`py-1 rounded-md text-[10px] font-bold transition-all flex items-center justify-center gap-1 ${callType === 'INBOUND' ? 'bg-emerald-500 text-white shadow-xs' : 'text-slate-450 hover:text-slate-600 dark:text-slate-400'}`}
+                                                        >
+                                                            <PhoneIncoming className="w-3 h-3" />
+                                                            ورودی
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setCallType('OUTBOUND')}
+                                                            className={`py-1 rounded-md text-[10px] font-bold transition-all flex items-center justify-center gap-1 ${callType === 'OUTBOUND' ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-450 hover:text-slate-600 dark:text-slate-400'}`}
+                                                        >
+                                                            <PhoneOutgoing className="w-3 h-3" />
+                                                            خروجی
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">وضعیت نهایی مکالمه</label>
+                                                    <select
+                                                        value={callStatus}
+                                                        onChange={e => setCallStatus(e.target.value as any)}
+                                                        className="w-full px-2.5 py-1.5 text-[11px] bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-lg focus:border-sky-500 focus:outline-none dark:text-white font-bold"
+                                                    >
+                                                        <option value="SUCCESSFUL" className="text-emerald-600 font-bold">موفق (صحبت شد)</option>
+                                                        <option value="NO_ANSWER" className="text-amber-600 font-bold">بدون پاسخ</option>
+                                                        <option value="BUSY" className="text-stone-600 font-bold">خط مشغول بود</option>
+                                                        <option value="REJECTED" className="text-red-700 font-bold">رد تماس توسط مخاطب</option>
+                                                        <option value="MISSED" className="text-rose-600 font-bold">از دست رفته</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Duration (Only if successful) */}
+                                            {callStatus === 'SUCCESSFUL' && (
+                                                <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl space-y-1.5 border border-slate-100 dark:border-slate-800/80">
+                                                    <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                        <Clock className="w-3 h-3 text-emerald-500" />
+                                                        مدت زمان مکالمه تلفنی
+                                                    </span>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="59"
+                                                                value={durationMin}
+                                                                onChange={e => setDurationMin(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                                                                className="w-12 px-1.5 py-1 text-center font-mono text-[11px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md dark:text-white"
+                                                            />
+                                                            <span className="text-[10px] text-slate-400">دقیقه</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="59"
+                                                                value={durationSec}
+                                                                onChange={e => setDurationSec(Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                                                                className="w-12 px-1.5 py-1 text-center font-mono text-[11px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md dark:text-white"
+                                                            />
+                                                            <span className="text-[10px] text-slate-400">ثانیه</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Notes / Description */}
+                                            <div>
+                                                <textarea
+                                                    value={callNotes}
+                                                    onChange={(e) => setCallNotes(e.target.value)}
+                                                    placeholder="شرح گفتگو، توافقات یا صحبت‌های رد و بدل شده تلفنی با مشتری..."
+                                                    className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-slate-800 dark:text-white text-xs outline-none resize-none min-h-[70px]"
+                                                    rows={3}
+                                                />
+                                            </div>
+
+                                            {/* Submit Button */}
+                                            <div className="flex justify-end mt-2">
+                                                <button 
+                                                    onClick={handleSaveManualCallLog} 
+                                                    disabled={!callNotes.trim() || isJournalSending}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed flex items-center gap-1"
+                                                >
+                                                    {isJournalSending ? 'در حال ثبت...' : 'ثبت تماس و گزارش'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Combined Activity Timeline */}
