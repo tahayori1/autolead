@@ -9,6 +9,43 @@ import { EditIcon } from '../components/icons/EditIcon';
 import { CloseIcon } from '../components/icons/CloseIcon';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
+import PersianDatePicker from '../components/PersianDatePicker';
+
+declare const moment: any;
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        console.error("Error converting Jalali to Gregorian:", e);
+    }
+    return dateStr || '';
+};
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        console.error("Error converting Gregorian to Jalali:", e);
+    }
+    return gregorianStr || '';
+};
 
 const CorrectiveActionsPage: React.FC = () => {
     const [actions, setActions] = useState<CorrectiveAction[]>([]);
@@ -40,12 +77,16 @@ const CorrectiveActionsPage: React.FC = () => {
         }
 
         try {
+            const apiPayload = {
+                ...currentAction,
+                dueDate: toGregorian(currentAction.dueDate),
+            };
             if (currentAction.id) {
-                await correctiveActionsService.update(currentAction as CorrectiveAction);
+                await correctiveActionsService.update(apiPayload as CorrectiveAction);
                 setToast({ message: 'اقدام اصلاحی ویرایش شد', type: 'success' });
             } else {
                 await correctiveActionsService.create({
-                    ...currentAction,
+                    ...apiPayload,
                     isCompleted: false,
                     createdAt: new Date().toLocaleDateString('fa-IR'),
                 });
@@ -112,7 +153,7 @@ const CorrectiveActionsPage: React.FC = () => {
                             
                             <div className="space-y-2 text-xs text-slate-500 dark:text-slate-400 mb-4">
                                 <div className="flex justify-between"><span>مسئول:</span> <span className="font-bold">{action.responsiblePerson}</span></div>
-                                <div className="flex justify-between"><span>مهلت:</span> <span className="font-mono">{action.dueDate}</span></div>
+                                <div className="flex justify-between"><span>مهلت:</span> <span className="font-mono">{toJalali(action.dueDate)}</span></div>
                             </div>
 
                             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
@@ -135,9 +176,15 @@ const CorrectiveActionsPage: React.FC = () => {
                         <div className="space-y-4">
                             <input type="text" placeholder="عنوان عدم انطباق / مشکل" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentAction.title || ''} onChange={e => setCurrentAction({...currentAction, title: e.target.value})} />
                             <textarea placeholder="شرح کامل موضوع" rows={3} className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentAction.description || ''} onChange={e => setCurrentAction({...currentAction, description: e.target.value})}></textarea>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4 items-center">
                                 <input type="text" placeholder="مسئول اجرا" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentAction.responsiblePerson || ''} onChange={e => setCurrentAction({...currentAction, responsiblePerson: e.target.value})} />
-                                <input type="text" placeholder="مهلت اقدام (1403/xx/xx)" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white text-left" dir="ltr" value={currentAction.dueDate || ''} onChange={e => setCurrentAction({...currentAction, dueDate: e.target.value})} />
+                                <div className="relative">
+                                    <PersianDatePicker
+                                        value={currentAction.dueDate || ''}
+                                        onChange={val => setCurrentAction({ ...currentAction, dueDate: val })}
+                                        placeholder="مهلت اقدام"
+                                    />
+                                </div>
                             </div>
                         </div>
                         <div className="flex justify-end gap-2 mt-6">

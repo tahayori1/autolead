@@ -9,6 +9,43 @@ import { EditIcon } from '../components/icons/EditIcon';
 import { CloseIcon } from '../components/icons/CloseIcon';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
+import PersianDatePicker from '../components/PersianDatePicker';
+
+declare const moment: any;
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        console.error("Error converting Jalali to Gregorian:", e);
+    }
+    return dateStr || '';
+};
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        console.error("Error converting Gregorian to Jalali:", e);
+    }
+    return gregorianStr || '';
+};
 
 const MeetingMinutesPage: React.FC = () => {
     const [minutes, setMinutes] = useState<MeetingMinute[]>([]);
@@ -40,11 +77,15 @@ const MeetingMinutesPage: React.FC = () => {
         }
 
         try {
+            const apiPayload = {
+                ...currentMinute,
+                date: toGregorian(currentMinute.date),
+            };
             if (currentMinute.id) {
-                await meetingMinutesService.update(currentMinute as MeetingMinute);
+                await meetingMinutesService.update(apiPayload as MeetingMinute);
                 setToast({ message: 'صورت‌جلسه ویرایش شد', type: 'success' });
             } else {
-                await meetingMinutesService.create(currentMinute);
+                await meetingMinutesService.create(apiPayload);
                 setToast({ message: 'صورت‌جلسه جدید ثبت شد', type: 'success' });
             }
             setIsModalOpen(false);
@@ -93,7 +134,7 @@ const MeetingMinutesPage: React.FC = () => {
                                 <div>
                                     <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">{minute.title}</h3>
                                     <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                                        <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">{minute.date}</span>
+                                        <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-xs font-mono">{toJalali(minute.date)}</span>
                                         <span>| حاضرین: {minute.attendees}</span>
                                     </p>
                                 </div>
@@ -120,9 +161,15 @@ const MeetingMinutesPage: React.FC = () => {
                             <button onClick={() => setIsModalOpen(false)}><CloseIcon className="text-slate-500" /></button>
                         </div>
                         <div className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                                 <input type="text" placeholder="موضوع جلسه" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentMinute.title || ''} onChange={e => setCurrentMinute({...currentMinute, title: e.target.value})} />
-                                <input type="text" placeholder="تاریخ (1403/xx/xx)" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white text-left" dir="ltr" value={currentMinute.date || ''} onChange={e => setCurrentMinute({...currentMinute, date: e.target.value})} />
+                                <div className="relative">
+                                    <PersianDatePicker
+                                        value={currentMinute.date || ''}
+                                        onChange={val => setCurrentMinute({ ...currentMinute, date: val })}
+                                        placeholder="تاریخ جلسه"
+                                    />
+                                </div>
                             </div>
                             <input type="text" placeholder="لیست حاضرین" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentMinute.attendees || ''} onChange={e => setCurrentMinute({...currentMinute, attendees: e.target.value})} />
                             <textarea placeholder="شرح مذاکرات و مصوبات" rows={6} className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentMinute.decisions || ''} onChange={e => setCurrentMinute({...currentMinute, decisions: e.target.value})}></textarea>

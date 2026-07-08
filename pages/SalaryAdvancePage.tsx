@@ -19,8 +19,43 @@ import {
 } from 'lucide-react';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
+import PersianDatePicker from '../components/PersianDatePicker';
 
 declare const moment: any;
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        console.error("Error converting Jalali to Gregorian:", e);
+    }
+    return dateStr || '';
+};
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        console.error("Error converting Gregorian to Jalali:", e);
+    }
+    return gregorianStr || '';
+};
 
 const INITIAL_REQUESTS: SalaryAdvanceRequest[] = [
     {
@@ -211,7 +246,7 @@ const SalaryAdvancePage: React.FC = () => {
             id: Date.now(),
             requesterName: currentUserProfile.full_name || 'کاربر سیستم',
             amount: rawAmount,
-            targetDate: formData.targetDate.trim(),
+            targetDate: toGregorian(formData.targetDate.trim()),
             reason: formData.reason.trim(),
             status: 'PENDING',
             createdAt: currentDateStr
@@ -497,7 +532,7 @@ const SalaryAdvancePage: React.FC = () => {
                                             <td className="p-4 font-bold font-mono text-cyan-700 dark:text-cyan-400">
                                                 {req.amount.toLocaleString('fa-IR')} <span className="text-[10px] font-normal text-slate-400">تومان</span>
                                             </td>
-                                            <td className="p-4 font-mono text-slate-700 dark:text-slate-300">{req.targetDate}</td>
+                                            <td className="p-4 font-mono text-slate-700 dark:text-slate-300">{toJalali(req.targetDate)}</td>
                                             <td className="p-4 max-w-sm">
                                                 <p className="line-clamp-2 text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed" title={req.reason}>
                                                     {req.reason}
@@ -642,21 +677,13 @@ const SalaryAdvancePage: React.FC = () => {
 
                             {/* Target Date */}
                             <div>
-                                <label htmlFor="date-input" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاریخ نیاز به پرداخت (جلالی)</label>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاریخ نیاز به پرداخت (جلالی)</label>
                                 <div className="relative">
-                                    <input
-                                        id="date-input"
-                                        type="text"
+                                    <PersianDatePicker
                                         value={formData.targetDate}
-                                        onChange={e => setFormData(p => ({ ...p, targetDate: e.target.value }))}
-                                        placeholder="مثال: 1405/03/30"
-                                        className="w-full pr-10 pl-3 py-2 text-xs font-bold font-mono text-left bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:text-white"
-                                        required
-                                        dir="ltr"
+                                        onChange={val => setFormData(p => ({ ...p, targetDate: val }))}
+                                        placeholder="تاریخ نیاز به پرداخت"
                                     />
-                                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
-                                        <Calendar className="w-4 h-4" />
-                                    </span>
                                 </div>
                                 <p className="text-[9px] text-slate-400 mt-1">توصیه می‌شود تاریخ درخواستی حداقل ۵ روز کاری پس از زمان فعلی باشد.</p>
                             </div>

@@ -7,6 +7,43 @@ import { TrashIcon } from '../components/icons/TrashIcon';
 import { CloseIcon } from '../components/icons/CloseIcon';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
+import PersianDatePicker from '../components/PersianDatePicker';
+
+declare const moment: any;
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        console.error("Error converting Jalali to Gregorian:", e);
+    }
+    return dateStr || '';
+};
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        console.error("Error converting Gregorian to Jalali:", e);
+    }
+    return gregorianStr || '';
+};
 
 const OvertimePage: React.FC = () => {
     const [requests, setRequests] = useState<OvertimeRequest[]>([]);
@@ -44,11 +81,13 @@ const OvertimePage: React.FC = () => {
         }
 
         try {
-            await overtimeService.create({
+            const apiPayload = {
                 ...currentRequest,
+                date: toGregorian(currentRequest.date),
                 status: 'PENDING',
                 createdAt: new Date().toLocaleDateString('fa-IR'),
-            });
+            };
+            await overtimeService.create(apiPayload as any);
             setToast({ message: 'درخواست اضافه کاری با موفقیت ثبت شد', type: 'success' });
             setIsModalOpen(false);
             fetchAllData();
@@ -165,7 +204,7 @@ const OvertimePage: React.FC = () => {
                                     return (
                                         <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200">
                                             {viewMode === 'ALL_REQUESTS' && <td className="p-4 font-bold text-slate-900 dark:text-white">{req.requesterName}</td>}
-                                            <td className="p-4 font-mono font-bold">{req.date}</td>
+                                            <td className="p-4 font-mono font-bold">{toJalali(req.date)}</td>
                                             <td className="p-4 font-bold text-amber-600 dark:text-amber-400">{req.hours} ساعت</td>
                                             <td className="p-4 max-w-sm truncate text-slate-600 dark:text-slate-300" title={req.reason}>{req.reason}</td>
                                             <td className="p-4">
@@ -245,14 +284,13 @@ const OvertimePage: React.FC = () => {
                             
                             <div>
                                 <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1 font-bold">تاریخ اضافه کاری</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="مثال: 1403/04/12" 
-                                    className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white text-left font-bold" 
-                                    dir="ltr" 
-                                    value={currentRequest.date || ''} 
-                                    onChange={e => setCurrentRequest({...currentRequest, date: e.target.value})} 
-                                />
+                                <div className="relative">
+                                    <PersianDatePicker 
+                                        value={currentRequest.date || ''} 
+                                        onChange={val => setCurrentRequest({...currentRequest, date: val})} 
+                                        placeholder="تاریخ اضافه کاری"
+                                    />
+                                </div>
                             </div>
                             
                             <div>

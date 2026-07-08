@@ -8,6 +8,43 @@ import { TrashIcon } from '../components/icons/TrashIcon';
 import { CloseIcon } from '../components/icons/CloseIcon';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
+import PersianDatePicker from '../components/PersianDatePicker';
+
+declare const moment: any;
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        console.error("Error converting Jalali to Gregorian:", e);
+    }
+    return dateStr || '';
+};
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        console.error("Error converting Gregorian to Jalali:", e);
+    }
+    return gregorianStr || '';
+};
 
 const LeaveRequestsPage: React.FC = () => {
     const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -45,11 +82,14 @@ const LeaveRequestsPage: React.FC = () => {
         }
 
         try {
-            await leaveRequestsService.create({
+            const apiPayload = {
                 ...currentRequest,
+                startDate: toGregorian(currentRequest.startDate),
+                endDate: currentRequest.type === 'DAILY' ? toGregorian(currentRequest.endDate) : undefined,
                 status: 'PENDING',
                 createdAt: new Date().toLocaleDateString('fa-IR'),
-            });
+            };
+            await leaveRequestsService.create(apiPayload as any);
             setToast({ message: 'درخواست مرخصی ثبت شد', type: 'success' });
             setIsModalOpen(false);
             fetchAllData();
@@ -157,8 +197,8 @@ const LeaveRequestsPage: React.FC = () => {
                                             <td className="p-4">{req.type === 'DAILY' ? 'روزانه' : 'ساعتی'}</td>
                                             <td className="p-4">
                                                 <div className="flex flex-col">
-                                                    <span className="font-mono">{req.startDate}</span>
-                                                    {req.type === 'DAILY' && req.endDate && <span className="text-xs text-slate-400 font-mono">تا {req.endDate}</span>}
+                                                    <span className="font-mono">{toJalali(req.startDate)}</span>
+                                                    {req.type === 'DAILY' && req.endDate && <span className="text-xs text-slate-400 font-mono">تا {toJalali(req.endDate)}</span>}
                                                     {req.type === 'HOURLY' && <span className="text-xs text-slate-400 font-mono">{req.hours} ساعت</span>}
                                                 </div>
                                             </td>
@@ -225,10 +265,24 @@ const LeaveRequestsPage: React.FC = () => {
                                 </label>
                             </div>
 
-                            <input type="text" placeholder="تاریخ شروع (1403/xx/xx)" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white text-left" dir="ltr" value={currentRequest.startDate || ''} onChange={e => setCurrentRequest({...currentRequest, startDate: e.target.value})} />
+                            <div className="relative">
+                                <label className="block text-xs text-slate-500 mb-1">تاریخ شروع</label>
+                                <PersianDatePicker
+                                    value={currentRequest.startDate || ''}
+                                    onChange={val => setCurrentRequest({ ...currentRequest, startDate: val })}
+                                    placeholder="تاریخ شروع مرخصی"
+                                />
+                            </div>
                             
                             {currentRequest.type === 'DAILY' ? (
-                                <input type="text" placeholder="تاریخ پایان (1403/xx/xx)" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white text-left" dir="ltr" value={currentRequest.endDate || ''} onChange={e => setCurrentRequest({...currentRequest, endDate: e.target.value})} />
+                                <div className="relative">
+                                    <label className="block text-xs text-slate-500 mb-1">تاریخ پایان</label>
+                                    <PersianDatePicker
+                                        value={currentRequest.endDate || ''}
+                                        onChange={val => setCurrentRequest({ ...currentRequest, endDate: val })}
+                                        placeholder="تاریخ پایان مرخصی"
+                                    />
+                                </div>
                             ) : (
                                 <input type="number" placeholder="مدت (ساعت)" className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={currentRequest.hours || ''} onChange={e => setCurrentRequest({...currentRequest, hours: Number(e.target.value)})} />
                             )}

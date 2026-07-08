@@ -6,6 +6,43 @@ import { SpeakerphoneIcon } from '../components/icons/SpeakerphoneIcon';
 import { TrashIcon } from '../components/icons/TrashIcon';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
+import PersianDatePicker from '../components/PersianDatePicker';
+
+declare const moment: any;
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        console.error("Error converting Jalali to Gregorian:", e);
+    }
+    return dateStr || '';
+};
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        console.error("Error converting Gregorian to Jalali:", e);
+    }
+    return gregorianStr || '';
+};
 
 const AnonymousFeedbackPage: React.FC = () => {
     // viewMode state
@@ -21,6 +58,14 @@ const AnonymousFeedbackPage: React.FC = () => {
     // Form states
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
+    const [createdAt, setCreatedAt] = useState(() => {
+        try {
+            if (typeof moment !== 'undefined') {
+                return moment().locale('fa').format('jYYYY/jMM/jDD');
+            }
+        } catch (e) {}
+        return '';
+    });
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     useEffect(() => {
@@ -67,7 +112,7 @@ const AnonymousFeedbackPage: React.FC = () => {
             await anonymousSuggestionsService.create({
                 subject,
                 message,
-                createdAt: new Date().toLocaleDateString('fa-IR'),
+                createdAt: toGregorian(createdAt),
                 isRead: false
             });
             setSubject('');
@@ -121,6 +166,14 @@ const AnonymousFeedbackPage: React.FC = () => {
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">تاریخ ثبت</label>
+                            <PersianDatePicker
+                                value={createdAt}
+                                onChange={val => setCreatedAt(val)}
+                                placeholder="تاریخ ثبت پیام"
+                            />
+                        </div>
+                        <div>
                             <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">موضوع</label>
                             <input 
                                 type="text" 
@@ -161,7 +214,7 @@ const AnonymousFeedbackPage: React.FC = () => {
                                         <div className="flex justify-between items-start mb-2">
                                             <h3 className="font-bold text-lg text-slate-800 dark:text-white">{feedback.subject}</h3>
                                             <div className="flex items-center gap-3">
-                                                <span className="text-xs text-slate-400 font-mono">{feedback.createdAt}</span>
+                                                <span className="text-xs text-slate-400 font-mono">{toJalali(feedback.createdAt)}</span>
                                                 <button onClick={() => handleDelete(feedback.id)} className="text-slate-400 hover:text-red-500"><TrashIcon className="w-5 h-5" /></button>
                                             </div>
                                         </div>
