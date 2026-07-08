@@ -27,6 +27,56 @@ async function startServer() {
       next();
     }
   });
+  
+  // Proxy endpoint to bypass CORS when talking to api.hoseinikhodro.com
+  app.all("/api-proxy*", async (req, res) => {
+    const targetPath = req.url.substring("/api-proxy".length);
+    const targetUrl = `https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1${targetPath}`;
+
+    try {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value && typeof value === 'string' && !['host', 'connection', 'content-length', 'origin', 'referer'].includes(key.toLowerCase())) {
+          headers.set(key, value);
+        }
+      }
+
+      const fetchOptions: RequestInit = {
+        method: req.method,
+        headers: headers,
+      };
+
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (req.body && typeof req.body === 'object') {
+          fetchOptions.body = JSON.stringify(req.body);
+        } else if (req.body) {
+          fetchOptions.body = req.body;
+        }
+      }
+
+      const proxyResponse = await fetch(targetUrl, fetchOptions);
+
+      proxyResponse.headers.forEach((value, key) => {
+        if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(key.toLowerCase())) {
+          res.setHeader(key, value);
+        }
+      });
+
+      res.status(proxyResponse.status);
+
+      const contentType = proxyResponse.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await proxyResponse.json();
+        res.json(data);
+      } else {
+        const text = await proxyResponse.text();
+        res.send(text);
+      }
+    } catch (error: any) {
+      console.error("Proxy connection error:", error);
+      res.status(500).json({ error: "Connection error with target API", message: error.message });
+    }
+  });
 
   // API endpoint for Gemini generation
   app.post("/api/generate-ad", async (req, res) => {

@@ -33,7 +33,7 @@ import type {
     CrmCallLog
 } from '../types';
 
-const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
+const API_BASE_URL = '/api-proxy';
 
 const handleResponse = async (response: Response) => {
     if (response.status === 401) {
