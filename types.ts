@@ -585,6 +585,7 @@ export interface CrmCallLog {
     callStatus: 'SUCCESSFUL' | 'MISSED' | 'NO_ANSWER' | 'BUSY' | 'REJECTED';
     duration: number; // in seconds
     agentName: string;
+    followUpPhone?: string; // تلفن پیگیری
     notes: string;
     timestamp: string; // "jYYYY/jMM/jDD HH:mm"
 }

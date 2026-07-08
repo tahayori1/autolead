@@ -177,6 +177,7 @@ ${companyDetails ? `اطلاعات تماس یا شرکت: ${companyDetails}` : 
     callStatus: 'SUCCESSFUL' | 'MISSED' | 'NO_ANSWER' | 'BUSY' | 'REJECTED';
     duration: number;
     agentName: string;
+    followUpPhone?: string;
     notes: string;
     timestamp: string;
   }

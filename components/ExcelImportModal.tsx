@@ -140,7 +140,7 @@ export function parseAndConvertJalaliToGregorian(dateVal: any): string {
                 timeStr = `${hh}:${mm}:${ss}`;
             }
             
-            return `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}T${timeStr}`;
+            return `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')} ${timeStr}`;
         }
     }
     
@@ -148,7 +148,7 @@ export function parseAndConvertJalaliToGregorian(dateVal: any): string {
     try {
         const d = new Date(str);
         if (!isNaN(d.getTime())) {
-            return d.toISOString().replace('.000Z', '').replace('Z', '');
+            return d.toISOString().replace('.000Z', '').replace('Z', '').replace('T', ' ');
         }
     } catch {}
     
@@ -566,6 +566,28 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                 if (vDestIdx > -1 && row[vDestIdx] && isOutbound === false) notesParts.push(`داخلی مقصد: ${row[vDestIdx]}`);
                 const callNotes = notesParts.join(' | ') || 'ثبت شده از طریق ایمپورت فایل VOIP';
 
+                // Calculate followUpPhone for VOIP import
+                let voipFollowUpPhone: string | undefined = undefined;
+                if (vDestIdx > -1 && row[vDestIdx]) {
+                    let destNum = String(row[vDestIdx]).trim();
+                    if (destNum.startsWith('98')) {
+                        destNum = '0' + destNum.substring(2);
+                    }
+                    voipFollowUpPhone = destNum;
+                    
+                    if (vQueueIdx > -1 && row[vQueueIdx]) {
+                        const queueVal = String(row[vQueueIdx]).trim();
+                        if (queueVal) {
+                            voipFollowUpPhone += ` (صف: ${queueVal})`;
+                        }
+                    }
+                } else if (vQueueIdx > -1 && row[vQueueIdx]) {
+                    const queueVal = String(row[vQueueIdx]).trim();
+                    if (queueVal) {
+                        voipFollowUpPhone = `صف: ${queueVal}`;
+                    }
+                }
+
                 parsedLogs.push({
                     id: `voip-import-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
                     userId: matchedUser?.id,
@@ -575,6 +597,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
                     callStatus,
                     duration: durationSeconds,
                     agentName: 'مرکز تماس VOIP',
+                    followUpPhone: voipFollowUpPhone,
                     notes: callNotes,
                     timestamp: callTimestamp
                 });

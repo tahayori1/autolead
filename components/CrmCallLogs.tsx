@@ -80,6 +80,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
     const [durationMin, setDurationMin] = useState<number>(0);
     const [durationSec, setDurationSec] = useState<number>(0);
     const [agentName, setAgentName] = useState(loggedInUser?.username || 'مدیر سیستم');
+    const [followUpPhone, setFollowUpPhone] = useState('');
     const [notes, setNotes] = useState('');
     const [timestamp, setTimestamp] = useState('');
 
@@ -101,6 +102,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                 setDurationMin(Math.floor(editingLog.duration / 60));
                 setDurationSec(editingLog.duration % 60);
                 setAgentName(editingLog.agentName);
+                setFollowUpPhone(editingLog.followUpPhone || '');
                 setNotes(editingLog.notes);
                 setTimestamp(editingLog.timestamp);
             } else {
@@ -126,6 +128,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                 setCallType('INBOUND');
                 setCallStatus('SUCCESSFUL');
                 setAgentName(loggedInUser?.username || 'مدیر سیستم');
+                setFollowUpPhone('');
             }
         } else {
             setEditingLog(null);
@@ -172,6 +175,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                     callStatus,
                     duration: durationTotal,
                     agentName,
+                    followUpPhone: followUpPhone || undefined,
                     notes,
                     timestamp
                 };
@@ -186,6 +190,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                     callStatus,
                     duration: durationTotal,
                     agentName,
+                    followUpPhone: followUpPhone || undefined,
                     notes,
                     timestamp
                 };
@@ -484,7 +489,13 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                                             {formatDuration(log.duration)}
                                         </td>
                                         <td className="p-4 font-medium text-slate-600 dark:text-slate-400">
-                                            {log.agentName}
+                                            <div className="font-bold text-slate-700 dark:text-slate-300">{log.agentName}</div>
+                                            {log.followUpPhone && (
+                                                <div className="text-[10px] text-sky-600 dark:text-sky-400 font-bold mt-1.5 flex items-center gap-1" title="تلفن پیگیری">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                                    <span>{log.followUpPhone}</span>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-4 max-w-xs md:max-w-md">
                                             <p className="text-slate-600 dark:text-slate-300 line-clamp-2" title={log.notes}>
@@ -683,7 +694,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                                 </div>
                             )}
 
-                            {/* Agent handler & date */}
+                            {/* Agent handler & destination phone */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label htmlFor="agent-picker" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">کارشناس پیگیری</label>
@@ -703,17 +714,36 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                                 </div>
 
                                 <div>
-                                    <label htmlFor="time-picker" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاریخ و ساعت تماس</label>
-                                    <input
-                                        type="text"
-                                        id="time-picker"
-                                        value={timestamp}
-                                        onChange={e => setTimestamp(e.target.value)}
-                                        placeholder="مثال: 1405/03/28 12:45"
-                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl focus:border-sky-500 focus:outline-none dark:text-white"
-                                        required
-                                    />
+                                    <label htmlFor="follow-up-phone-select" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تلفن پیگیری</label>
+                                    <select
+                                        id="follow-up-phone-select"
+                                        value={followUpPhone}
+                                        onChange={e => setFollowUpPhone(e.target.value)}
+                                        className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl focus:border-sky-500 focus:outline-none dark:text-white font-bold"
+                                    >
+                                        <option value="">-- نامشخص / انتخاب نشده --</option>
+                                        <option value="خط اصلی تهران (۰۲۱-۹۱۰۰۰۰۰۰)">خط اصلی تهران (۰۲۱-۹۱۰۰۰۰۰۰)</option>
+                                        <option value="خط مستقیم فروش (داخلی ۱۰۱)">خط مستقیم فروش (داخلی ۱۰۱)</option>
+                                        <option value="خط پشتیبانی (داخلی ۱۰۲)">خط پشتیبانی (داخلی ۱۰۲)</option>
+                                        <option value="خط تبلیغات دیوار">خط تبلیغات دیوار</option>
+                                        <option value="خط آگهی‌های باما">خط آگهی‌های باما</option>
+                                        <option value="همراه کارشناس پیگیری">همراه کارشناس پیگیری</option>
+                                    </select>
                                 </div>
+                            </div>
+
+                            {/* Call date and time */}
+                            <div>
+                                <label htmlFor="time-picker" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاریخ و ساعت تماس</label>
+                                <input
+                                    type="text"
+                                    id="time-picker"
+                                    value={timestamp}
+                                    onChange={e => setTimestamp(e.target.value)}
+                                    placeholder="مثال: 1405/03/28 12:45"
+                                    className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl focus:border-sky-500 focus:outline-none dark:text-white"
+                                    required
+                                />
                             </div>
 
                             {/* Interaction Notes */}

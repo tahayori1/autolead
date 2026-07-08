@@ -133,6 +133,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [durationMin, setDurationMin] = useState<number>(0);
     const [durationSec, setDurationSec] = useState<number>(0);
     const [callNotes, setCallNotes] = useState('');
+    const [manualFollowUpPhone, setManualFollowUpPhone] = useState('');
 
     const targetUser = fullUserDetails || lead;
 
@@ -154,6 +155,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setDurationMin(0);
             setDurationSec(0);
             setCallNotes('');
+            setManualFollowUpPhone('');
         }
     }, [isOpen, lead, fullUserDetails]);
 
@@ -262,6 +264,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
                 callStatus,
                 duration: durationTotal,
                 agentName: currentUser?.full_name || currentUser?.username || 'کاربر سیستم',
+                followUpPhone: manualFollowUpPhone || undefined,
                 notes: callNotes.trim(),
                 timestamp: pTime
             });
@@ -275,7 +278,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             else if (callStatus === 'REJECTED') callStatusLabel = 'رد تماس';
 
             const durationStr = durationTotal > 0 ? ` (مدت زمان مکالمه: ${durationMin} دقیقه و ${durationSec} ثانیه)` : '';
-            const journalContent = `📞 لاگ تماس تلفنی ${callTypeLabel} [وضعیت: ${callStatusLabel}]${durationStr}:\n${callNotes.trim()}`;
+            const followUpPhoneStr = manualFollowUpPhone ? ` (خط پیگیری: ${manualFollowUpPhone})` : '';
+            const journalContent = `📞 لاگ تماس تلفنی ${callTypeLabel}${followUpPhoneStr} [وضعیت: ${callStatusLabel}]${durationStr}:\n${callNotes.trim()}`;
 
             await createCustomerJournal({
                 userId,
@@ -287,6 +291,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setCallNotes('');
             setDurationMin(0);
             setDurationSec(0);
+            setManualFollowUpPhone('');
             setLogFormTab('NOTE'); // Go back to note tab
 
             window.dispatchEvent(new Event('crm_call_logs_updated'));
@@ -848,6 +853,26 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                     </div>
                                                 </div>
                                             )}
+
+                                            {/* Follow-up Telephone */}
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                                                    {callType === 'INBOUND' ? 'تلفن پیگیری (کدام خط شرکت زنگ خورد؟)' : 'تلفن پیگیری (از کدام خط تماس گرفته شد؟)'}
+                                                </label>
+                                                <select
+                                                    value={manualFollowUpPhone}
+                                                    onChange={e => setManualFollowUpPhone(e.target.value)}
+                                                    className="w-full px-2.5 py-1.5 text-[11px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-sky-500 focus:outline-none dark:text-white font-bold"
+                                                >
+                                                    <option value="">-- نامشخص / انتخاب نشده --</option>
+                                                    <option value="خط اصلی تهران (۰۲۱-۹۱۰۰۰۰۰۰)">خط اصلی تهران (۰۲۱-۹۱۰۰۰۰۰۰)</option>
+                                                    <option value="خط مستقیم فروش (داخلی ۱۰۱)">خط مستقیم فروش (داخلی ۱۰۱)</option>
+                                                    <option value="خط پشتیبانی (داخلی ۱۰۲)">خط پشتیبانی (داخلی ۱۰۲)</option>
+                                                    <option value="خط تبلیغات دیوار">خط تبلیغات دیوار</option>
+                                                    <option value="خط آگهی‌های باما">خط آگهی‌های باما</option>
+                                                    <option value="همراه کارشناس پیگیری">همراه کارشناس پیگیری</option>
+                                                </select>
+                                            </div>
 
                                             {/* Notes / Description */}
                                             <div>
