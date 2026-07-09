@@ -81,7 +81,7 @@ export const CrmCallLogsImportModal: React.FC<CrmCallLogsImportModalProps> = ({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        getMyProfile().then(p => {
+        getMyProfile().then((p: any) => {
             setCurrentUser(p);
             setSelectedAgent(p?.full_name || p?.username || loggedInUser?.username || 'کاربر سیستم');
         }).catch(() => {

@@ -792,6 +792,20 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                     </div>
                 </div>
             )}
+
+            {isImportModalOpen && (
+                <CrmCallLogsImportModal
+                    isOpen={isImportModalOpen}
+                    onClose={() => setIsImportModalOpen(false)}
+                    existingUsers={users}
+                    staffUsers={staffUsers}
+                    loggedInUser={loggedInUser}
+                    onImportSuccess={() => {
+                        setIsImportModalOpen(false);
+                        // Refresh logs (or refresh the parent, but for now, just close is okay)
+                    }}
+                />
+            )}
         </div>
     );
 };
