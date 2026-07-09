@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getUsers, getCars, carOrdersService } from '../services/api';
-import type { User, Car, CarOrder } from '../types';
+import { getUsers, getCars, carOrdersService, getCallLogs, getCrmMeetings } from '../services/api';
+import type { User, Car, CarOrder, CrmCallLog, CrmMeeting } from '../types';
 import { OrderStatus, LeadStatus } from '../types';
 import Spinner from '../components/Spinner';
 import { motion } from 'framer-motion';
@@ -13,7 +13,7 @@ import {
     ChartBar, Users, Car as CarIcon, Map, Megaphone, 
     Calendar, Filter, TrendingUp, Activity, ShoppingCart,
     Copy, Check, FileText, Layers, Award, BarChart3, HelpCircle,
-    PhoneCall, CheckCircle2, Flame, Share2, FileSpreadsheet
+    PhoneCall, CheckCircle2, Flame, Share2, FileSpreadsheet, Phone
 } from 'lucide-react';
 
 // Declare moment from global scope
@@ -53,11 +53,13 @@ const ReportsPage: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [cars, setCars] = useState<Car[]>([]);
     const [orders, setOrders] = useState<CarOrder[]>([]);
+    const [callLogs, setCallLogs] = useState<CrmCallLog[]>([]);
+    const [meetings, setMeetings] = useState<CrmMeeting[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
     // Sub-tab selection and notifications
-    const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics'>('kpis');
+    const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics' | 'meetings' | 'callLogs'>('kpis');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -320,14 +322,18 @@ const ReportsPage: React.FC = () => {
             setLoading(true);
             setError(null);
             try {
-                const [usersData, carsData, ordersData] = await Promise.all([
+                const [usersData, carsData, ordersData, logsData, meetingsData] = await Promise.all([
                     getUsers(),
                     getCars(),
-                    carOrdersService.getAll()
+                    carOrdersService.getAll(),
+                    getCallLogs().catch(() => []),
+                    getCrmMeetings().catch(() => [])
                 ]);
                 setUsers(usersData);
                 setCars(carsData);
                 setOrders(ordersData);
+                setCallLogs(logsData);
+                setMeetings(meetingsData);
             } catch (err) {
                 setError('خطا در دریافت اطلاعات گزارشات');
             } finally {
@@ -755,7 +761,7 @@ const ReportsPage: React.FC = () => {
                 </div>
 
                 {/* Sub-tab selection */}
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start">
+                <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start gap-1">
                     <button
                         onClick={() => setActiveSubTab('kpis')}
                         className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
@@ -777,6 +783,28 @@ const ReportsPage: React.FC = () => {
                     >
                         <BarChart3 className="w-4 h-4" />
                         نمودارها و تحلیل عمومی
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('meetings')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                            activeSubTab === 'meetings'
+                            ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}
+                    >
+                        <Users className="w-4 h-4" />
+                        گزارش ملاقات‌ها
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('callLogs')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                            activeSubTab === 'callLogs'
+                            ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}
+                    >
+                        <Phone className="w-4 h-4" />
+                        گزارش تماس‌ها
                     </button>
                 </div>
             </div>
@@ -1650,6 +1678,186 @@ const ReportsPage: React.FC = () => {
                                 </ResponsiveContainer>
                             </div>
                         </motion.div>
+                    </div>
+                </div>
+            )}
+
+            {/* Meetings Tab */}
+            {activeSubTab === 'meetings' && (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard 
+                            title="کل ملاقات‌ها" 
+                            value={meetings.length.toLocaleString('fa-IR')} 
+                            icon={Users} 
+                            color="text-indigo-500" 
+                            delay={0.1} 
+                        />
+                        <StatCard 
+                            title="برگزار شده" 
+                            value={meetings.filter(m => m.stage === 'برگزار شد').length.toLocaleString('fa-IR')} 
+                            icon={CheckCircle2} 
+                            color="text-emerald-500" 
+                            delay={0.2} 
+                        />
+                        <StatCard 
+                            title="تعیین وقت" 
+                            value={meetings.filter(m => m.stage === 'تعیین وقت').length.toLocaleString('fa-IR')} 
+                            icon={Calendar} 
+                            color="text-amber-500" 
+                            delay={0.3} 
+                        />
+                        <StatCard 
+                            title="برگزار نشد / لغو" 
+                            value={meetings.filter(m => m.stage === 'برگزار نشد').length.toLocaleString('fa-IR')} 
+                            icon={Activity} 
+                            color="text-rose-500" 
+                            delay={0.4} 
+                        />
+                    </div>
+                    
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700">
+                        <h3 className="text-lg font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                            <Users className="w-5 h-5 text-indigo-500" />
+                            وضعیت برگزاری ملاقات‌های حضوری
+                        </h3>
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={[
+                                            { name: 'دعوت اولیه', value: meetings.filter(m => m.stage === 'دعوت').length },
+                                            { name: 'تعیین وقت', value: meetings.filter(m => m.stage === 'تعیین وقت').length },
+                                            { name: 'برگزار شد', value: meetings.filter(m => m.stage === 'برگزار شد').length },
+                                            { name: 'برگزار نشد', value: meetings.filter(m => m.stage === 'برگزار نشد').length }
+                                        ].filter(item => item.value > 0)}
+                                        cx="50%"
+                                        cy="50%"
+                                        labelLine={false}
+                                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                                        outerRadius={100}
+                                        fill="#8884d8"
+                                        dataKey="value"
+                                    >
+                                        {[
+                                            { name: 'دعوت اولیه', value: meetings.filter(m => m.stage === 'دعوت').length },
+                                            { name: 'تعیین وقت', value: meetings.filter(m => m.stage === 'تعیین وقت').length },
+                                            { name: 'برگزار شد', value: meetings.filter(m => m.stage === 'برگزار شد').length },
+                                            { name: 'برگزار نشد', value: meetings.filter(m => m.stage === 'برگزار نشد').length }
+                                        ].filter(item => item.value > 0).map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Call Logs Tab */}
+            {activeSubTab === 'callLogs' && (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard 
+                            title="کل تماس‌های ثبت شده" 
+                            value={callLogs.length.toLocaleString('fa-IR')} 
+                            icon={Phone} 
+                            color="text-sky-500" 
+                            delay={0.1} 
+                        />
+                        <StatCard 
+                            title="تماس‌های موفق" 
+                            value={callLogs.filter(c => c.callStatus === 'SUCCESSFUL').length.toLocaleString('fa-IR')} 
+                            icon={CheckCircle2} 
+                            color="text-emerald-500" 
+                            delay={0.2} 
+                        />
+                        <StatCard 
+                            title="ورودی به خروجی" 
+                            value={`${callLogs.filter(c => c.callType === 'INBOUND').length.toLocaleString('fa-IR')} / ${callLogs.filter(c => c.callType === 'OUTBOUND').length.toLocaleString('fa-IR')}`} 
+                            icon={PhoneCall} 
+                            color="text-amber-500" 
+                            delay={0.3} 
+                        />
+                        <StatCard 
+                            title="از دست رفته / بی‌پاسخ" 
+                            value={callLogs.filter(c => c.callStatus === 'MISSED' || c.callStatus === 'NO_ANSWER').length.toLocaleString('fa-IR')} 
+                            icon={HelpCircle} 
+                            color="text-rose-500" 
+                            delay={0.4} 
+                        />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700">
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                                <Activity className="w-5 h-5 text-sky-500" />
+                                وضعیت پاسخگویی تماس‌ها
+                            </h3>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart 
+                                        data={[
+                                            { name: 'موفق', value: callLogs.filter(c => c.callStatus === 'SUCCESSFUL').length },
+                                            { name: 'بدون پاسخ', value: callLogs.filter(c => c.callStatus === 'NO_ANSWER').length },
+                                            { name: 'از دست رفته', value: callLogs.filter(c => c.callStatus === 'MISSED').length },
+                                            { name: 'مشغول', value: callLogs.filter(c => c.callStatus === 'BUSY').length },
+                                            { name: 'رد شده', value: callLogs.filter(c => c.callStatus === 'REJECTED').length },
+                                        ].filter(item => item.value > 0)}
+                                        margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                                        <Tooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
+                                        <Bar dataKey="value" name="تعداد تماس" fill="#0ea5e9" radius={[4, 4, 0, 0]} barSize={40}>
+                                            {
+                                                [
+                                                    { name: 'موفق', value: callLogs.filter(c => c.callStatus === 'SUCCESSFUL').length },
+                                                    { name: 'بدون پاسخ', value: callLogs.filter(c => c.callStatus === 'NO_ANSWER').length },
+                                                    { name: 'از دست رفته', value: callLogs.filter(c => c.callStatus === 'MISSED').length },
+                                                    { name: 'مشغول', value: callLogs.filter(c => c.callStatus === 'BUSY').length },
+                                                    { name: 'رد شده', value: callLogs.filter(c => c.callStatus === 'REJECTED').length },
+                                                ].filter(item => item.value > 0).map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))
+                                            }
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700">
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                                <PhoneCall className="w-5 h-5 text-indigo-500" />
+                                ترکیب تماس‌های ورودی و خروجی
+                            </h3>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'تماس خروجی (توسط کارشناس)', value: callLogs.filter(c => c.callType === 'OUTBOUND').length },
+                                                { name: 'تماس ورودی (از سمت مشتری)', value: callLogs.filter(c => c.callType === 'INBOUND').length }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={100}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                        >
+                                            <Cell fill="#8b5cf6" />
+                                            <Cell fill="#f43f5e" />
+                                        </Pie>
+                                        <Tooltip content={<CustomTooltip />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
