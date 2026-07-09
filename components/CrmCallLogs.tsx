@@ -18,10 +18,12 @@ import {
     TrendingUp,
     Hash,
     Edit2,
-    Loader2
+    Loader2,
+    FileSpreadsheet
 } from 'lucide-react';
 import type { User, StaffUser, CrmCallLog } from '../types';
 import { getCallLogs, createCallLog, updateCallLog } from '../services/api';
+import { CrmCallLogsImportModal } from './CrmCallLogsImportModal';
 
 declare const moment: any;
 
@@ -69,6 +71,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
 
     // Logging/Add Modal state
     const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     
     // Log Call Form state
     const [selectedUserOption, setSelectedUserOption] = useState<'EXISTING' | 'NEW'>('EXISTING');
@@ -405,13 +408,22 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                         ))}
                     </div>
 
-                    <button
-                        onClick={() => setIsLogModalOpen(true)}
-                        className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 self-start md:self-auto"
-                    >
-                        <Plus className="w-4 h-4" />
-                        ثبت تماس جدید
-                    </button>
+                    <div className="flex gap-2.5 self-start md:self-auto">
+                        <button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
+                        >
+                            <FileSpreadsheet className="w-4 h-4" />
+                            وارد کردن از اکسل/CSV
+                        </button>
+                        <button
+                            onClick={() => setIsLogModalOpen(true)}
+                            className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            ثبت تماس جدید
+                        </button>
+                    </div>
                 </div>
 
                 {/* Search Bar / Filters */}
