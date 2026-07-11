@@ -1234,18 +1234,68 @@ const CRM_MEETINGS_URL = `${API_BASE_URL}/crmMeetings`;
 export const getCrmMeetings = async (): Promise<CrmMeeting[]> => {
     const response = await fetch(CRM_MEETINGS_URL, { headers: getAuthHeaders() });
     const data = await handleResponse(response);
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => ({
+        id: item.id,
+        userId: item.customer_id !== undefined ? Number(item.customer_id) : (item.userId !== undefined ? Number(item.userId) : 0),
+        customerName: item.customer_name || item.customerName || 'مشتری',
+        customerNumber: item.customer_phone || item.customer_number || item.customerNumber || '',
+        stage: item.meeting_stage || item.stage || 'دعوت',
+        meetingDate: item.meeting_date || item.meetingDate || '',
+        meetingTime: item.meeting_time || item.meetingTime || '',
+        meetingLocation: item.location || item.meetingLocation || '',
+        meetingResult: item.result_notes || item.meetingResult || '',
+        agentName: item.agent_name || item.agentName || 'کاربر سیستم',
+        createdAt: item.created_at || item.createdAt || ''
+    }));
 };
 
 export const createCrmMeeting = async (meeting: Omit<CrmMeeting, 'id'> & { id?: string | number }): Promise<CrmMeeting> => {
     ensureOnline();
+    
+    // Map to the webhook API structure
+    const payload = {
+        customer_id: meeting.userId,
+        agent_name: meeting.agentName,
+        meeting_stage: meeting.stage,
+        meeting_date: meeting.meetingDate,
+        meeting_time: meeting.meetingTime,
+        location: meeting.meetingLocation,
+        result_notes: meeting.meetingResult || '',
+        // Include camelCase just in case
+        userId: meeting.userId,
+        customerName: meeting.customerName,
+        customerNumber: meeting.customerNumber,
+        stage: meeting.stage,
+        meetingDate: meeting.meetingDate,
+        meetingTime: meeting.meetingTime,
+        meetingLocation: meeting.meetingLocation,
+        meetingResult: meeting.meetingResult || '',
+        agentName: meeting.agentName
+    };
+
     const response = await fetch(CRM_MEETINGS_URL, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(meeting),
+        body: JSON.stringify(payload),
     });
     const result = await handleResponse(response);
     
+    // Map response back to camelCase
+    const mapped: CrmMeeting = {
+        id: result.id,
+        userId: result.customer_id !== undefined ? Number(result.customer_id) : (result.userId !== undefined ? Number(result.userId) : meeting.userId),
+        customerName: result.customer_name || result.customerName || meeting.customerName || 'مشتری',
+        customerNumber: result.customer_phone || result.customer_number || result.customerNumber || meeting.customerNumber || '',
+        stage: result.meeting_stage || result.stage || meeting.stage,
+        meetingDate: result.meeting_date || result.meetingDate || meeting.meetingDate,
+        meetingTime: result.meeting_time || result.meetingTime || meeting.meetingTime,
+        meetingLocation: result.location || result.meetingLocation || meeting.meetingLocation,
+        meetingResult: result.result_notes || result.meetingResult || meeting.meetingResult,
+        agentName: result.agent_name || result.agentName || meeting.agentName,
+        createdAt: result.created_at || result.createdAt || ''
+    };
+
     // Register lock/activity on local Express server if userId exists
     if (meeting.userId) {
         try {
@@ -1255,17 +1305,55 @@ export const createCrmMeeting = async (meeting: Omit<CrmMeeting, 'id'> & { id?: 
         }
     }
     
-    return result;
+    return mapped;
 };
 
 export const updateCrmMeeting = async (meeting: CrmMeeting): Promise<CrmMeeting> => {
     ensureOnline();
+
+    // Map to the webhook API structure
+    const payload = {
+        id: meeting.id,
+        customer_id: meeting.userId,
+        agent_name: meeting.agentName,
+        meeting_stage: meeting.stage,
+        meeting_date: meeting.meetingDate,
+        meeting_time: meeting.meetingTime,
+        location: meeting.meetingLocation,
+        result_notes: meeting.meetingResult || '',
+        // Include camelCase just in case
+        userId: meeting.userId,
+        customerName: meeting.customerName,
+        customerNumber: meeting.customerNumber,
+        stage: meeting.stage,
+        meetingDate: meeting.meetingDate,
+        meetingTime: meeting.meetingTime,
+        meetingLocation: meeting.meetingLocation,
+        meetingResult: meeting.meetingResult || '',
+        agentName: meeting.agentName
+    };
+
     const response = await fetch(CRM_MEETINGS_URL, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(meeting),
+        body: JSON.stringify(payload),
     });
-    return handleResponse(response);
+    const result = await handleResponse(response);
+    
+    // Map response back to camelCase
+    return {
+        id: result.id,
+        userId: result.customer_id !== undefined ? Number(result.customer_id) : (result.userId !== undefined ? Number(result.userId) : meeting.userId),
+        customerName: result.customer_name || result.customerName || meeting.customerName || 'مشتری',
+        customerNumber: result.customer_phone || result.customer_number || result.customerNumber || meeting.customerNumber || '',
+        stage: result.meeting_stage || result.stage || meeting.stage,
+        meetingDate: result.meeting_date || result.meetingDate || meeting.meetingDate,
+        meetingTime: result.meeting_time || result.meetingTime || meeting.meetingTime,
+        meetingLocation: result.location || result.meetingLocation || meeting.meetingLocation,
+        meetingResult: result.result_notes || result.meetingResult || meeting.meetingResult,
+        agentName: result.agent_name || result.agentName || meeting.agentName,
+        createdAt: result.created_at || result.createdAt || ''
+    };
 };
 
 // --- CRM Live Status & Locks ---
