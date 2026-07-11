@@ -219,7 +219,19 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             ]);
             setJournals(journalData);
             
-            const filteredMeetings = meetingData.filter(m => Number(m.userId) === Number(userId));
+            const filteredMeetings = meetingData.filter(m => {
+                if (userId && Number(m.userId) === Number(userId)) return true;
+                
+                const normalizedMeetingNum = String(m.customerNumber || '').trim().replace(/[\s\-\+]/g, '');
+                const normalizedUserNum = userNumber ? String(userNumber).trim().replace(/[\s\-\+]/g, '') : '';
+                
+                if (normalizedMeetingNum && normalizedUserNum) {
+                    const last10Meeting = normalizedMeetingNum.substring(Math.max(0, normalizedMeetingNum.length - 10));
+                    const last10User = normalizedUserNum.substring(Math.max(0, normalizedUserNum.length - 10));
+                    return last10Meeting === last10User;
+                }
+                return false;
+            });
             setCrmMeetings(filteredMeetings);
             
             const filteredLogs = callLogData.filter(log => {
