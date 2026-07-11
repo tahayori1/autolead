@@ -852,6 +852,15 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                         setModalFullUser(prev => prev && prev.id === userId ? { ...prev, leadStatus: newStatus } : prev);
                         setSelectedLead(prev => prev && prev.id === userId ? { ...prev, leadStatus: newStatus } : prev);
                     }}
+                    onUserUpdate={(updatedUser) => {
+                        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+                        if (modalFullUser && modalFullUser.id === updatedUser.id) {
+                            setModalFullUser(updatedUser);
+                        }
+                        if (selectedLead && selectedLead.id === updatedUser.id) {
+                            setSelectedLead(updatedUser);
+                        }
+                    }}
                 />
             )}
             

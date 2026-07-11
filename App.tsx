@@ -21,7 +21,6 @@ import LeaveRequestsPage from './pages/LeaveRequestsPage';
 import AnonymousFeedbackPage from './pages/AnonymousFeedbackPage';
 import ZeroCarDeliveryPage from './pages/ZeroCarDeliveryPage';
 import MyProfilePage from './pages/MyProfilePage';
-import CustomerClubPage from './pages/CustomerClubPage';
 import NotificationCenterPage from './pages/NotificationCenterPage';
 import UsedCarPage from './pages/UsedCarPage';
 import CarOrderPage from './pages/CarOrderPage';
@@ -202,7 +201,6 @@ const App: React.FC = () => {
         { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
         { view: 'car-prices' as ActiveView, label: 'قیمت روز خودرو', icon: <PriceIcon className="w-5 h-5" /> },
         { view: 'users' as ActiveView, label: 'مدیریت مشتریان (CRM)', icon: <UsersIcon className="w-5 h-5" /> },
-        { view: 'customer-club' as ActiveView, label: 'باشگاه مشتریان', icon: <BadgeIcon className="w-5 h-5" /> },
         { view: 'notification-center' as ActiveView, label: 'پیام‌رسان هوشمند', icon: <ChatAltIcon className="w-5 h-5" /> },
         { view: 'advertising-campaigns' as ActiveView, label: 'آنالیز کمپین‌ها', icon: <RocketIcon className="w-5 h-5 text-emerald-500" /> },
         { view: 'advertising-writer' as ActiveView, label: 'تبلیغ نویس', icon: <Sparkles className="w-5 h-5 text-indigo-500" /> },
@@ -259,7 +257,6 @@ const App: React.FC = () => {
             icon: <UsersIcon className="w-5 h-5" />,
             items: [
                 { view: 'users' as ActiveView, label: 'مدیریت مشتریان (CRM)', icon: <UsersIcon className="w-5 h-5" /> },
-                { view: 'customer-club' as ActiveView, label: 'باشگاه مشتریان', icon: <BadgeIcon className="w-5 h-5" /> },
                 { view: 'notification-center' as ActiveView, label: 'پیام‌رسان هوشمند', icon: <ChatAltIcon className="w-5 h-5" /> },
             ]
         },
@@ -529,7 +526,6 @@ const App: React.FC = () => {
                 {activeView === 'anonymous-feedback' && <AnonymousFeedbackPage />}
                 {activeView === 'zero-car-delivery' && <ZeroCarDeliveryPage />}
                 {activeView === 'my-profile' && <MyProfilePage />}
-                {activeView === 'customer-club' && <CustomerClubPage />}
                 {activeView === 'notification-center' && <NotificationCenterPage />}
                 {activeView === 'used-cars' && <UsedCarPage />}
                 {activeView === 'advertising-writer' && <AdvertisingPage loggedInUser={currentUser} initialTab="writer" />}

@@ -7,7 +7,8 @@ import Toast from './Toast';
 import { 
     getCustomerJournals, createCustomerJournal, getMyProfile,
     sendCrmHeartbeat, getCrmStatus, clearCrmLock,
-    createCallLog, getCallLogs, createCrmMeeting, getCrmMeetings, updateCrmMeeting
+    createCallLog, getCallLogs, createCrmMeeting, getCrmMeetings, updateCrmMeeting,
+    updateUser
 } from '../services/api';
 import SendMessageModal from './SendMessageModal';
 import { 
@@ -51,6 +52,7 @@ interface LeadDetailHistoryModalProps {
     conditions: CarSaleCondition[];
     loggedInUser: MyProfile | null;
     onStatusChange?: (userId: number, newStatus: LeadStatus) => Promise<void>;
+    onUserUpdate?: (updatedUser: User) => void;
     hasPrevious?: boolean;
     hasNext?: boolean;
     onNavigate?: (direction: 'prev' | 'next') => void;
@@ -66,7 +68,7 @@ const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ labe
 const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({ 
     isOpen, onClose, lead, fullUserDetails, messages, isLoading, error, 
     onSendMessage, onRegisterOrder, onEdit, cars, conditions, loggedInUser,
-    onStatusChange, hasPrevious = false, hasNext = false, onNavigate
+    onStatusChange, onUserUpdate, hasPrevious = false, hasNext = false, onNavigate
 }) => {
     const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'SURVEYS'>('COMBINED_HISTORY');
     const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY'>('REGISTRATION');
@@ -87,6 +89,16 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
+
+    // CRM Ratings & Tagging States
+    const [crmTags, setCrmTags] = useState<string[]>([]);
+    const [crmBehaviorScore, setCrmBehaviorScore] = useState<number>(0);
+    const [crmDealDifficulty, setCrmDealDifficulty] = useState<string>('متوسط');
+    const [crmOpinion, setCrmOpinion] = useState<string>('');
+    const [newCrmTagInput, setNewCrmTagInput] = useState<string>('');
+    const [isSavingCrmRatings, setIsSavingCrmRatings] = useState<boolean>(false);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
     // Polling and heartbeat for viewing status
     useEffect(() => {
@@ -179,6 +191,13 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             // Prefill meeting date & time
             setMeetingDate(getTodayJalaliDate());
             setMeetingTime('10:00');
+
+            // Initialize CRM Ratings and Tags
+            setCrmTags(targetUser.tags || []);
+            setCrmBehaviorScore(targetUser.behaviorScore || 0);
+            setCrmDealDifficulty(targetUser.dealDifficulty || 'متوسط');
+            setCrmOpinion(targetUser.behaviorRatingOpinion || '');
+            setNewCrmTagInput('');
         } else if (!isOpen) {
             setNewJournalContent('');
             setValidationError(null);
@@ -198,12 +217,93 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setMeetingTime('');
             setMeetingLocation('نمایشگاه مرکزی');
             setMeetingResult('');
+
+            // Reset CRM Ratings and Tags
+            setCrmTags([]);
+            setCrmBehaviorScore(0);
+            setCrmDealDifficulty('متوسط');
+            setCrmOpinion('');
+            setNewCrmTagInput('');
         }
     }, [isOpen, lead, fullUserDetails]);
+
+    const handleAddCrmTag = () => {
+        const cleanTag = newCrmTagInput.trim();
+        if (!cleanTag) return;
+        if (crmTags.includes(cleanTag)) {
+            setNewCrmTagInput('');
+            return;
+        }
+        setCrmTags([...crmTags, cleanTag]);
+        setNewCrmTagInput('');
+    };
+
+    const handleRemoveCrmTag = (tagToRemove: string) => {
+        setCrmTags(crmTags.filter(t => t !== tagToRemove));
+    };
+
+    const handleToggleCrmTag = (tag: string) => {
+        if (crmTags.includes(tag)) {
+            setCrmTags(crmTags.filter(t => t !== tag));
+        } else {
+            setCrmTags([...crmTags, tag]);
+        }
+    };
+
+    const handleSaveCrmRatings = async () => {
+        const userId = targetUser?.id;
+        if (!userId) return;
+
+        setIsSavingCrmRatings(true);
+        try {
+            const updatedUser: User = {
+                ...targetUser,
+                tags: crmTags,
+                behaviorScore: crmBehaviorScore,
+                dealDifficulty: crmDealDifficulty,
+                behaviorRatingOpinion: crmOpinion,
+                LastAction: new Date().toISOString()
+            };
+
+            const result = await updateUser(Number(userId), updatedUser);
+
+            // Create customer journal log entry for history timeline
+            const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+            const stars = '★'.repeat(crmBehaviorScore) + '☆'.repeat(5 - crmBehaviorScore);
+            const journalContent = `⭐ به‌روزرسانی امتیاز و برچسب‌های CRM:
+- امتیاز اخلاق و رفتار: ${crmBehaviorScore} از ۵ (${stars})
+- وضعیت معامله: معامله با این مشتری ${crmDealDifficulty} است.
+- برچسب‌ها: ${crmTags.length > 0 ? crmTags.join('، ') : 'بدون برچسب'}
+${crmOpinion ? `- نظر کارشناس: ${crmOpinion}` : ''}`;
+
+            await createCustomerJournal({
+                userId,
+                content: journalContent,
+                author: authorName
+            });
+
+            if (onUserUpdate) {
+                onUserUpdate(result);
+            }
+
+            // Fetch journals to immediately show on history timeline
+            fetchJournals();
+
+            setToastType('success');
+            setToastMessage('اطلاعات امتیازدهی و برچسب‌های مشتری با موفقیت ذخیره شد.');
+        } catch (err) {
+            console.error("Failed to save CRM ratings and tags:", err);
+            setToastType('error');
+            setToastMessage('خطا در ذخیره‌سازی اطلاعات امتیاز و برچسب.');
+        } finally {
+            setIsSavingCrmRatings(false);
+        }
+    };
 
     const fetchJournals = useCallback(async () => {
         const userId = fullUserDetails?.id || lead?.id;
         const userNumber = fullUserDetails?.Number || lead?.Number;
+        const leadName = fullUserDetails?.FullName || lead?.FullName || '';
         if (!userId) return;
         setIsJournalLoading(true);
         setIsCallLogsLoading(true);
@@ -228,7 +328,11 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
                 if (normalizedMeetingNum && normalizedUserNum) {
                     const last10Meeting = normalizedMeetingNum.substring(Math.max(0, normalizedMeetingNum.length - 10));
                     const last10User = normalizedUserNum.substring(Math.max(0, normalizedUserNum.length - 10));
-                    return last10Meeting === last10User;
+                    if (last10Meeting === last10User) return true;
+                }
+
+                if (leadName && m.customerName) {
+                    if (m.customerName.trim() === leadName.trim()) return true;
                 }
                 return false;
             });
@@ -747,7 +851,8 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
             if (j.content.startsWith('📞 لاگ تماس تلفنی')) {
                 return; // skip duplicate manual journal
             }
-            if (j.content.startsWith('🤝 ملاقات حضوری:') || j.content.startsWith('📝 ویرایش و به‌روزرسانی ملاقات حضوری:')) {
+            const isMeetingJournal = j.content.includes('ملاقات حضوری') && (j.content.includes('زمان جلسه:') || j.content.includes('مرحله:'));
+            if (isMeetingJournal) {
                 const { stage, dateTime, location, result } = parseMeetingContent(j.content);
                 // Deduplicate if we already added a CRM meeting at this exact time
                 if (addedMeetingTimes.has(dateTime)) {
@@ -1049,6 +1154,171 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                 </button>
                                             );
                                         })}
+                                    </div>
+                                </div>
+
+                                {/* Customer Ratings & Tagging (CRM Club Merged) */}
+                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm space-y-4">
+                                    <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                                        <Sparkles className="w-4.5 h-4.5 text-amber-500" />
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">امتیازدهی اخلاق و برچسب‌گذاری مشتری (ادغام شده با باشگاه مشتریان):</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Score Section */}
+                                        <div className="space-y-2">
+                                            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">امتیاز اخلاق و رفتار مشتری (امتیازدهی کارشناسان):</span>
+                                            <div className="flex items-center gap-1.5">
+                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                    <button
+                                                        key={star}
+                                                        type="button"
+                                                        onClick={() => setCrmBehaviorScore(star)}
+                                                        className="text-2xl transition-all focus:outline-none hover:scale-110 active:scale-95"
+                                                    >
+                                                        <Star 
+                                                            className={`w-6 h-6 ${
+                                                                star <= crmBehaviorScore 
+                                                                    ? 'text-amber-500 fill-amber-500' 
+                                                                    : 'text-slate-300 dark:text-slate-700'
+                                                            }`} 
+                                                        />
+                                                    </button>
+                                                ))}
+                                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-2">
+                                                    {crmBehaviorScore === 1 && "بسیار ضعیف / سرد"}
+                                                    {crmBehaviorScore === 2 && "ضعیف"}
+                                                    {crmBehaviorScore === 3 && "معمولی"}
+                                                    {crmBehaviorScore === 4 && "خوب و باحوصله"}
+                                                    {crmBehaviorScore === 5 && "بسیار خوش‌اخلاق و عالی"}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Difficulty Level */}
+                                        <div className="space-y-2">
+                                            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">میزان سختی معامله با این مشتری:</span>
+                                            <div className="flex flex-wrap gap-1 bg-slate-50 dark:bg-slate-950 p-1 rounded-xl border border-slate-100 dark:border-slate-800">
+                                                {['خیلی آسان', 'آسان', 'متوسط', 'سخت', 'خیلی سخت'].map((level) => {
+                                                    const isSelected = crmDealDifficulty === level;
+                                                    let colorClass = "bg-white text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-850";
+                                                    if (isSelected) {
+                                                        if (level === 'خیلی آسان' || level === 'آسان') {
+                                                            colorClass = "bg-emerald-500 text-white border-emerald-500 font-bold shadow-sm";
+                                                        } else if (level === 'متوسط') {
+                                                            colorClass = "bg-sky-500 text-white border-sky-500 font-bold shadow-sm";
+                                                        } else {
+                                                            colorClass = "bg-rose-500 text-white border-rose-500 font-bold shadow-sm";
+                                                        }
+                                                    }
+                                                    return (
+                                                        <button
+                                                            key={level}
+                                                            type="button"
+                                                            onClick={() => setCrmDealDifficulty(level)}
+                                                            className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${colorClass}`}
+                                                        >
+                                                            {level}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Ready-made tags selection list */}
+                                    <div className="space-y-2">
+                                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">برچسب‌های توصیفی آماده (انتخاب سریع):</span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {['سختگیر', 'خوش اخلاق', 'محتاط و بادقت', 'سرمایه‌گذار', 'نفوذ سیاسی/حاکمیتی', 'سابقه دوستی', 'سفارشی', 'تخفیف مشاغل'].map((tag) => {
+                                                const isSelected = crmTags.includes(tag);
+                                                return (
+                                                    <button
+                                                        key={tag}
+                                                        type="button"
+                                                        onClick={() => handleToggleCrmTag(tag)}
+                                                        className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
+                                                            isSelected 
+                                                                ? 'bg-indigo-500 text-white border-indigo-500 font-bold shadow-xs' 
+                                                                : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
+                                                        }`}
+                                                    >
+                                                        {isSelected ? `✓ ${tag}` : `+ ${tag}`}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Typed/Custom tags */}
+                                    <div className="space-y-2">
+                                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">برچسب‌های اختصاصی و دلخواه مشتری:</span>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={newCrmTagInput}
+                                                onChange={(e) => setNewCrmTagInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddCrmTag();
+                                                    }
+                                                }}
+                                                placeholder="تایپ برچسب جدید و فشردن اینتر..."
+                                                className="flex-grow px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-850 dark:text-white text-xs outline-none"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAddCrmTag}
+                                                className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition"
+                                            >
+                                                افزودن برچسب
+                                            </button>
+                                        </div>
+
+                                        {/* Display Active Tags */}
+                                        {crmTags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-150 dark:border-slate-850">
+                                                {crmTags.map((tag) => (
+                                                    <span 
+                                                        key={tag} 
+                                                        className="inline-flex items-center gap-1 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full"
+                                                    >
+                                                        {tag}
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => handleRemoveCrmTag(tag)}
+                                                            className="text-slate-400 hover:text-rose-500 font-bold ml-0.5 transition focus:outline-none"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Sales expert opinion input */}
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">ثبت نظر و یادداشت کارشناس بابت رفتار مشتری:</label>
+                                        <textarea
+                                            value={crmOpinion}
+                                            onChange={(e) => setCrmOpinion(e.target.value)}
+                                            placeholder="نظرات، جزئیات رفتار یا اطلاعات تکمیلی در مورد اخلاق و نحوه معامله با این مشتری را یادداشت کنید..."
+                                            className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-850 dark:text-white text-xs outline-none resize-none min-h-[60px]"
+                                            rows={2}
+                                        />
+                                    </div>
+
+                                    <div className="flex justify-end pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveCrmRatings}
+                                            disabled={isSavingCrmRatings}
+                                            className="bg-emerald-650 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                                        >
+                                            {isSavingCrmRatings ? 'در حال ذخیره‌سازی...' : '✓ ثبت و ذخیره مشخصات امتیاز و برچسب'}
+                                        </button>
                                     </div>
                                 </div>
 
@@ -1854,6 +2124,14 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                     message={validationError} 
                     type="error" 
                     onClose={() => setValidationError(null)} 
+                />
+            )}
+
+            {toastMessage && (
+                <Toast 
+                    message={toastMessage} 
+                    type={toastType} 
+                    onClose={() => setToastMessage(null)} 
                 />
             )}
         </>

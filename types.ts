@@ -104,6 +104,8 @@ export interface User {
     segment?: CustomerSegment;
     behaviorScore?: number; // 1 to 5
     tags?: string[]; // e.g., ["خوش‌حساب", "عجول"]
+    dealDifficulty?: 'VERY_EASY' | 'EASY' | 'MEDIUM' | 'HARD' | 'VERY_HARD' | string;
+    behaviorRatingOpinion?: string;
     // CRM Fields
     leadStatus?: LeadStatus;
     reservedByUserId?: number | null;
