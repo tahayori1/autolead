@@ -70,7 +70,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     onSendMessage, onRegisterOrder, onEdit, cars, conditions, loggedInUser,
     onStatusChange, onUserUpdate, hasPrevious = false, hasNext = false, onNavigate
 }) => {
-    const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'SURVEYS'>('COMBINED_HISTORY');
+    const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'BEHAVIOR_RATING' | 'SURVEYS'>('COMBINED_HISTORY');
     const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY'>('REGISTRATION');
     
     // Send Message Modal visibility
@@ -250,7 +250,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         }
     };
 
-    const handleSaveCrmRatings = async () => {
+    const handleSaveCrmTags = async () => {
         const userId = targetUser?.id;
         if (!userId) return;
 
@@ -259,9 +259,6 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             const updatedUser: User = {
                 ...targetUser,
                 tags: crmTags,
-                behaviorScore: crmBehaviorScore,
-                dealDifficulty: crmDealDifficulty,
-                behaviorRatingOpinion: crmOpinion,
                 LastAction: new Date().toISOString()
             };
 
@@ -269,12 +266,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
 
             // Create customer journal log entry for history timeline
             const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
-            const stars = '★'.repeat(crmBehaviorScore) + '☆'.repeat(5 - crmBehaviorScore);
-            const journalContent = `⭐ به‌روزرسانی امتیاز و برچسب‌های CRM:
-- امتیاز اخلاق و رفتار: ${crmBehaviorScore} از ۵ (${stars})
-- وضعیت معامله: معامله با این مشتری ${crmDealDifficulty} است.
-- برچسب‌ها: ${crmTags.length > 0 ? crmTags.join('، ') : 'بدون برچسب'}
-${crmOpinion ? `- نظر کارشناس: ${crmOpinion}` : ''}`;
+            const journalContent = `🏷️ به‌روزرسانی برچسب‌های مشتری:
+- برچسب‌ها: ${crmTags.length > 0 ? crmTags.join('، ') : 'بدون برچسب'}`;
 
             await createCustomerJournal({
                 userId,
@@ -290,11 +283,59 @@ ${crmOpinion ? `- نظر کارشناس: ${crmOpinion}` : ''}`;
             fetchJournals();
 
             setToastType('success');
-            setToastMessage('اطلاعات امتیازدهی و برچسب‌های مشتری با موفقیت ذخیره شد.');
+            setToastMessage('برچسب‌های مشتری با موفقیت ذخیره شد.');
         } catch (err) {
-            console.error("Failed to save CRM ratings and tags:", err);
+            console.error("Failed to save CRM tags:", err);
             setToastType('error');
-            setToastMessage('خطا در ذخیره‌سازی اطلاعات امتیاز و برچسب.');
+            setToastMessage('خطا در ذخیره‌سازی برچسب‌ها.');
+        } finally {
+            setIsSavingCrmRatings(false);
+        }
+    };
+
+    const handleSaveBehaviorRating = async () => {
+        const userId = targetUser?.id;
+        if (!userId) return;
+
+        setIsSavingCrmRatings(true);
+        try {
+            const updatedUser: User = {
+                ...targetUser,
+                behaviorScore: crmBehaviorScore,
+                dealDifficulty: crmDealDifficulty,
+                behaviorRatingOpinion: crmOpinion,
+                LastAction: new Date().toISOString()
+            };
+
+            const result = await updateUser(Number(userId), updatedUser);
+
+            // Create customer journal log entry for history timeline
+            const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+            const stars = '★'.repeat(crmBehaviorScore) + '☆'.repeat(5 - crmBehaviorScore);
+            const journalContent = `⭐ ثبت/به‌روزرسانی امتیاز اخلاق و رفتار مشتری:
+- امتیاز اخلاق و رفتار: ${crmBehaviorScore} از ۵ (${stars})
+- وضعیت معامله: معامله با این مشتری ${crmDealDifficulty} است.
+${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpinion}` : ''}`;
+
+            await createCustomerJournal({
+                userId,
+                content: journalContent,
+                author: authorName
+            });
+
+            if (onUserUpdate) {
+                onUserUpdate(result);
+            }
+
+            // Fetch journals to immediately show on history timeline
+            fetchJournals();
+
+            setToastType('success');
+            setToastMessage('اطلاعات امتیازدهی اخلاق مشتری با موفقیت ذخیره شد.');
+        } catch (err) {
+            console.error("Failed to save behavior rating:", err);
+            setToastType('error');
+            setToastMessage('خطا در ذخیره‌سازی امتیاز اخلاق.');
         } finally {
             setIsSavingCrmRatings(false);
         }
@@ -1035,6 +1076,17 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                 <span>تاریخچه و گزارشات CRM</span>
                             </button>
                             <button
+                                onClick={() => setActiveTab('BEHAVIOR_RATING')}
+                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                    activeTab === 'BEHAVIOR_RATING' 
+                                        ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-sm' 
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                }`}
+                            >
+                                <Star className="w-4 h-4 text-amber-500" />
+                                <span>امتیازدهی اخلاق</span>
+                            </button>
+                            <button
                                 onClick={() => setActiveTab('SURVEYS')}
                                 className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                                     activeTab === 'SURVEYS' 
@@ -1157,73 +1209,11 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                     </div>
                                 </div>
 
-                                {/* Customer Ratings & Tagging (CRM Club Merged) */}
+                                {/* Customer Tagging (CRM Club Merged) */}
                                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm space-y-4">
                                     <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                                        <Sparkles className="w-4.5 h-4.5 text-amber-500" />
-                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">امتیازدهی اخلاق و برچسب‌گذاری مشتری (ادغام شده با باشگاه مشتریان):</p>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Score Section */}
-                                        <div className="space-y-2">
-                                            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">امتیاز اخلاق و رفتار مشتری (امتیازدهی کارشناسان):</span>
-                                            <div className="flex items-center gap-1.5">
-                                                {[1, 2, 3, 4, 5].map((star) => (
-                                                    <button
-                                                        key={star}
-                                                        type="button"
-                                                        onClick={() => setCrmBehaviorScore(star)}
-                                                        className="text-2xl transition-all focus:outline-none hover:scale-110 active:scale-95"
-                                                    >
-                                                        <Star 
-                                                            className={`w-6 h-6 ${
-                                                                star <= crmBehaviorScore 
-                                                                    ? 'text-amber-500 fill-amber-500' 
-                                                                    : 'text-slate-300 dark:text-slate-700'
-                                                            }`} 
-                                                        />
-                                                    </button>
-                                                ))}
-                                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-2">
-                                                    {crmBehaviorScore === 1 && "بسیار ضعیف / سرد"}
-                                                    {crmBehaviorScore === 2 && "ضعیف"}
-                                                    {crmBehaviorScore === 3 && "معمولی"}
-                                                    {crmBehaviorScore === 4 && "خوب و باحوصله"}
-                                                    {crmBehaviorScore === 5 && "بسیار خوش‌اخلاق و عالی"}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* Difficulty Level */}
-                                        <div className="space-y-2">
-                                            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">میزان سختی معامله با این مشتری:</span>
-                                            <div className="flex flex-wrap gap-1 bg-slate-50 dark:bg-slate-950 p-1 rounded-xl border border-slate-100 dark:border-slate-800">
-                                                {['خیلی آسان', 'آسان', 'متوسط', 'سخت', 'خیلی سخت'].map((level) => {
-                                                    const isSelected = crmDealDifficulty === level;
-                                                    let colorClass = "bg-white text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-850";
-                                                    if (isSelected) {
-                                                        if (level === 'خیلی آسان' || level === 'آسان') {
-                                                            colorClass = "bg-emerald-500 text-white border-emerald-500 font-bold shadow-sm";
-                                                        } else if (level === 'متوسط') {
-                                                            colorClass = "bg-sky-500 text-white border-sky-500 font-bold shadow-sm";
-                                                        } else {
-                                                            colorClass = "bg-rose-500 text-white border-rose-500 font-bold shadow-sm";
-                                                        }
-                                                    }
-                                                    return (
-                                                        <button
-                                                            key={level}
-                                                            type="button"
-                                                            onClick={() => setCrmDealDifficulty(level)}
-                                                            className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${colorClass}`}
-                                                        >
-                                                            {level}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
+                                        <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">برچسب‌گذاری مشتری (باشگاه مشتریان):</p>
                                     </div>
 
                                     {/* Ready-made tags selection list */}
@@ -1298,26 +1288,14 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                         )}
                                     </div>
 
-                                    {/* Sales expert opinion input */}
-                                    <div className="space-y-1.5">
-                                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">ثبت نظر و یادداشت کارشناس بابت رفتار مشتری:</label>
-                                        <textarea
-                                            value={crmOpinion}
-                                            onChange={(e) => setCrmOpinion(e.target.value)}
-                                            placeholder="نظرات، جزئیات رفتار یا اطلاعات تکمیلی در مورد اخلاق و نحوه معامله با این مشتری را یادداشت کنید..."
-                                            className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-850 dark:text-white text-xs outline-none resize-none min-h-[60px]"
-                                            rows={2}
-                                        />
-                                    </div>
-
                                     <div className="flex justify-end pt-1">
                                         <button
                                             type="button"
-                                            onClick={handleSaveCrmRatings}
+                                            onClick={handleSaveCrmTags}
                                             disabled={isSavingCrmRatings}
-                                            className="bg-emerald-650 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                                            className="bg-indigo-650 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
                                         >
-                                            {isSavingCrmRatings ? 'در حال ذخیره‌سازی...' : '✓ ثبت و ذخیره مشخصات امتیاز و برچسب'}
+                                            {isSavingCrmRatings ? 'در حال ذخیره‌سازی...' : '✓ ثبت و ذخیره برچسب‌های مشتری'}
                                         </button>
                                     </div>
                                 </div>
@@ -1797,6 +1775,102 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             }
                                         })
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB 2: Behavior & Ethics Rating */}
+                        {activeTab === 'BEHAVIOR_RATING' && (
+                            <div className="space-y-4">
+                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-5">
+                                    <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                                        <Star className="w-5 h-5 text-amber-500 fill-amber-500 animate-pulse" />
+                                        <p className="text-xs font-extrabold text-slate-800 dark:text-white">پنل تخصصی امتیازدهی اخلاق و میزان سختی معامله مشتری</p>
+                                    </div>
+
+                                    {/* Star Rating Section */}
+                                    <div className="space-y-2.5">
+                                        <label className="block text-[11px] font-black text-slate-600 dark:text-slate-300">امتیاز اخلاق و رفتار مشتری (از نگاه کارشناسان فروش):</label>
+                                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-150 dark:border-slate-850">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <button
+                                                    key={star}
+                                                    type="button"
+                                                    onClick={() => setCrmBehaviorScore(star)}
+                                                    className="text-3xl transition-all focus:outline-none hover:scale-125 active:scale-95"
+                                                >
+                                                    <Star 
+                                                        className={`w-8 h-8 ${
+                                                            star <= crmBehaviorScore 
+                                                                ? 'text-amber-500 fill-amber-500' 
+                                                                : 'text-slate-300 dark:text-slate-700'
+                                                        }`} 
+                                                    />
+                                                </button>
+                                            ))}
+                                            <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 mr-3 px-2.5 py-1 bg-amber-50 dark:bg-amber-950/50 rounded-lg text-amber-700 dark:text-amber-400">
+                                                {crmBehaviorScore === 0 && "بدون امتیاز"}
+                                                {crmBehaviorScore === 1 && "بسیار ضعیف / سرد"}
+                                                {crmBehaviorScore === 2 && "ضعیف"}
+                                                {crmBehaviorScore === 3 && "معمولی"}
+                                                {crmBehaviorScore === 4 && "خوب و باحوصله"}
+                                                {crmBehaviorScore === 5 && "بسیار خوش‌اخلاق و عالی"}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Difficulty Level */}
+                                    <div className="space-y-2.5">
+                                        <label className="block text-[11px] font-black text-slate-600 dark:text-slate-300">میزان سختی معامله با این مشتری:</label>
+                                        <div className="flex flex-wrap gap-1.5 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-150 dark:border-slate-850">
+                                            {['خیلی آسان', 'آسان', 'متوسط', 'سخت', 'خیلی سخت'].map((level) => {
+                                                const isSelected = crmDealDifficulty === level;
+                                                let colorClass = "bg-white text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800";
+                                                if (isSelected) {
+                                                    if (level === 'خیلی آسان' || level === 'آسان') {
+                                                        colorClass = "bg-emerald-500 text-white border-emerald-500 font-extrabold shadow-sm scale-102";
+                                                    } else if (level === 'متوسط') {
+                                                        colorClass = "bg-sky-500 text-white border-sky-500 font-extrabold shadow-sm scale-102";
+                                                    } else {
+                                                        colorClass = "bg-rose-500 text-white border-rose-500 font-extrabold shadow-sm scale-102";
+                                                    }
+                                                }
+                                                return (
+                                                    <button
+                                                        key={level}
+                                                        type="button"
+                                                        onClick={() => setCrmDealDifficulty(level)}
+                                                        className={`text-xs px-4 py-2 rounded-xl border transition-all ${colorClass}`}
+                                                    >
+                                                        {level}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Sales expert opinion input */}
+                                    <div className="space-y-2">
+                                        <label className="block text-[11px] font-black text-slate-600 dark:text-slate-300">ثبت نظر، یادداشت یا انتقاد کارشناس بابت اخلاق و رفتار مشتری:</label>
+                                        <textarea
+                                            value={crmOpinion}
+                                            onChange={(e) => setCrmOpinion(e.target.value)}
+                                            placeholder="نظرات، جزئیات رفتار یا اطلاعات تکمیلی در مورد اخلاق و نحوه معامله با این مشتری را یادداشت کنید..."
+                                            className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-850 dark:text-white text-xs outline-none resize-none min-h-[120px]"
+                                            rows={4}
+                                        />
+                                    </div>
+
+                                    <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveBehaviorRating}
+                                            disabled={isSavingCrmRatings}
+                                            className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-6 py-2.5 rounded-xl text-xs font-black transition disabled:opacity-50 flex items-center gap-1.5 shadow-md hover:shadow-lg"
+                                        >
+                                            {isSavingCrmRatings ? 'در حال ذخیره‌سازی...' : '✓ ثبت و ذخیره امتیاز و نظر اخلاقی'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
