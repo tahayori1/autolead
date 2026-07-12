@@ -65,6 +65,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const [modalFullUser, setModalFullUser] = useState<User | null>(null);
     const [modalLoading, setModalLoading] = useState<boolean>(false);
     const [modalError, setModalError] = useState<string | null>(null);
+    const [modalInitialTab, setModalInitialTab] = useState<'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS'>('COMBINED_HISTORY');
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
     const [userToDelete, setUserToDelete] = useState<number | null>(null);
@@ -318,8 +319,8 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     }, []);
 
     const handleEdit = (user: User) => {
-        setCurrentUser(user);
-        setIsModalOpen(true);
+        setModalInitialTab('EDIT_LEAD');
+        handleViewDetails(user);
     };
 
     const handleDelete = (id: number) => {
@@ -328,6 +329,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     };
 
     const handleViewDetails = async (lead: User) => {
+        if (modalInitialTab !== 'EDIT_LEAD') {
+            setModalInitialTab('COMBINED_HISTORY');
+        }
         setIsDetailModalOpen(true);
         setSelectedLead(lead);
         setModalLoading(true);
@@ -371,6 +375,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setSelectedLead(null);
         setModalMessages([]);
         setModalFullUser(null);
+        setModalInitialTab('COMBINED_HISTORY');
     };
 
     const handleNavigateLead = async (direction: 'prev' | 'next') => {
@@ -837,10 +842,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     onSendMessage={handleSendMessage}
                     onRegisterOrder={handleOpenOrderModal}
                     onEdit={(user) => {
-                        // Close history modal first, then open edit modal
-                        setIsDetailModalOpen(false);
-                        handleEdit(user);
+                        setModalInitialTab('EDIT_LEAD');
                     }}
+                    initialTab={modalInitialTab}
                     hasPrevious={selectedLead ? sortedUsers.findIndex(u => u.id === selectedLead.id) > 0 : false}
                     hasNext={selectedLead ? (sortedUsers.findIndex(u => u.id === selectedLead.id) > -1 && sortedUsers.findIndex(u => u.id === selectedLead.id) < sortedUsers.length - 1) : false}
                     onNavigate={handleNavigateLead}

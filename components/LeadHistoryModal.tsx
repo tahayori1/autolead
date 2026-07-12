@@ -13,6 +13,7 @@ import {
 import SendMessageModal from './SendMessageModal';
 import { 
     MessageSquare, 
+    Edit,
     FileText, 
     ClipboardList, 
     Info, 
@@ -56,6 +57,7 @@ interface LeadDetailHistoryModalProps {
     hasPrevious?: boolean;
     hasNext?: boolean;
     onNavigate?: (direction: 'prev' | 'next') => void;
+    initialTab?: 'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS';
 }
 
 const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ label, value }) => (
@@ -68,9 +70,10 @@ const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ labe
 const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({ 
     isOpen, onClose, lead, fullUserDetails, messages, isLoading, error, 
     onSendMessage, onRegisterOrder, onEdit, cars, conditions, loggedInUser,
-    onStatusChange, onUserUpdate, hasPrevious = false, hasNext = false, onNavigate
+    onStatusChange, onUserUpdate, hasPrevious = false, hasNext = false, onNavigate,
+    initialTab
 }) => {
-    const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'BEHAVIOR_RATING' | 'SURVEYS'>('COMBINED_HISTORY');
+    const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS'>('COMBINED_HISTORY');
     const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY'>('REGISTRATION');
     
     // Send Message Modal visibility
@@ -100,6 +103,18 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
+    // Edit Lead Form States
+    const [editFullName, setEditFullName] = useState('');
+    const [editNumber, setEditNumber] = useState('');
+    const [editCarModel, setEditCarModel] = useState('');
+    const [editProvince, setEditProvince] = useState('');
+    const [editCity, setEditCity] = useState('');
+    const [editDescription, setEditDescription] = useState('');
+    const [editReference, setEditReference] = useState('');
+    const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>(LeadStatus.NEW);
+    const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+    const [isSavingEditLead, setIsSavingEditLead] = useState(false);
+
     // Polling and heartbeat for viewing status
     useEffect(() => {
         if (!isOpen || !lead || !loggedInUser) return;
@@ -110,8 +125,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
 
         const sendHeartbeatAndFetch = async () => {
             try {
-                // Send heartbeat (isEditing is false in details modal, true in edit modal)
-                await sendCrmHeartbeat(leadId, username, fullName, false);
+                // Send heartbeat (isEditing is true when activeTab is EDIT_LEAD)
+                await sendCrmHeartbeat(leadId, username, fullName, activeTab === 'EDIT_LEAD');
                 const status = await getCrmStatus();
                 setCrmStatus(status);
             } catch (err) {
@@ -125,7 +140,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         return () => {
             clearInterval(timer);
         };
-    }, [isOpen, lead, loggedInUser]);
+    }, [isOpen, lead, loggedInUser, activeTab]);
 
     // Registration Survey State
     const [regQ1Type, setRegQ1Type] = useState<'internet' | 'presence' | ''>('');
@@ -184,7 +199,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
 
     useEffect(() => {
         if (isOpen && targetUser) {
-            setActiveTab('COMBINED_HISTORY');
+            setActiveTab(initialTab || 'COMBINED_HISTORY');
             setSurveySubTab('REGISTRATION');
             getMyProfile().then(p => setCurrentUser(p)).catch(() => {});
             fetchJournals();
@@ -198,6 +213,17 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setCrmDealDifficulty(targetUser.dealDifficulty || 'متوسط');
             setCrmOpinion(targetUser.behaviorRatingOpinion || '');
             setNewCrmTagInput('');
+
+            // Initialize Edit Lead Form States
+            setEditFullName(targetUser.FullName || '');
+            setEditNumber(targetUser.Number || '');
+            setEditCarModel(targetUser.CarModel || 'JAC J4');
+            setEditProvince(targetUser.Province || '');
+            setEditCity(targetUser.City || '');
+            setEditDescription(targetUser.Decription || '');
+            setEditReference(targetUser.reference || '');
+            setEditLeadStatus(targetUser.leadStatus || LeadStatus.NEW);
+            setEditErrors({});
         } else if (!isOpen) {
             setNewJournalContent('');
             setValidationError(null);
@@ -224,8 +250,19 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setCrmDealDifficulty('متوسط');
             setCrmOpinion('');
             setNewCrmTagInput('');
+
+            // Reset Edit Lead Form States
+            setEditFullName('');
+            setEditNumber('');
+            setEditCarModel('');
+            setEditProvince('');
+            setEditCity('');
+            setEditDescription('');
+            setEditReference('');
+            setEditLeadStatus(LeadStatus.NEW);
+            setEditErrors({});
         }
-    }, [isOpen, lead, fullUserDetails]);
+    }, [isOpen, lead, fullUserDetails, initialTab]);
 
     const handleAddCrmTag = () => {
         const cleanTag = newCrmTagInput.trim();
@@ -338,6 +375,84 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             setToastMessage('خطا در ذخیره‌سازی امتیاز اخلاق.');
         } finally {
             setIsSavingCrmRatings(false);
+        }
+    };
+
+    const handleSaveEditLead = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const userId = targetUser?.id;
+        if (!userId) return;
+
+        // Validation
+        const newErrors: Record<string, string> = {};
+        if (!editFullName.trim()) newErrors.FullName = 'نام کامل الزامی است.';
+        if (!editNumber.trim()) newErrors.Number = 'شماره تماس الزامی است.';
+        if (!/^\d{10,11}$/.test(editNumber)) newErrors.Number = 'شماره تماس معتبر نیست.';
+        
+        if (Object.keys(newErrors).length > 0) {
+            setEditErrors(newErrors);
+            setToastType('error');
+            setToastMessage('لطفاً خطاهای فرم را برطرف کنید.');
+            return;
+        }
+
+        setIsSavingEditLead(true);
+        try {
+            const updatedUser: User = {
+                ...targetUser,
+                FullName: editFullName.trim(),
+                Number: editNumber.trim(),
+                CarModel: editCarModel,
+                Province: editProvince.trim(),
+                City: editCity.trim(),
+                Decription: editDescription.trim(),
+                reference: editReference.trim(),
+                leadStatus: editLeadStatus,
+                LastAction: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            const result = await updateUser(Number(userId), updatedUser);
+
+            // Create customer journal log entry for history timeline
+            const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+            let changes: string[] = [];
+            if (targetUser.FullName !== updatedUser.FullName) changes.push(`نام: "${targetUser.FullName}" ← "${updatedUser.FullName}"`);
+            if (targetUser.Number !== updatedUser.Number) changes.push(`شماره: "${targetUser.Number}" ← "${updatedUser.Number}"`);
+            if (targetUser.CarModel !== updatedUser.CarModel) changes.push(`خودرو: "${targetUser.CarModel}" ← "${updatedUser.CarModel}"`);
+            if ((targetUser.Province || '') !== (updatedUser.Province || '')) changes.push(`استان: "${targetUser.Province || ''}" ← "${updatedUser.Province || ''}"`);
+            if ((targetUser.City || '') !== (updatedUser.City || '')) changes.push(`شهر: "${targetUser.City || ''}" ← "${updatedUser.City || ''}"`);
+            if ((targetUser.reference || '') !== (updatedUser.reference || '')) changes.push(`مرجع: "${targetUser.reference || ''}" ← "${updatedUser.reference || ''}"`);
+            if (targetUser.leadStatus !== updatedUser.leadStatus) changes.push(`وضعیت: "${targetUser.leadStatus || ''}" ← "${updatedUser.leadStatus || ''}"`);
+            if (targetUser.Decription !== updatedUser.Decription) changes.push(`توضیحات به‌روز شد.`);
+
+            const journalContent = `✏️ ویرایش مشخصات اصلی مشتری:
+${changes.length > 0 ? changes.join('\n') : 'تغییری در اطلاعات پایه اعمال نشد.'}`;
+
+            await createCustomerJournal({
+                userId,
+                content: journalContent,
+                author: authorName
+            });
+
+            if (onUserUpdate) {
+                onUserUpdate(result);
+            }
+
+            // Fetch journals to immediately show on history timeline
+            fetchJournals();
+
+            setToastType('success');
+            setToastMessage('مشخصات مشتری با موفقیت ذخیره شد.');
+            
+            // Switch back to combined history to see the result
+            setActiveTab('COMBINED_HISTORY');
+        } catch (err) {
+            console.error("Failed to save lead info:", err);
+            setToastType('error');
+            setToastMessage('خطا در ذخیره‌سازی اطلاعات سرنخ.');
+        } finally {
+            setIsSavingEditLead(false);
         }
     };
 
@@ -1026,15 +1141,17 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                             <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
                                 {/* Edit Customer Button */}
                                 <button 
-                                    onClick={() => (fullUserDetails || lead) && onEdit(fullUserDetails || lead)}
+                                    onClick={() => setActiveTab('EDIT_LEAD')}
                                     type="button"
-                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50 hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors flex items-center gap-1"
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1 ${
+                                        activeTab === 'EDIT_LEAD'
+                                            ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                                            : 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-900/50 hover:bg-amber-100 dark:hover:bg-amber-900'
+                                    }`}
                                     title="ویرایش اطلاعات مشتری"
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                    <span>ویرایش</span>
+                                    <Edit className="w-4 h-4" />
+                                    <span>ویرایش مشخصات</span>
                                 </button>
 
                                 {/* Send Message to Customer Button */}
@@ -1063,21 +1180,33 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                         </div>
                         
                         {/* Tab Switcher */}
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
                             <button
                                 onClick={() => setActiveTab('COMBINED_HISTORY')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'COMBINED_HISTORY' 
                                         ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-sm' 
                                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                                 }`}
                             >
                                 <FileText className="w-4 h-4" />
-                                <span>تاریخچه و گزارشات CRM</span>
+                                <span className="hidden xs:inline">تاریخچه و گزارشات</span>
+                                <span className="xs:hidden">تاریخچه</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('EDIT_LEAD')}
+                                className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                                    activeTab === 'EDIT_LEAD' 
+                                        ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-sm' 
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                }`}
+                            >
+                                <Edit className="w-4 h-4 text-indigo-500" />
+                                <span>ویرایش مشخصات</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('BEHAVIOR_RATING')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'BEHAVIOR_RATING' 
                                         ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-sm' 
                                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -1088,14 +1217,14 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                             </button>
                             <button
                                 onClick={() => setActiveTab('SURVEYS')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'SURVEYS' 
                                         ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-sm' 
                                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                                 }`}
                             >
                                 <Smile className="w-4 h-4" />
-                                <span>نظرسنجی مشتری</span>
+                                <span>نظرسنجی</span>
                             </button>
                         </div>
                     </header>
@@ -1777,6 +1906,162 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                     )}
                                 </div>
                             </div>
+                        )}
+
+                        {/* TAB: Edit Lead Details */}
+                        {activeTab === 'EDIT_LEAD' && (
+                            <form onSubmit={handleSaveEditLead} className="space-y-4">
+                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                                    <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                                        <Edit className="w-5 h-5 text-indigo-500 animate-pulse" />
+                                        <p className="text-xs font-extrabold text-slate-800 dark:text-white">فرم ویرایش اطلاعات و مشخصات پایه مشتری</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Full Name */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editFullName" className="block text-xs font-bold text-slate-700 dark:text-slate-300">نام و نام خانوادگی:</label>
+                                            <input 
+                                                type="text" 
+                                                id="editFullName" 
+                                                value={editFullName} 
+                                                onChange={(e) => setEditFullName(e.target.value)}
+                                                className={`w-full px-3 py-2 text-xs border rounded-xl dark:bg-slate-800 dark:border-slate-750 dark:text-white ${editErrors.FullName ? 'border-red-500 focus:ring-red-400' : 'border-slate-200 focus:ring-indigo-500'}`} 
+                                            />
+                                            {editErrors.FullName && <p className="text-red-500 text-[10px] font-bold">{editErrors.FullName}</p>}
+                                        </div>
+
+                                        {/* Phone Number */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editNumber" className="block text-xs font-bold text-slate-700 dark:text-slate-300">شماره تماس:</label>
+                                            <input 
+                                                type="tel" 
+                                                id="editNumber" 
+                                                value={editNumber} 
+                                                onChange={(e) => setEditNumber(e.target.value)}
+                                                className={`w-full px-3 py-2 text-xs border rounded-xl dark:bg-slate-800 dark:border-slate-750 dark:text-white font-mono text-left ${editErrors.Number ? 'border-red-500 focus:ring-red-400' : 'border-slate-200 focus:ring-indigo-500'}`} 
+                                                dir="ltr"
+                                            />
+                                            {editErrors.Number && <p className="text-red-500 text-[10px] font-bold">{editErrors.Number}</p>}
+                                        </div>
+
+                                        {/* Requested Vehicle */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editCarModel" className="block text-xs font-bold text-slate-700 dark:text-slate-300">خودروی درخواستی / مورد علاقه:</label>
+                                            <select 
+                                                id="editCarModel" 
+                                                value={editCarModel} 
+                                                onChange={(e) => setEditCarModel(e.target.value)}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white"
+                                            >
+                                                {['JAC J4', 'JAC S3', 'JAC S5', 'BAC X3PRO', 'KMC T8', 'KMC T9', 'KMC A5', 'KMC J7', 'KMC X5', 'KMC SR3', 'KMC EAGLE', 'KMC SHADOW', 'KMC SR6'].map(model => (
+                                                    <option key={model} value={model}>{model}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Lead Status */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editLeadStatus" className="block text-xs font-bold text-slate-700 dark:text-slate-300">وضعیت سرنخ:</label>
+                                            <select 
+                                                id="editLeadStatus" 
+                                                value={editLeadStatus} 
+                                                onChange={(e) => setEditLeadStatus(e.target.value as LeadStatus)}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white"
+                                            >
+                                                {Object.values(LeadStatus).map(status => (
+                                                    <option key={status} value={status}>
+                                                        {status === LeadStatus.NEW ? 'جدید' :
+                                                         status === LeadStatus.CONTACTED ? 'تماس گرفته شده' :
+                                                         status === LeadStatus.MEETING ? 'جلسه حضوری' :
+                                                         status === LeadStatus.NEGOTIATION ? 'در حال مذاکره' :
+                                                         status === LeadStatus.WON ? 'موفق (خرید)' :
+                                                         status === LeadStatus.LOST ? 'ناموفق' :
+                                                         status === LeadStatus.NO_ANSWER ? 'پاسخ نداد' : status}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Reference */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editReference" className="block text-xs font-bold text-slate-700 dark:text-slate-300">منبع / مرجع جذب:</label>
+                                            <input 
+                                                type="text" 
+                                                id="editReference" 
+                                                value={editReference} 
+                                                onChange={(e) => setEditReference(e.target.value)}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white" 
+                                                placeholder="مثال: سایت، اینستاگرام، دیوار..."
+                                            />
+                                        </div>
+
+                                        {/* Province */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editProvince" className="block text-xs font-bold text-slate-700 dark:text-slate-300">استان:</label>
+                                            <input 
+                                                type="text" 
+                                                id="editProvince" 
+                                                value={editProvince} 
+                                                onChange={(e) => setEditProvince(e.target.value)}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white" 
+                                            />
+                                        </div>
+
+                                        {/* City */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editCity" className="block text-xs font-bold text-slate-700 dark:text-slate-300">شهر:</label>
+                                            <input 
+                                                type="text" 
+                                                id="editCity" 
+                                                value={editCity} 
+                                                onChange={(e) => setEditCity(e.target.value)}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white" 
+                                            />
+                                        </div>
+
+                                        {/* Description */}
+                                        <div className="space-y-1.5 md:col-span-2">
+                                            <label htmlFor="editDescription" className="block text-xs font-bold text-slate-700 dark:text-slate-300">توضیحات تکمیلی:</label>
+                                            <textarea 
+                                                id="editDescription" 
+                                                rows={4} 
+                                                value={editDescription} 
+                                                onChange={(e) => setEditDescription(e.target.value)}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white" 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-4 mt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('COMBINED_HISTORY')}
+                                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                                        >
+                                            انصراف
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isSavingEditLead}
+                                            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                        >
+                                            {isSavingEditLead ? (
+                                                <>
+                                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                    <span>در حال ذخیره...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <CheckCircle className="w-4 h-4" />
+                                                    <span>ذخیره مشخصات سرنخ</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
                         )}
 
                         {/* TAB 2: Behavior & Ethics Rating */}
