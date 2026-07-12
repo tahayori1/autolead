@@ -803,6 +803,17 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     const [includePrice, setIncludePrice] = useState(true);
     const [includeStockQty, setIncludeStockQty] = useState(true);
 
+    // Compact mode state
+    const [isCompact, setIsCompact] = useState<boolean>(() => {
+        const saved = localStorage.getItem('inventoryCopyCompact');
+        return saved !== null ? saved === 'true' : true;
+    });
+
+    const handleSetIsCompact = (val: boolean) => {
+        setIsCompact(val);
+        localStorage.setItem('inventoryCopyCompact', val.toString());
+    };
+
     // Selected conditions selection state
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -892,54 +903,121 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 title += ` (مدل ${c.model.toLocaleString('fa-IR', { useGrouping: false })})`;
             }
 
-            let lines = [title];
-
-            if (includeSaleType && c.sale_type) {
-                lines.push(`🔹 روش واگذاری: ${c.sale_type}`);
-            }
-            if (includePayType && c.pay_type) {
-                lines.push(`💳 نحوه پرداخت: ${c.pay_type}`);
-            }
-            if (includeColors && c.colors && c.colors.length > 0) {
-                lines.push(`🎨 رنگ‌های موجود: ${c.colors.join(' - ')}`);
-            }
-            if (includeDeliveryTime && c.delivery_time) {
-                lines.push(`⏱ زمان تحویل: ${c.delivery_time}`);
-            }
-            if (includePrice && c.initial_deposit) {
-                const label = c.pay_type === 'نقدی' ? 'قیمت' : 'پیش‌پرداخت';
-                lines.push(`💰 ${label}: ${c.initial_deposit.toLocaleString('fa-IR')} تومان`);
-            }
-
-            // Absolutely no quantity details for customer facing mode!
-            if (activeTab !== 'customer' && includeStockQty) {
-                if (c.status === ConditionStatus.SOLD_OUT) {
-                    lines.push(`📦 وضعیت موجودی: 🔴 اتمام موجودی انبار`);
-                } else if (c.status === ConditionStatus.CAPACITY_FULL) {
-                    lines.push(`📦 وضعیت موجودی: 🟡 تکمیل ظرفیت ثبت‌نام`);
-                } else {
-                    const label = activeTab === 'transfer' ? 'حواله موجود' : 'دستگاه موجود در انبار';
-                    lines.push(`📦 ${label}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
+            if (isCompact) {
+                let lines = [title];
+                
+                // Combine sale type and pay type
+                let salePayInfo = '';
+                if (includeSaleType && c.sale_type) {
+                    salePayInfo += `${c.sale_type}`;
                 }
-            } else if (activeTab === 'customer') {
-                // For customer, only mention status text safely without any numbers!
-                if (c.status === ConditionStatus.SOLD_OUT) {
-                    lines.push(`📦 وضعیت: 🔴 اتمام ظرفیت فروش`);
-                } else if (c.status === ConditionStatus.CAPACITY_FULL) {
-                    lines.push(`📦 وضعیت: 🟡 تکمیل ظرفیت موقت`);
-                } else {
-                    lines.push(`📦 وضعیت: 🟢 فعال و آماده ثبت‌نام`);
+                if (includePayType && c.pay_type) {
+                    salePayInfo += salePayInfo ? ` - ${c.pay_type}` : `${c.pay_type}`;
                 }
-            }
+                if (salePayInfo) {
+                    lines.push(`🔹 ${salePayInfo}`);
+                }
 
-            return lines.join('\n');
+                // Combine colors and delivery time
+                let detailsInfo = '';
+                if (includeColors && c.colors && c.colors.length > 0) {
+                    detailsInfo += `رنگ: ${c.colors.join('، ')}`;
+                }
+                if (includeDeliveryTime && c.delivery_time) {
+                    detailsInfo += detailsInfo ? ` | تحویل: ${c.delivery_time}` : `تحویل: ${c.delivery_time}`;
+                }
+                if (detailsInfo) {
+                    lines.push(`🎨 ${detailsInfo}`);
+                }
+
+                // Combine price and status/quantity
+                let priceInfo = '';
+                if (includePrice && c.initial_deposit) {
+                    const label = c.pay_type === 'نقدی' ? 'قیمت' : 'پیش‌پرداخت';
+                    priceInfo += `${label}: ${c.initial_deposit.toLocaleString('fa-IR')} تومان`;
+                }
+
+                let statusInfo = '';
+                if (activeTab !== 'customer' && includeStockQty) {
+                    if (c.status === ConditionStatus.SOLD_OUT) {
+                        statusInfo = '🔴 اتمام';
+                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                        statusInfo = '🟡 تکمیل';
+                    } else {
+                        const qtyLabel = activeTab === 'transfer' ? 'حواله' : 'موجود';
+                        statusInfo = `📦 ${qtyLabel}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`;
+                    }
+                } else if (activeTab === 'customer') {
+                    if (c.status === ConditionStatus.SOLD_OUT) {
+                        statusInfo = '🔴 اتمام ظرفیت';
+                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                        statusInfo = '🟡 تکمیل ظرفیت';
+                    } else {
+                        statusInfo = '🟢 فعال';
+                    }
+                }
+
+                if (priceInfo || statusInfo) {
+                    let lastLine = '';
+                    if (priceInfo) lastLine += `💰 ${priceInfo}`;
+                    if (statusInfo) {
+                        lastLine += lastLine ? ` (${statusInfo})` : statusInfo;
+                    }
+                    lines.push(lastLine);
+                }
+
+                return lines.join('\n');
+            } else {
+                let lines = [title];
+
+                if (includeSaleType && c.sale_type) {
+                    lines.push(`🔹 روش واگذاری: ${c.sale_type}`);
+                }
+                if (includePayType && c.pay_type) {
+                    lines.push(`💳 نحوه پرداخت: ${c.pay_type}`);
+                }
+                if (includeColors && c.colors && c.colors.length > 0) {
+                    lines.push(`🎨 رنگ‌های موجود: ${c.colors.join(' - ')}`);
+                }
+                if (includeDeliveryTime && c.delivery_time) {
+                    lines.push(`⏱ زمان تحویل: ${c.delivery_time}`);
+                }
+                if (includePrice && c.initial_deposit) {
+                    const label = c.pay_type === 'نقدی' ? 'قیمت' : 'پیش‌پرداخت';
+                    lines.push(`💰 ${label}: ${c.initial_deposit.toLocaleString('fa-IR')} تومان`);
+                }
+
+                // Absolutely no quantity details for customer facing mode!
+                if (activeTab !== 'customer' && includeStockQty) {
+                    if (c.status === ConditionStatus.SOLD_OUT) {
+                        lines.push(`📦 وضعیت موجودی: 🔴 اتمام موجودی انبار`);
+                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                        lines.push(`📦 وضعیت موجودی: 🟡 تکمیل ظرفیت ثبت‌نام`);
+                    } else {
+                        const label = activeTab === 'transfer' ? 'حواله موجود' : 'دستگاه موجود در انبار';
+                        lines.push(`📦 ${label}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
+                    }
+                } else if (activeTab === 'customer') {
+                    // For customer, only mention status text safely without any numbers!
+                    if (c.status === ConditionStatus.SOLD_OUT) {
+                        lines.push(`📦 وضعیت: 🔴 اتمام ظرفیت فروش`);
+                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                        lines.push(`📦 وضعیت: 🟡 تکمیل ظرفیت موقت`);
+                    } else {
+                        lines.push(`📦 وضعیت: 🟢 فعال و آماده ثبت‌نام`);
+                    }
+                }
+
+                return lines.join('\n');
+            }
         });
 
-        return `${headerText}\n\n${rows.join('\n\n───────────────────\n\n')}\n\n${footerText}`;
+        const divider = isCompact ? '\n\n' : '\n\n───────────────────\n\n';
+        return `${headerText}\n\n${rows.join(divider)}\n\n${footerText}`;
     }, [
         conditions, selectedIds, headerText, footerText, activeTab,
         includeModelYear, includeSaleType, includePayType,
-        includeColors, includeDeliveryTime, includePrice, includeStockQty
+        includeColors, includeDeliveryTime, includePrice, includeStockQty, isCompact
     ]);
 
     const handleCopy = () => {
@@ -1033,6 +1111,22 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                                     </>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Compact Layout Toggle */}
+                        <div className="bg-amber-50 dark:bg-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-900/30 space-y-1">
+                            <label className="flex items-center gap-2.5 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isCompact} 
+                                    onChange={e => handleSetIsCompact(e.target.checked)} 
+                                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
+                                />
+                                <span className="text-xs font-black text-amber-800 dark:text-amber-300">قالب بسیار کوتاه و خلاصه (حذف تکراری‌ها)</span>
+                            </label>
+                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium leading-relaxed">
+                                ادغام اطلاعات خودروها در ۲ الی ۳ خط کوتاه، حذف عبارات تکراری و حذف خطوط جداکننده بزرگ جهت کپی سریع.
+                            </p>
                         </div>
 
                         {/* Toggle Switches */}
