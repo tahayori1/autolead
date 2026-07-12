@@ -9,7 +9,7 @@ import { CopyIcon } from '../components/icons/CopyIcon';
 import { EyeIcon } from '../components/icons/EyeIcon';
 import CarPriceCopySettingsModal from '../components/CarPriceCopySettingsModal';
 import AddCustomPriceModal from '../components/AddCustomPriceModal';
-import { Plus, Clock, ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Plus, Clock, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, TrendingUp } from 'lucide-react';
 
 const timeAgo = (dateString: string): string => {
     try {
@@ -115,6 +115,17 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
     // Add Custom Price Modal State
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+    
+    // Havaleh Visibility States
+    const [showHavalehs, setShowHavalehs] = useState<boolean>(false);
+    const [expandedHavalehs, setExpandedHavalehs] = useState<Record<string, boolean>>({});
+
+    const toggleHavalehExpanded = (modelName: string) => {
+        setExpandedHavalehs(prev => ({
+            ...prev,
+            [modelName]: prev[modelName] !== undefined ? !prev[modelName] : !showHavalehs
+        }));
+    };
 
     const toggleCardExpanded = (modelName: string) => {
         setExpandedCards(prev => ({
@@ -363,6 +374,17 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     {lastUpdated && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">آخرین بروزرسانی: {timeAgo(lastUpdated)}</p>}
                  </div>
                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    {/* Global Havaleh Toggle */}
+                    <label className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={showHavalehs}
+                            onChange={(e) => setShowHavalehs(e.target.checked)}
+                            className="rounded text-sky-600 focus:ring-sky-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span className="text-slate-700 dark:text-slate-300">نمایش حواله‌ها</span>
+                    </label>
+
                     {/* Auto Refresh Select */}
                     <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
                         <span className="text-slate-500 dark:text-slate-400 font-bold">بروزرسانی خودکار:</span>
@@ -490,30 +512,53 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                         )}
                                     </div>
 
-                                    {/* Havaleh 1 Month */}
-                                    <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                                        <div className="flex justify-between items-center mb-1.5">
-                                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">حواله ۱ ماهه</span>
-                                            <span className="text-[10px] text-emerald-600/70 font-mono">(۳٪ - ۵٪)</span>
-                                        </div>
-                                        <div className="flex justify-between items-center font-mono text-sm text-emerald-900 dark:text-emerald-100 font-bold">
-                                            <span>{Math.round(havaleh1Min).toLocaleString('fa-IR')}</span>
-                                            <span className="text-[10px] text-emerald-400 mx-1 font-sans">تا</span>
-                                            <span>{Math.round(havaleh1Max).toLocaleString('fa-IR')}</span>
-                                        </div>
-                                    </div>
+                                    {/* Havaleh Section Toggle */}
+                                    <div className="pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleHavalehExpanded(stat.model_name)}
+                                            className="w-full flex items-center justify-between text-xs py-1.5 px-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/40 dark:hover:bg-slate-850 rounded-lg text-slate-600 dark:text-slate-300 font-bold transition-all outline-none"
+                                        >
+                                            <span className="flex items-center gap-1.5">
+                                                <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span>محاسبات حواله (۱ و ۲ ماهه)</span>
+                                            </span>
+                                            {(expandedHavalehs[stat.model_name] !== undefined ? expandedHavalehs[stat.model_name] : showHavalehs) ? (
+                                                <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                            ) : (
+                                                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                            )}
+                                        </button>
+                                        
+                                        {(expandedHavalehs[stat.model_name] !== undefined ? expandedHavalehs[stat.model_name] : showHavalehs) && (
+                                            <div className="mt-2 space-y-2 animate-fadeIn">
+                                                {/* Havaleh 1 Month */}
+                                                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                                                    <div className="flex justify-between items-center mb-1.5">
+                                                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">حواله ۱ ماهه</span>
+                                                        <span className="text-[10px] text-emerald-600/70 font-mono">(۳٪ - ۵٪)</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center font-mono text-sm text-emerald-900 dark:text-emerald-100 font-bold">
+                                                        <span>{Math.round(havaleh1Min).toLocaleString('fa-IR')}</span>
+                                                        <span className="text-[10px] text-emerald-400 mx-1 font-sans">تا</span>
+                                                        <span>{Math.round(havaleh1Max).toLocaleString('fa-IR')}</span>
+                                                    </div>
+                                                </div>
 
-                                    {/* Havaleh 2 Month */}
-                                    <div className="bg-cyan-50 dark:bg-cyan-900/20 p-2.5 rounded-xl border border-cyan-100 dark:border-cyan-800">
-                                        <div className="flex justify-between items-center mb-1.5">
-                                            <span className="text-xs font-bold text-cyan-700 dark:text-cyan-400">حواله ۲ ماهه</span>
-                                            <span className="text-[10px] text-cyan-600/70 font-mono">(۶٪ - ۱۰٪)</span>
-                                        </div>
-                                        <div className="flex justify-between items-center font-mono text-sm text-cyan-900 dark:text-cyan-100 font-bold">
-                                            <span>{Math.round(havaleh2Min).toLocaleString('fa-IR')}</span>
-                                            <span className="text-[10px] text-cyan-400 mx-1 font-sans">تا</span>
-                                            <span>{Math.round(havaleh2Max).toLocaleString('fa-IR')}</span>
-                                        </div>
+                                                {/* Havaleh 2 Month */}
+                                                <div className="bg-cyan-50 dark:bg-cyan-900/20 p-2.5 rounded-xl border border-cyan-100 dark:border-cyan-800">
+                                                    <div className="flex justify-between items-center mb-1.5">
+                                                        <span className="text-xs font-bold text-cyan-700 dark:text-cyan-400">حواله ۲ ماهه</span>
+                                                        <span className="text-[10px] text-cyan-600/70 font-mono">(۶٪ - ۱۰٪)</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center font-mono text-sm text-cyan-900 dark:text-cyan-100 font-bold">
+                                                        <span>{Math.round(havaleh2Min).toLocaleString('fa-IR')}</span>
+                                                        <span className="text-[10px] text-cyan-400 mx-1 font-sans">تا</span>
+                                                        <span>{Math.round(havaleh2Max).toLocaleString('fa-IR')}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Limits */}
