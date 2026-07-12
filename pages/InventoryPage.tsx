@@ -802,6 +802,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     const [includeDeliveryTime, setIncludeDeliveryTime] = useState(true);
     const [includePrice, setIncludePrice] = useState(true);
     const [includeStockQty, setIncludeStockQty] = useState(true);
+    const [includeStatus, setIncludeStatus] = useState(false);
 
     // Compact mode state
     const [isCompact, setIsCompact] = useState<boolean>(() => {
@@ -898,7 +899,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
             if (c.status === ConditionStatus.CAPACITY_FULL) statusEmoji = '🟡';
             if (c.status === ConditionStatus.SOLD_OUT) statusEmoji = '🔴';
 
-            let title = `${statusEmoji} ${c.car_model}`;
+            let title = includeStatus ? `${statusEmoji} ${c.car_model}` : c.car_model;
             if (includeModelYear && c.model) {
                 title += ` (مدل ${c.model.toLocaleString('fa-IR', { useGrouping: false })})`;
             }
@@ -938,23 +939,28 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 }
 
                 let statusInfo = '';
-                if (activeTab !== 'customer' && includeStockQty) {
-                    if (c.status === ConditionStatus.SOLD_OUT) {
-                        statusInfo = '🔴 اتمام';
-                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
-                        statusInfo = '🟡 تکمیل';
-                    } else {
-                        const qtyLabel = activeTab === 'transfer' ? 'حواله' : 'موجود';
-                        statusInfo = `📦 ${qtyLabel}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`;
+                if (includeStatus) {
+                    if (activeTab !== 'customer' && includeStockQty) {
+                        if (c.status === ConditionStatus.SOLD_OUT) {
+                            statusInfo = '🔴 اتمام';
+                        } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                            statusInfo = '🟡 تکمیل';
+                        } else {
+                            const qtyLabel = activeTab === 'transfer' ? 'حواله' : 'موجود';
+                            statusInfo = `📦 ${qtyLabel}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`;
+                        }
+                    } else if (activeTab === 'customer') {
+                        if (c.status === ConditionStatus.SOLD_OUT) {
+                            statusInfo = '🔴 اتمام ظرفیت';
+                        } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                            statusInfo = '🟡 تکمیل ظرفیت';
+                        } else {
+                            statusInfo = '🟢 فعال';
+                        }
                     }
-                } else if (activeTab === 'customer') {
-                    if (c.status === ConditionStatus.SOLD_OUT) {
-                        statusInfo = '🔴 اتمام ظرفیت';
-                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
-                        statusInfo = '🟡 تکمیل ظرفیت';
-                    } else {
-                        statusInfo = '🟢 فعال';
-                    }
+                } else if (activeTab !== 'customer' && includeStockQty) {
+                    const qtyLabel = activeTab === 'transfer' ? 'حواله' : 'موجود';
+                    statusInfo = `📦 ${qtyLabel}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`;
                 }
 
                 if (priceInfo || statusInfo) {
@@ -988,24 +994,29 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 }
 
                 // Absolutely no quantity details for customer facing mode!
-                if (activeTab !== 'customer' && includeStockQty) {
-                    if (c.status === ConditionStatus.SOLD_OUT) {
-                        lines.push(`📦 وضعیت موجودی: 🔴 اتمام موجودی انبار`);
-                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
-                        lines.push(`📦 وضعیت موجودی: 🟡 تکمیل ظرفیت ثبت‌نام`);
-                    } else {
-                        const label = activeTab === 'transfer' ? 'حواله موجود' : 'دستگاه موجود در انبار';
-                        lines.push(`📦 ${label}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
+                if (includeStatus) {
+                    if (activeTab !== 'customer' && includeStockQty) {
+                        if (c.status === ConditionStatus.SOLD_OUT) {
+                            lines.push(`📦 وضعیت موجودی: 🔴 اتمام موجودی انبار`);
+                        } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                            lines.push(`📦 وضعیت موجودی: 🟡 تکمیل ظرفیت ثبت‌نام`);
+                        } else {
+                            const label = activeTab === 'transfer' ? 'حواله موجود' : 'دستگاه موجود در انبار';
+                            lines.push(`📦 ${label}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
+                        }
+                    } else if (activeTab === 'customer') {
+                        // For customer, only mention status text safely without any numbers!
+                        if (c.status === ConditionStatus.SOLD_OUT) {
+                            lines.push(`📦 وضعیت: 🔴 اتمام ظرفیت فروش`);
+                        } else if (c.status === ConditionStatus.CAPACITY_FULL) {
+                            lines.push(`📦 وضعیت: 🟡 تکمیل ظرفیت موقت`);
+                        } else {
+                            lines.push(`📦 وضعیت: 🟢 فعال و آماده ثبت‌نام`);
+                        }
                     }
-                } else if (activeTab === 'customer') {
-                    // For customer, only mention status text safely without any numbers!
-                    if (c.status === ConditionStatus.SOLD_OUT) {
-                        lines.push(`📦 وضعیت: 🔴 اتمام ظرفیت فروش`);
-                    } else if (c.status === ConditionStatus.CAPACITY_FULL) {
-                        lines.push(`📦 وضعیت: 🟡 تکمیل ظرفیت موقت`);
-                    } else {
-                        lines.push(`📦 وضعیت: 🟢 فعال و آماده ثبت‌نام`);
-                    }
+                } else if (activeTab !== 'customer' && includeStockQty) {
+                    const label = activeTab === 'transfer' ? 'حواله موجود' : 'دستگاه موجود در انبار';
+                    lines.push(`📦 ${label}: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
                 }
 
                 return lines.join('\n');
@@ -1017,7 +1028,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     }, [
         conditions, selectedIds, headerText, footerText, activeTab,
         includeModelYear, includeSaleType, includePayType,
-        includeColors, includeDeliveryTime, includePrice, includeStockQty, isCompact
+        includeColors, includeDeliveryTime, includePrice, includeStockQty, isCompact, includeStatus
     ]);
 
     const handleCopy = () => {
@@ -1156,6 +1167,11 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                                 <label className="flex items-center gap-2.5 cursor-pointer bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-sm">
                                     <input type="checkbox" checked={includePrice} onChange={e => setIncludePrice(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
                                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300">قیمت نهایی / پیش‌پرداخت</span>
+                                </label>
+                                
+                                <label className="flex items-center gap-2.5 cursor-pointer bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 shadow-sm col-span-2">
+                                    <input type="checkbox" checked={includeStatus} onChange={e => setIncludeStatus(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
+                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">نمایش وضعیت عرضه (فعال / تکمیل ظرفیت / اتمام)</span>
                                 </label>
                                 
                                 {activeTab !== 'customer' ? (
