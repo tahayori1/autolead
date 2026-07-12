@@ -85,6 +85,14 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
         fetchData();
     }, [fetchData]);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchData]);
+
     // Auto Refresh Effect
     useEffect(() => {
         let interval: any;

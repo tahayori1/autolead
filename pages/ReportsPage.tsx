@@ -317,31 +317,40 @@ const ReportsPage: React.FC = () => {
     const [selectedDay, setSelectedDay] = useState<string>('all');
     const [timeRange, setTimeRange] = useState<TimeRange>('all');
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const [usersData, carsData, ordersData, logsData, meetingsData] = await Promise.all([
-                    getUsers(),
-                    getCars(),
-                    carOrdersService.getAll(),
-                    getCallLogs().catch(() => []),
-                    getCrmMeetings().catch(() => [])
-                ]);
-                setUsers(usersData);
-                setCars(carsData);
-                setOrders(ordersData);
-                setCallLogs(logsData);
-                setMeetings(meetingsData);
-            } catch (err) {
-                setError('خطا در دریافت اطلاعات گزارشات');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+    const fetchData = React.useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [usersData, carsData, ordersData, logsData, meetingsData] = await Promise.all([
+                getUsers(),
+                getCars(),
+                carOrdersService.getAll(),
+                getCallLogs().catch(() => []),
+                getCrmMeetings().catch(() => [])
+            ]);
+            setUsers(usersData);
+            setCars(carsData);
+            setOrders(ordersData);
+            setCallLogs(logsData);
+            setMeetings(meetingsData);
+        } catch (err) {
+            setError('خطا در دریافت اطلاعات گزارشات');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchData]);
 
     const handleTimeRangeChange = (range: TimeRange) => {
         setTimeRange(range);

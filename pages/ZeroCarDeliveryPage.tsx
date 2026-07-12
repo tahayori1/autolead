@@ -87,6 +87,14 @@ const ZeroCarDeliveryPage: React.FC = () => {
         fetchDeliveries();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchDeliveries();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     // Reset pagination when filters change
     useEffect(() => {
         setCurrentPage(1);

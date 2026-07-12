@@ -75,6 +75,14 @@ const LeaveRequestsPage: React.FC = () => {
         fetchAllData();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchAllData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const handleSave = async () => {
         if (!currentRequest.requesterName || !currentRequest.startDate || !currentRequest.reason) {
             setToast({ message: 'اطلاعات ناقص است', type: 'error' });

@@ -286,6 +286,31 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
         fetchInitialData();
     }, [isAdmin]);
 
+    useEffect(() => {
+        const handleRefresh = async () => {
+            try {
+                fetchContactFromWebhook(true);
+                const [carsData, conditionsData, settingsData] = await Promise.all([
+                    getCars().catch(() => []),
+                    getConditions().catch(() => []),
+                    getSettings().catch(() => null)
+                ]);
+                setCars(carsData);
+                setConditions(conditionsData);
+                if (settingsData) {
+                    setBusinessSettings(settingsData);
+                }
+                if (isAdmin) {
+                    await fetchCampaigns();
+                }
+            } catch (err) {
+                console.error("Refresh error in AdvertisingPage", err);
+            }
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [isAdmin]);
+
     // Fetch Campaigns from service
     const fetchCampaigns = async () => {
         setIsCampaignLoading(true);

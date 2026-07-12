@@ -72,6 +72,14 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
         fetchAllConditions();
     }, [fetchAllConditions]);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchAllConditions();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchAllConditions]);
+
     const showToast = (message: string, type: 'success' | 'error') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);

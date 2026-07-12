@@ -103,6 +103,14 @@ const AnonymousFeedbackPage: React.FC = () => {
         }
     }, [viewMode]);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchFeedbacks();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!subject.trim() || !message.trim()) return;

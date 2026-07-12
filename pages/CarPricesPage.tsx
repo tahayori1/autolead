@@ -223,6 +223,14 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
         fetchAllData();
     }, [fetchAllData]);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchAllData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchAllData]);
+
     // Effect for the auto refresh timer
     useEffect(() => {
         if (refreshInterval <= 0) {

@@ -45,6 +45,14 @@ const NotificationCenterPage: React.FC = () => {
         fetchData();
     }, [activeTab]);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [activeTab]);
+
     const fetchData = async () => {
         setLoading(true);
         try {

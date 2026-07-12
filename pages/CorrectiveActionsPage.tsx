@@ -70,6 +70,14 @@ const CorrectiveActionsPage: React.FC = () => {
         fetchActions();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchActions();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const handleSave = async () => {
         if (!currentAction.title || !currentAction.responsiblePerson) {
             setToast({ message: 'عنوان و مسئول اجرا الزامی است', type: 'error' });

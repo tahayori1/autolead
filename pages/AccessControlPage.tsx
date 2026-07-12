@@ -38,6 +38,14 @@ const AccessControlPage: React.FC = () => {
         fetchUsers();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchUsers();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const fetchUsers = async () => {
         setLoading(true);
         setError(null);

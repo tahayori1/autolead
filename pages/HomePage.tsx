@@ -23,24 +23,33 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     const [priceSearch, setPriceSearch] = useState('');
     const [conditionSearch, setConditionSearch] = useState('');
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const [pricesData, conditionsData] = await Promise.all([
-                    getCarPriceStats().catch(() => []),
-                    getConditions().catch(() => [])
-                ]);
-                setPriceStats(pricesData);
-                setConditions(conditionsData);
-            } catch (error) {
-                console.error('Error fetching dashboard data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+    const fetchData = React.useCallback(async () => {
+        setLoading(true);
+        try {
+            const [pricesData, conditionsData] = await Promise.all([
+                getCarPriceStats().catch(() => []),
+                getConditions().catch(() => [])
+            ]);
+            setPriceStats(pricesData);
+            setConditions(conditionsData);
+        } catch (error) {
+            console.error('Error fetching dashboard data:', error);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchData]);
 
     const today = new Date().toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' });
 

@@ -159,6 +159,14 @@ const SalaryAdvancePage: React.FC = () => {
         fetchUserData();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchUserData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     // Set Default targetDate to today + 5 days in Persian
     useEffect(() => {
         if (isModalOpen) {

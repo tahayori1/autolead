@@ -61,6 +61,14 @@ const CarsPage: React.FC<CarsPageProps> = ({ onNavigateToLeads, initialFilters, 
     useEffect(() => {
         fetchAllCars();
     }, [fetchAllCars]);
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchAllCars();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchAllCars]);
     
     const filteredCars = useMemo(() => {
         if (!filterQuery) return cars;

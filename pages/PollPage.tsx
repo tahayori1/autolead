@@ -318,21 +318,30 @@ const PollPage: React.FC = () => {
     const [showDissatisfiedOnly, setShowDissatisfiedOnly] = useState(false);
     const [hideIgnored, setHideIgnored] = useState(true);
 
-    useEffect(() => {
-        const fetchResults = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const result = await getPollAverages();
-                setData(result);
-            } catch (err) {
-                setError('خطا در بارگذاری نتایج نظرسنجی');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchResults();
+    const fetchResults = React.useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const result = await getPollAverages();
+            setData(result);
+        } catch (err) {
+            setError('خطا در بارگذاری نتایج نظرسنجی');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchResults();
+    }, [fetchResults]);
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchResults();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchResults]);
 
     const filterResults = (list: PollCustomerResult[]) => {
         return list.filter(item => {

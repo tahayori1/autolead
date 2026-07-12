@@ -63,6 +63,14 @@ const InventoryPage: React.FC = () => {
         fetchAllData();
     }, [fetchAllData]);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchAllData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchAllData]);
+
     const showToast = (message: string, type: 'success' | 'error') => {
         setToast({ message, type });
     };

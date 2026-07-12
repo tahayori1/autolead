@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes } from 'lucide-react';
+import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import ConditionsPage from './pages/ConditionsPage';
 import InventoryPage from './pages/InventoryPage';
@@ -89,6 +89,46 @@ const App: React.FC = () => {
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [currentUser, setCurrentUser] = useState<MyProfile | null>(null);
+
+    // Global Auto-Refresh States
+    const [refreshInterval, setRefreshInterval] = useState<number>(() => {
+        const saved = localStorage.getItem('globalRefreshInterval');
+        return saved !== null ? Number(saved) : 0;
+    });
+    const [countdown, setCountdown] = useState<number | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+    const triggerManualRefresh = () => {
+        setIsRefreshing(true);
+        window.dispatchEvent(new CustomEvent('app-refresh'));
+        setTimeout(() => setIsRefreshing(false), 800);
+    };
+
+    useEffect(() => {
+        if (refreshInterval === 0) {
+            setCountdown(null);
+            return;
+        }
+        setCountdown(refreshInterval);
+
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                if (prev === null) return null;
+                if (prev <= 1) {
+                    triggerManualRefresh();
+                    return refreshInterval;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [refreshInterval]);
+
+    const handleSetRefreshInterval = (val: number) => {
+        setRefreshInterval(val);
+        localStorage.setItem('globalRefreshInterval', val.toString());
+    };
 
     // Sidebar Category Toggle states
     const [openCategories, setOpenCategories] = useState<{ [key: string]: boolean }>({
@@ -333,12 +373,57 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-[#F2F4F7] dark:bg-[#0f172a] font-vazir text-right overflow-hidden">
             {/* Sidebar */}
             <aside className="hidden lg:flex flex-col w-72 bg-[#F2F4F7] dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 p-4 overflow-y-auto">
-                <div className="flex items-center gap-3 px-2 mb-8 mt-2">
+                <div className="flex items-center gap-3 px-2 mb-4 mt-2">
                     <img src="/vite.svg" alt="Logo" className="w-8 h-8" />
                     <div>
                         <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight leading-none">AutoLead</h1>
                         <span className="text-[10px] font-bold text-slate-400">سامانه جامع مدیریت فروش</span>
                     </div>
+                </div>
+
+                {/* Global Auto Refresh Controller */}
+                <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800/80 mb-5 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <div className="flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-sky-500 animate-pulse" />
+                            <span>بروزرسانی خودکار</span>
+                        </div>
+                        {refreshInterval > 0 && countdown !== null && (
+                            <span className="text-[10px] font-mono bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 px-2 py-0.5 rounded-md">
+                                {countdown}ثانیه
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                        {[
+                            { value: 0, label: 'خاموش' },
+                            { value: 5, label: '۵ ثانیه' },
+                            { value: 60, label: '۱ دقیقه' },
+                            { value: 3600, label: '۱ ساعت' }
+                        ].map((opt) => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => handleSetRefreshInterval(opt.value)}
+                                className={`text-[10px] py-1.5 px-0.5 rounded-lg font-semibold transition-all ${
+                                    refreshInterval === opt.value
+                                    ? 'bg-sky-600 text-white font-black shadow-sm'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                {opt.label.split(' ')[0] + (opt.label.split(' ')[1] ? opt.label.split(' ')[1][0] : '')}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={triggerManualRefresh}
+                        disabled={isRefreshing}
+                        className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200/50 dark:border-transparent"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 text-sky-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        <span>بروزرسانی دستی</span>
+                    </button>
                 </div>
 
                 <nav className="flex-1 space-y-1 pr-1">
@@ -435,9 +520,55 @@ const App: React.FC = () => {
             {isMoreMenuOpen && (
                 <div className="lg:hidden fixed inset-0 bg-slate-900/90 z-50 backdrop-blur-sm animate-fade-in" onClick={() => setIsMoreMenuOpen(false)}>
                     <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 rounded-t-3xl p-6 pb-24 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-center mb-6">
+                        <div className="flex justify-center mb-4">
                             <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
                         </div>
+
+                        {/* Global Auto Refresh Controller for Mobile */}
+                        <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-750 mb-6 space-y-3">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                                <div className="flex items-center gap-1.5">
+                                    <Clock className="w-4 h-4 text-sky-500 animate-pulse" />
+                                    <span>بروزرسانی خودکار سیستم</span>
+                                </div>
+                                {refreshInterval > 0 && countdown !== null && (
+                                    <span className="text-[10px] font-mono bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 px-2 py-0.5 rounded-md">
+                                        {countdown}ثانیه
+                                    </span>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {[
+                                    { value: 0, label: 'خاموش' },
+                                    { value: 5, label: '۵ ثانیه' },
+                                    { value: 60, label: '۱ دقیقه' },
+                                    { value: 3600, label: '۱ ساعت' }
+                                ].map((opt) => (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => handleSetRefreshInterval(opt.value)}
+                                        className={`text-[10px] py-2 px-0.5 rounded-xl font-bold transition-all text-center ${
+                                            refreshInterval === opt.value
+                                            ? 'bg-sky-600 text-white shadow-sm'
+                                            : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-650'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={triggerManualRefresh}
+                                disabled={isRefreshing}
+                                className="w-full flex items-center justify-center gap-1.5 bg-white hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-650 text-slate-700 dark:text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-slate-700"
+                            >
+                                <RefreshCw className={`w-3.5 h-3.5 text-sky-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                <span>بروزرسانی دستی کل صفحات</span>
+                            </button>
+                        </div>
+
                         <div className="grid grid-cols-3 gap-4">
                             {flatMenuItems
                                 .filter(item => {

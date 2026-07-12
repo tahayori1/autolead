@@ -212,6 +212,14 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     }, [fetchAllData]);
 
     useEffect(() => {
+        const handleRefresh = () => {
+            fetchAllData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchAllData]);
+
+    useEffect(() => {
         setCurrentPage(1);
         setSelectedUserIds(new Set());
     }, [sortConfig, filters, viewMode]);

@@ -42,6 +42,14 @@ const AnnouncementsSubPage: React.FC<{ loggedInUser: any }> = ({ loggedInUser })
         fetchAnnouncements();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchAnnouncements();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim() || !content.trim()) return;

@@ -32,6 +32,14 @@ const UsedCarPage: React.FC = () => {
         fetchCars();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchCars();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const handleSave = async (carData: Omit<UsedCar, 'id' | 'createdAt'>) => {
         try {
             if (currentCar) {

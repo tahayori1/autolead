@@ -70,6 +70,14 @@ const MeetingMinutesPage: React.FC = () => {
         fetchMinutes();
     }, []);
 
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchMinutes();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, []);
+
     const handleSave = async () => {
         if (!currentMinute.title || !currentMinute.date) {
             setToast({ message: 'عنوان و تاریخ الزامی است', type: 'error' });

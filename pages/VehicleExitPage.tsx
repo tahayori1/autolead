@@ -118,7 +118,7 @@ const VehicleExitPage: React.FC = () => {
         data: any;
     }[]>([]);
 
-    useEffect(() => {
+    const fetchData = React.useCallback(() => {
         Promise.all([getUsers(), carOrdersService.getAll()])
             .then(([usersData, ordersData]) => {
                 setCrmUsers(usersData || []);
@@ -128,6 +128,18 @@ const VehicleExitPage: React.FC = () => {
                 console.error("Error loading CRM or Orders data:", err);
             });
     }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        return () => window.removeEventListener('app-refresh', handleRefresh);
+    }, [fetchData]);
 
     const handleSearch = (query: string) => {
         setSearchQuery(query);
