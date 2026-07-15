@@ -112,6 +112,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [editDescription, setEditDescription] = useState('');
     const [editReference, setEditReference] = useState('');
     const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>(LeadStatus.NEW);
+    const [editFailReason, setEditFailReason] = useState('');
+    const [editFailExplanation, setEditFailExplanation] = useState('');
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [isSavingEditLead, setIsSavingEditLead] = useState(false);
 
@@ -223,6 +225,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setEditDescription(targetUser.Decription || '');
             setEditReference(targetUser.reference || '');
             setEditLeadStatus(targetUser.leadStatus || LeadStatus.NEW);
+            setEditFailReason(targetUser.failReason || '');
+            setEditFailExplanation(targetUser.failExplanation || '');
             setEditErrors({});
         } else if (!isOpen) {
             setNewJournalContent('');
@@ -260,6 +264,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setEditDescription('');
             setEditReference('');
             setEditLeadStatus(LeadStatus.NEW);
+            setEditFailReason('');
+            setEditFailExplanation('');
             setEditErrors({});
         }
     }, [isOpen, lead, fullUserDetails, initialTab]);
@@ -389,6 +395,12 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
         if (!editNumber.trim()) newErrors.Number = 'شماره تماس الزامی است.';
         if (!/^\d{10,11}$/.test(editNumber)) newErrors.Number = 'شماره تماس معتبر نیست.';
         
+        if (editLeadStatus === LeadStatus.LOST) {
+            if (!editFailReason) {
+                newErrors.FailReason = 'لطفاً علت شکست معامله را انتخاب کنید.';
+            }
+        }
+        
         if (Object.keys(newErrors).length > 0) {
             setEditErrors(newErrors);
             setToastType('error');
@@ -408,6 +420,8 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
                 Decription: editDescription.trim(),
                 reference: editReference.trim(),
                 leadStatus: editLeadStatus,
+                failReason: editLeadStatus === LeadStatus.LOST ? editFailReason : undefined,
+                failExplanation: editLeadStatus === LeadStatus.LOST ? editFailExplanation : undefined,
                 LastAction: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -1293,6 +1307,22 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                     <DetailItem label="مرجع" value={fullUserDetails.reference} />
                                     <DetailItem label="زمان ثبت" value={formatDate(fullUserDetails.RegisterTime)} />
                                     <DetailItem label="آخرین فعالیت" value={formatDate(fullUserDetails.LastAction)} />
+                                    {fullUserDetails.failReason && (
+                                        <DetailItem label="علت شکست معامله" value={
+                                            <span className="font-extrabold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded border border-red-100 dark:border-red-900/30">
+                                                {fullUserDetails.failReason}
+                                            </span>
+                                        } />
+                                    )}
+                                    {fullUserDetails.failExplanation && (
+                                        <div className="col-span-full border-t border-slate-100 dark:border-slate-850 pt-2 mt-1">
+                                            <DetailItem label="توضیحات تکمیلی شکست معامله" value={
+                                                <span className="whitespace-pre-wrap text-red-600 dark:text-red-400 font-medium">
+                                                    {fullUserDetails.failExplanation}
+                                                </span>
+                                            } />
+                                        </div>
+                                    )}
                                     {fullUserDetails.Decription && (
                                         <div className="col-span-full border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
                                             <DetailItem label="توضیحات" value={<span className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{fullUserDetails.Decription}</span>} />
@@ -1982,6 +2012,56 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                 ))}
                                             </select>
                                         </div>
+
+                                        {editLeadStatus === LeadStatus.LOST && (
+                                            <div className="col-span-full border border-red-150 dark:border-red-900 bg-red-50/20 dark:bg-red-950/10 p-4 rounded-2xl space-y-3">
+                                                <p className="text-xs font-bold text-red-650 dark:text-red-400">⚠️ علت شکست معامله (معامله ناموفق)</p>
+                                                
+                                                <div className="space-y-1">
+                                                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">علت شکست معامله:</label>
+                                                    <select
+                                                        value={editFailReason}
+                                                        onChange={(e) => setEditFailReason(e.target.value)}
+                                                        className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white"
+                                                    >
+                                                        <option value="">-- انتخاب علت شکست --</option>
+                                                        <option value="قیمت بالا / عدم توافق مالی روی جزئیات معامله">قیمت بالا / عدم توافق مالی روی جزئیات معامله</option>
+                                                        <option value="انصراف مشتری از خرید خودرو / تغییر تصمیم">انصراف مشتری از خرید خودرو / تغییر تصمیم</option>
+                                                        <option value="خرید از رقیب یا همکار دیگر">خرید از رقیب یا همکار دیگر</option>
+                                                        <option value="عدم تایید خودرو در کارشناسی فنی و بدنه">عدم تایید خودرو در کارشناسی فنی و بدنه</option>
+                                                        <option value="عدم تامین نقدینگی / عدم موافقت با شرایط پرداخت">عدم تامین نقدینگی / عدم موافقت با شرایط پرداخت</option>
+                                                        <option value="عدم پاسخگویی مشتری به تماس‌ها و پیگیری‌های مکرر">عدم پاسخگویی مشتری به تماس‌ها و پیگیری‌های مکرر</option>
+                                                        <option value="یافتن مورد مناسب‌تر در بازار آزاد">یافتن مورد مناسب‌تر در بازار آزاد</option>
+                                                        <option value="سایر دلایل">سایر دلایل</option>
+                                                    </select>
+                                                    {editErrors.FailReason && <p className="text-red-500 text-[10px] font-bold">{editErrors.FailReason}</p>}
+                                                </div>
+
+                                                {editFailReason === 'سایر دلایل' && (
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">علت شکست دلخواه شما:</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editFailReason === 'سایر دلایل' ? '' : editFailReason}
+                                                            onChange={(e) => setEditFailReason(e.target.value)}
+                                                            placeholder="علت شکست دلخواه را اینجا وارد کنید..."
+                                                            className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-850 dark:text-white"
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                <div className="space-y-1">
+                                                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">توضیحات تکمیلی شکست:</label>
+                                                    <textarea
+                                                        value={editFailExplanation}
+                                                        onChange={(e) => setEditFailExplanation(e.target.value)}
+                                                        placeholder="جزئیات علت شکست معامله را بنویسید..."
+                                                        rows={2}
+                                                        className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-850 dark:text-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Reference */}
                                         <div className="space-y-1.5">

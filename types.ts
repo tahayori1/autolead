@@ -110,6 +110,8 @@ export interface User {
     leadStatus?: LeadStatus;
     reservedByUserId?: number | null;
     reservedByUserName?: string | null;
+    failReason?: string;
+    failExplanation?: string;
 }
 
 export interface LeadMessage {

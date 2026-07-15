@@ -31,6 +31,7 @@ import { ClipboardListIcon } from '../components/icons/ClipboardListIcon'; // Re
 import CrmCallLogs from '../components/CrmCallLogs';
 import { Phone, FileSpreadsheet } from 'lucide-react';
 import { ExcelImportModal } from '../components/ExcelImportModal';
+import FailReasonModal from '../components/FailReasonModal';
 
 // Declare moment from global scope (loaded via CDN in index.html)
 declare const moment: any;
@@ -38,7 +39,7 @@ declare const moment: any;
 const ITEMS_PER_PAGE = 50;
 
 type SortConfig = { key: keyof User; direction: 'ascending' | 'descending' } | null;
-type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; myLeadsOnly?: boolean; };
+type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; myLeadsOnly?: boolean; staffUserId: string; };
 
 interface UsersPageProps {
     initialFilters: { carModel?: string };
@@ -77,7 +78,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'updatedAt', direction: 'descending' });
-    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false });
+    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all' });
 
     const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -95,6 +96,11 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const [customRefreshSeconds, setCustomRefreshSeconds] = useState<number>(10);
     const [nextRefreshCountdown, setNextRefreshCountdown] = useState<number | null>(null);
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+    // Fail Reason states
+    const [isFailReasonModalOpen, setIsFailReasonModalOpen] = useState(false);
+    const [failReasonTargetUserId, setFailReasonTargetUserId] = useState<number | null>(null);
+    const [failReasonResolve, setFailReasonResolve] = useState<((data: { reason: string; explanation: string } | null) => void) | null>(null);
 
     useEffect(() => {
         setFilters(prev => ({ ...prev, carModel: initialFilters.carModel || 'all' }));
@@ -257,6 +263,36 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             }
         });
 
+        // Find all user IDs that selected staff user worked on
+        const staffWorkedLeadIds = new Set<number>();
+        let selectedStaff: any = null;
+        if (filters.staffUserId && filters.staffUserId !== 'all') {
+            selectedStaff = staffUsers.find(su => String(su.id) === String(filters.staffUserId));
+            if (selectedStaff) {
+                const staffFullName = selectedStaff.fullName || '';
+                const staffUsername = selectedStaff.username || '';
+
+                customerJournals.forEach(j => {
+                    const isMatch = (staffFullName && j.author === staffFullName) ||
+                                    (staffUsername && j.author === staffUsername);
+                    if (isMatch) {
+                        staffWorkedLeadIds.add(Number(j.userId));
+                    }
+                });
+
+                callLogs.forEach(c => {
+                    const isMatch = (staffFullName && c.agentName === staffFullName) ||
+                                    (staffUsername && c.agentName === staffUsername);
+                    if (isMatch) {
+                        const found = users.find(u => u.Number === c.customerNumber);
+                        if (found) {
+                            staffWorkedLeadIds.add(Number(found.id));
+                        }
+                    }
+                });
+            }
+        }
+
         return users.filter(user => {
             const queryMatch = filters.query === '' ||
                 (user.FullName?.toLowerCase().includes(lowercasedQuery)) ||
@@ -272,9 +308,18 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
 
             const myLeadsMatch = !filters.myLeadsOnly || workedLeadIds.has(Number(user.id));
 
-            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch;
+            let staffMatch = true;
+            if (filters.staffUserId && filters.staffUserId !== 'all' && selectedStaff) {
+                const isReservedByStaff = (
+                    (user.reservedByUserId && String(user.reservedByUserId) === String(selectedStaff.id)) ||
+                    (user.reservedByUserName && (user.reservedByUserName === selectedStaff.fullName || user.reservedByUserName === selectedStaff.username))
+                );
+                staffMatch = staffWorkedLeadIds.has(Number(user.id)) || isReservedByStaff;
+            }
+
+            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch && staffMatch;
         });
-    }, [users, filters, customerJournals, callLogs, loggedInUser]);
+    }, [users, filters, customerJournals, callLogs, loggedInUser, staffUsers]);
 
     const sortedUsers = useMemo(() => {
         let usersCopy = [...filteredUsers];
@@ -417,21 +462,57 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         }
     };
     
-    const handleStatusChange = async (userId: number, newStatus: LeadStatus) => {
+    const handleStatusChange = async (userId: number, newStatus: LeadStatus, failReason?: string, failExplanation?: string): Promise<User | undefined> => {
         const user = users.find(u => u.id === userId);
         if (!user) return;
 
+        if (newStatus === LeadStatus.LOST && !failReason) {
+            return new Promise<User | undefined>((resolve) => {
+                setFailReasonTargetUserId(userId);
+                setIsFailReasonModalOpen(true);
+                setFailReasonResolve(() => (data: { reason: string; explanation: string } | null) => {
+                    if (data) {
+                        handleStatusChange(userId, LeadStatus.LOST, data.reason, data.explanation)
+                            .then((updated) => resolve(updated));
+                    } else {
+                        resolve(undefined);
+                    }
+                });
+            });
+        }
+
+        const updatedUser = { 
+            ...user, 
+            leadStatus: newStatus,
+            failReason: failReason || undefined,
+            failExplanation: failExplanation || undefined
+        };
+
         // Optimistic Update
         const originalUsers = [...users];
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, leadStatus: newStatus } : u));
+        setUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
         
         try {
             // Update via API
-            await updateUser(userId, { ...user, leadStatus: newStatus });
+            await updateUser(userId, updatedUser);
+
+            // If it is a LOST deal, also register a customer journal/report for the timeline
+            if (newStatus === LeadStatus.LOST && failReason) {
+                const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
+                await createCustomerJournal({
+                    userId,
+                    content: `❌ معامله نا‌موفق اعلام شد.
+علت شکست: ${failReason}
+${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
+                    author: authorName
+                });
+            }
+            return updatedUser;
         } catch (e) {
             // Revert on error
             setUsers(originalUsers);
             showToast('خطا در تغییر وضعیت سرنخ', 'error');
+            return undefined;
         }
     };
 
@@ -749,8 +830,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                             filters={filters}
                             onFilterChange={(newFilters: any) => setFilters(prev => ({...prev, ...newFilters}))}
                             references={references}
+                            staffUsers={staffUsers}
                             onClear={() => {
-                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false });
+                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all' });
                                 onFiltersCleared();
                             }}
                             refreshMode={refreshMode}
@@ -860,9 +942,11 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     conditions={conditions}
                     loggedInUser={loggedInUser}
                     onStatusChange={async (userId, newStatus) => {
-                        await handleStatusChange(userId, newStatus);
-                        setModalFullUser(prev => prev && prev.id === userId ? { ...prev, leadStatus: newStatus } : prev);
-                        setSelectedLead(prev => prev && prev.id === userId ? { ...prev, leadStatus: newStatus } : prev);
+                        const updated = await handleStatusChange(userId, newStatus);
+                        if (updated) {
+                            setModalFullUser(prev => prev && prev.id === userId ? { ...prev, ...updated } : prev);
+                            setSelectedLead(prev => prev && prev.id === userId ? { ...prev, ...updated } : prev);
+                        }
                     }}
                     onUserUpdate={(updatedUser) => {
                         setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
@@ -918,6 +1002,22 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     message="آیا از حذف این مشتری اطمینان دارید؟ این عملیات قابل بازگشت نیست."
                 />
             )}
+
+            <FailReasonModal
+                isOpen={isFailReasonModalOpen}
+                onClose={() => {
+                    setIsFailReasonModalOpen(false);
+                    if (failReasonResolve) {
+                        failReasonResolve(null);
+                    }
+                }}
+                onSubmit={(reason, explanation) => {
+                    setIsFailReasonModalOpen(false);
+                    if (failReasonResolve) {
+                        failReasonResolve({ reason, explanation });
+                    }
+                }}
+            />
             
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
