@@ -1,0 +1,59 @@
+@import "@fontsource/vazirmatn/index.css";
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-vazir: "Vazirmatn", system-ui, sans-serif;
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+/* Custom Styles */
+html, body {
+  height: 100%;
+  overscroll-behavior-y: none; /* Prevent pull-to-refresh */
+  -webkit-tap-highlight-color: transparent;
+  background-color: #F2F4F7;
+}
+
+html.dark body {
+  background-color: #0f172a;
+}
+
+/* Global Font Enforcement */
+:root {
+  --font-primary: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+}
+
+body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, table, th, td {
+  font-family: var(--font-primary) !important;
+}
+
+/* Optimize for Persian Numbers */
+.font-mono, [class*="font-mono"], .price-text, .numeric-data {
+  font-family: var(--font-primary) !important;
+  font-feature-settings: "jnum", "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* Prevent iOS zoom on inputs */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Scrollbar Hiding */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Safe Area Support */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}

@@ -12,19 +12,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="/vite.svg">
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              vazir: ['Vazirmatn', 'system-ui', 'sans-serif'],
-            }
-          }
-        }
-      }
-    </script>
     <script>
       // On page load or when changing themes, best to add inline in `head` to avoid FOUC
       if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -35,60 +22,7 @@
         document.querySelector('meta[name="theme-color"]').setAttribute('content', '#F2F4F7');
       }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-      html, body {
-        height: 100%;
-        overscroll-behavior-y: none; /* Prevent pull-to-refresh */
-        -webkit-tap-highlight-color: transparent;
-        background-color: #F2F4F7;
-      }
-      
-      html.dark body {
-        background-color: #0f172a;
-      }
-
-      /* Global Font Enforcement */
-      :root {
-        --font-primary: 'Vazirmatn', system-ui, -apple-system, sans-serif;
-      }
-
-      body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, table, th, td {
-        font-family: var(--font-primary) !important;
-      }
-
-      /* Optimize for Persian Numbers */
-      .font-mono, [class*="font-mono"], .price-text, .numeric-data {
-        font-family: var(--font-primary) !important;
-        font-feature-settings: "tnum";
-        font-variant-numeric: tabular-nums;
-      }
-
-      /* Prevent iOS zoom on inputs */
-      input, select, textarea {
-        font-size: 16px !important;
-      }
-
-      /* Scrollbar Hiding */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-      }
-
-      /* Safe Area Support */
-      .pb-safe {
-        padding-bottom: env(safe-area-inset-bottom);
-      }
-      .pt-safe {
-        padding-top: env(safe-area-inset-top);
-      }
-    </style>
-  <script src="https://cdn.jsdelivr.net/npm/jalali-moment@3.3.11/dist/jalali-moment.browser.js"></script>
+  <script src="/jalali-moment.browser.js"></script>
   <script type="importmap">
 {
   "imports": {
@@ -99,7 +33,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root" class="h-full"></div>
