@@ -25,8 +25,6 @@ import UserFilterPanel from '../components/UserFilterPanel';
 import { PlusIcon } from '../components/icons/PlusIcon';
 import { ExportIcon } from '../components/icons/ExportIcon';
 import { CopyIcon } from '../components/icons/CopyIcon';
-import CrmKanbanBoard from '../components/CrmKanbanBoard';
-import { ChartBarIcon } from '../components/icons/ChartBarIcon';
 import { ClipboardListIcon } from '../components/icons/ClipboardListIcon'; // Reused for list icon
 import CrmCallLogs from '../components/CrmCallLogs';
 import { Phone, FileSpreadsheet } from 'lucide-react';
@@ -84,7 +82,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
     
     // View Mode State
-    const [viewMode, setViewMode] = useState<'LIST' | 'BOARD' | 'CALLS'>('LIST');
+    const [viewMode, setViewMode] = useState<'LIST' | 'CALLS'>('LIST');
 
     // CRM live status and polling states
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
@@ -356,10 +354,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     }, [filteredUsers, sortConfig]);
 
     const paginatedUsers = useMemo(() => {
-        if (viewMode === 'BOARD') return sortedUsers; // No pagination for board
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         return sortedUsers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-    }, [sortedUsers, currentPage, viewMode]);
+    }, [sortedUsers, currentPage]);
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setToast({ message, type });
@@ -790,13 +787,6 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                                     لیست
                                 </button>
                                 <button 
-                                    onClick={() => setViewMode('BOARD')}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'BOARD' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
-                                >
-                                    <ChartBarIcon className="w-4 h-4" />
-                                    برد کانبان
-                                </button>
-                                <button 
                                     onClick={() => setViewMode('CALLS')}
                                     className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'CALLS' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
                                 >
@@ -880,14 +870,6 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                                     />
                                 )}
                             </>
-                        ) : viewMode === 'BOARD' ? (
-                            <CrmKanbanBoard 
-                                users={sortedUsers}
-                                onStatusChange={handleStatusChange}
-                                onViewDetails={handleViewDetails}
-                                loggedInUser={loggedInUser}
-                                crmStatus={crmStatus}
-                            />
                         ) : (
                             <CrmCallLogs 
                                 users={users}
