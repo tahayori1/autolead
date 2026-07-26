@@ -441,7 +441,7 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                 </div>
 
                 {/* Call logs list / table */}
-                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-100 dark:border-slate-800">
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center py-12 text-slate-400 bg-slate-50/50 dark:bg-slate-900/10">
                             <Loader2 className="w-8 h-8 animate-spin text-sky-500 mb-2" />
@@ -454,17 +454,17 @@ const CrmCallLogs: React.FC<CrmCallLogsProps> = ({ users, staffUsers, loggedInUs
                             <p className="text-xs text-slate-400 mt-1">تغییر فیلترها و یا ثبت تماس جدید را امتحان کنید.</p>
                         </div>
                     ) : (
-                        <table className="w-full text-right border-collapse text-xs">
+                        <table className="w-full text-right border-collapse text-xs whitespace-nowrap">
                             <thead>
                                 <tr className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
-                                    <th className="p-4">طرف مکالمه (مشتری)</th>
-                                    <th className="p-4">نوع تماس</th>
-                                    <th className="p-4">وضعیت</th>
-                                    <th className="p-4">مدت مکالمه</th>
-                                    <th className="p-4">پاسخگو / کارشناس</th>
-                                    <th className="p-4">شرح مذاکره / یادداشت‌های تماس</th>
-                                    <th className="p-4">زمان ثبت</th>
-                                    <th className="p-4 text-center">عملیات</th>
+                                    <th className="p-4 whitespace-nowrap">طرف مکالمه (مشتری)</th>
+                                    <th className="p-4 whitespace-nowrap">نوع تماس</th>
+                                    <th className="p-4 whitespace-nowrap">وضعیت</th>
+                                    <th className="p-4 whitespace-nowrap">مدت مکالمه</th>
+                                    <th className="p-4 whitespace-nowrap">پاسخگو / کارشناس</th>
+                                    <th className="p-4 min-w-[250px] whitespace-normal">شرح مذاکره / یادداشت‌های تماس</th>
+                                    <th className="p-4 whitespace-nowrap">زمان ثبت</th>
+                                    <th className="p-4 text-center whitespace-nowrap">عملیات</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-800">

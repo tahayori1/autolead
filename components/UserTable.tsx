@@ -122,7 +122,7 @@ const UserTable: React.FC<UserTableProps> = ({
         const direction = isSorted ? sortConfig.direction : 'none';
 
         return (
-            <th scope="col" className="px-6 py-4">
+            <th scope="col" className="px-6 py-4 whitespace-nowrap">
                 <button
                     className="flex items-center gap-1 uppercase font-bold text-xs text-slate-700 dark:text-slate-300 group hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
                     onClick={() => onSort(sortKey)}
@@ -141,8 +141,8 @@ const UserTable: React.FC<UserTableProps> = ({
     return (
         <div className="bg-transparent md:bg-white md:dark:bg-slate-800 md:rounded-[24px] md:shadow-sm md:border md:border-slate-200 md:dark:border-slate-700 overflow-hidden">
             {/* Desktop Table */}
-            <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-sm text-right text-slate-600 dark:text-slate-300">
+            <div className="hidden md:block overflow-x-auto custom-scrollbar">
+                <table className="w-full text-sm text-right text-slate-600 dark:text-slate-300 whitespace-nowrap">
                     <thead className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700">
                         <tr>
                             <th scope="col" className="p-4 w-4">
@@ -162,7 +162,7 @@ const UserTable: React.FC<UserTableProps> = ({
                             <SortableHeader title="وضعیت سرنخ" sortKey="leadStatus" />
                             <SortableHeader title="موقعیت" sortKey="Province" />
                             <SortableHeader title="آخرین بروزرسانی" sortKey="updatedAt" />
-                            <th scope="col" className="px-6 py-3"></th>
+                            <th scope="col" className="px-6 py-3 whitespace-nowrap"></th>
                         </tr>
                     </thead>
                     <tbody>

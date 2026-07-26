@@ -45,29 +45,29 @@ const CrmKanbanBoard: React.FC<CrmKanbanBoardProps> = ({ users, onStatusChange, 
     };
 
     return (
-        <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-220px)] min-h-[500px]">
+        <div className="flex gap-4 overflow-x-auto pb-6 w-full custom-scrollbar items-start min-h-[600px] max-h-[calc(100vh-220px)]">
             {COLUMNS.map(col => {
                 const columnUsers = getColumnUsers(col.status);
                 
                 return (
                     <div 
                         key={col.status}
-                        className={`flex-shrink-0 w-80 rounded-xl flex flex-col border border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-900/50`}
+                        className="flex-shrink-0 w-80 rounded-2xl flex flex-col border border-slate-200 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50 max-h-[calc(100vh-240px)]"
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, col.status)}
                     >
                         {/* Header */}
-                        <div className={`p-4 rounded-t-xl border-t-4 ${col.color} bg-white dark:bg-slate-800 shadow-sm mb-2`}>
+                        <div className={`p-4 rounded-t-2xl border-t-4 ${col.color} bg-white dark:bg-slate-800 shadow-sm mb-1`}>
                             <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-slate-800 dark:text-white">{col.label}</h3>
-                                <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-2 py-1 rounded-full font-mono font-bold">
+                                <h3 className="font-bold text-slate-800 dark:text-white text-sm">{col.label}</h3>
+                                <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono font-bold">
                                     {columnUsers.length}
                                 </span>
                             </div>
                         </div>
 
                         {/* Cards Container */}
-                        <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-2.5 space-y-3 custom-scrollbar min-h-[150px]">
                             {columnUsers.map(user => (
                                 <div
                                     key={user.id}
@@ -110,7 +110,8 @@ const CrmKanbanBoard: React.FC<CrmKanbanBoardProps> = ({ users, onStatusChange, 
                                         </div>
                                         <button 
                                             onClick={() => onViewDetails(user)}
-                                            className="transition-colors text-slate-400 hover:text-sky-600"
+                                            className="transition-colors text-slate-400 hover:text-sky-600 p-1"
+                                            title="جزئیات و گفتگو"
                                         >
                                             <ChatIcon className="w-4 h-4" />
                                         </button>
@@ -132,9 +133,9 @@ const CrmKanbanBoard: React.FC<CrmKanbanBoardProps> = ({ users, onStatusChange, 
                                             {new Date(user.updatedAt).toLocaleDateString('fa-IR')}
                                         </span>
                                         
-                                        {/* Mobile Move Dropdown (visible on hover or focus) */}
+                                        {/* Status Select dropdown */}
                                         <select
-                                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-[10px] rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-sky-500 transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-[11px] rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-sky-500 opacity-90 group-hover:opacity-100 transition-opacity cursor-pointer"
                                             value={user.leadStatus || LeadStatus.NEW}
                                             onChange={(e) => onStatusChange(user.id, e.target.value as LeadStatus)}
                                             onClick={(e) => e.stopPropagation()}

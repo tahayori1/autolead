@@ -6,7 +6,7 @@
   --font-vazir: "Vazirmatn", system-ui, sans-serif;
 }
 
-@variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Custom Styles */
 html, body {
@@ -36,18 +36,43 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
   font-variant-numeric: tabular-nums;
 }
 
-/* Prevent iOS zoom on inputs */
-input, select, textarea {
-  font-size: 16px !important;
+/* Prevent iOS auto zoom on mobile inputs without breaking small desktop controls */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    font-size: 16px;
+  }
+}
+
+/* Custom Scrollbar Styles */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.5);
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
 }
 
 /* Scrollbar Hiding */
 .no-scrollbar::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Safe Area Support */
@@ -57,3 +82,4 @@ input, select, textarea {
 .pt-safe {
   padding-top: env(safe-area-inset-top);
 }
+

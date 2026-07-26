@@ -774,7 +774,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
 
     return (
         <>
-            <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full flex flex-col">
+            <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex flex-col min-h-full">
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mb-6 space-y-4 flex-shrink-0">
                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="flex items-center gap-4">
