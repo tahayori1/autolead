@@ -5,10 +5,10 @@ import {
     sendMessage, sendSMS, getUserByNumber, getCars, getConditions, 
     getReferences, carOrdersService, sendBulkSMS, getStaffUsers,
     sendBaleMessage, createCustomerJournal,
-    getCrmStatus, getCallLogs, getAllCustomerJournals
+    getCrmStatus, getCallLogs, getAllCustomerJournals, getCrmMeetings
 } from '../services/api';
 import type { Reference } from '../services/api';
-import type { User, LeadMessage, Car, CarSaleCondition, MyProfile, StaffUser } from '../types';
+import type { User, LeadMessage, Car, CarSaleCondition, MyProfile, StaffUser, CrmMeeting } from '../types';
 import { OrderStatus, LeadStatus } from '../types';
 import UserTable from '../components/UserTable';
 import UserModal from '../components/UserModal';
@@ -37,7 +37,16 @@ declare const moment: any;
 const ITEMS_PER_PAGE = 50;
 
 type SortConfig = { key: keyof User; direction: 'ascending' | 'descending' } | null;
-type UserFilters = { query: string; carModel: string; reference: string; status: LeadStatus | 'all'; myLeadsOnly?: boolean; staffUserId: string; };
+type UserFilters = { 
+    query: string; 
+    carModel: string; 
+    reference: string; 
+    status: LeadStatus | 'all'; 
+    myLeadsOnly?: boolean; 
+    staffUserId: string; 
+    activityFilter?: 'all' | 'no_activity' | 'has_activity';
+    meetingFilter?: 'all' | 'has_meeting' | 'no_meeting';
+};
 
 interface UsersPageProps {
     initialFilters: { carModel?: string };
@@ -76,7 +85,16 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'updatedAt', direction: 'descending' });
-    const [filters, setFilters] = useState<UserFilters>({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all' });
+    const [filters, setFilters] = useState<UserFilters>({ 
+        query: '', 
+        carModel: 'all', 
+        reference: 'all', 
+        status: 'all', 
+        myLeadsOnly: false, 
+        staffUserId: 'all',
+        activityFilter: 'all',
+        meetingFilter: 'all'
+    });
 
     const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -88,6 +106,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
     const [callLogs, setCallLogs] = useState<any[]>([]);
     const [customerJournals, setCustomerJournals] = useState<any[]>([]);
+    const [crmMeetings, setCrmMeetings] = useState<CrmMeeting[]>([]);
 
     // Auto-refresh states
     const [refreshMode, setRefreshMode] = useState<'off' | '5s' | '30s' | '1m' | 'custom'>('off');
@@ -109,7 +128,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setLoading(true);
         setError(null);
         try {
-            const [usersData, carsData, conditionsData, referencesData, staffData, statusData, callsData, journalsData] = await Promise.all([
+            const [usersData, carsData, conditionsData, referencesData, staffData, statusData, callsData, journalsData, meetingsData] = await Promise.all([
                 getUsers(),
                 getCars(),
                 getConditions(),
@@ -117,7 +136,8 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 getStaffUsers(),
                 getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
                 getCallLogs().catch(() => []),
-                getAllCustomerJournals().catch(() => [])
+                getAllCustomerJournals().catch(() => []),
+                getCrmMeetings().catch(() => [])
             ]);
             
             setUsers(usersData);
@@ -128,6 +148,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             setCrmStatus(statusData);
             setCallLogs(callsData);
             setCustomerJournals(journalsData);
+            setCrmMeetings(meetingsData);
         } catch (err) {
             setError('خطا در دریافت اطلاعات');
             showToast('خطا در دریافت اطلاعات', 'error');
@@ -171,12 +192,14 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                         getUsers(),
                         getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
                         getCallLogs().catch(() => []),
-                        getAllCustomerJournals().catch(() => [])
-                    ]).then(([usersData, statusData, callsData, journalsData]) => {
+                        getAllCustomerJournals().catch(() => []),
+                        getCrmMeetings().catch(() => [])
+                    ]).then(([usersData, statusData, callsData, journalsData, meetingsData]) => {
                         setUsers(usersData);
                         setCrmStatus(statusData);
                         setCallLogs(callsData);
                         setCustomerJournals(journalsData);
+                        setCrmMeetings(meetingsData);
                     }).catch(err => {
                         console.error("Auto refresh failed", err);
                     }).finally(() => {
@@ -230,6 +253,34 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     const filteredUsers = useMemo(() => {
         const lowercasedQuery = filters.query.toLowerCase();
+
+        // 1. Sets for Activity (Call logs & Journals)
+        const userIdsWithActivity = new Set<number>();
+        const userNumbersWithActivity = new Set<string>();
+
+        customerJournals.forEach(j => {
+            if (j.userId) userIdsWithActivity.add(Number(j.userId));
+        });
+
+        callLogs.forEach(c => {
+            if (c.userId) userIdsWithActivity.add(Number(c.userId));
+            if (c.customerNumber) userNumbersWithActivity.add(String(c.customerNumber).trim());
+        });
+
+        // 2. Sets for In-Person Meetings
+        const userIdsWithMeeting = new Set<number>();
+        const userNumbersWithMeeting = new Set<string>();
+
+        crmMeetings.forEach(m => {
+            if (m.userId) userIdsWithMeeting.add(Number(m.userId));
+            if (m.customerNumber) userNumbersWithMeeting.add(String(m.customerNumber).trim());
+        });
+
+        customerJournals.forEach(j => {
+            if (j.content && (j.content.includes('ملاقات حضوری') || j.content.includes('جلسه حضوری'))) {
+                if (j.userId) userIdsWithMeeting.add(Number(j.userId));
+            }
+        });
 
         // Find all user IDs that current user worked on
         const workedLeadIds = new Set<number>();
@@ -315,9 +366,32 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 staffMatch = staffWorkedLeadIds.has(Number(user.id)) || isReservedByStaff;
             }
 
-            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch && staffMatch;
+            // Activity Filter logic (No call log or journal activity)
+            const userNum = user.Number ? String(user.Number).trim() : '';
+            const hasActivity = userIdsWithActivity.has(Number(user.id)) || (userNum ? userNumbersWithActivity.has(userNum) : false);
+
+            let activityMatch = true;
+            if (filters.activityFilter === 'no_activity') {
+                activityMatch = !hasActivity;
+            } else if (filters.activityFilter === 'has_activity') {
+                activityMatch = hasActivity;
+            }
+
+            // In-Person Meeting Filter logic
+            const hasMeeting = (user.leadStatus === LeadStatus.MEETING) || 
+                               userIdsWithMeeting.has(Number(user.id)) || 
+                               (userNum ? userNumbersWithMeeting.has(userNum) : false);
+
+            let meetingMatch = true;
+            if (filters.meetingFilter === 'has_meeting') {
+                meetingMatch = hasMeeting;
+            } else if (filters.meetingFilter === 'no_meeting') {
+                meetingMatch = !hasMeeting;
+            }
+
+            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch && staffMatch && activityMatch && meetingMatch;
         });
-    }, [users, filters, customerJournals, callLogs, loggedInUser, staffUsers]);
+    }, [users, filters, customerJournals, callLogs, crmMeetings, loggedInUser, staffUsers]);
 
     const sortedUsers = useMemo(() => {
         let usersCopy = [...filteredUsers];
@@ -822,7 +896,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                             references={references}
                             staffUsers={staffUsers}
                             onClear={() => {
-                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all' });
+                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all', activityFilter: 'all', meetingFilter: 'all' });
                                 onFiltersCleared();
                             }}
                             refreshMode={refreshMode}
