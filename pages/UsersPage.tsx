@@ -26,8 +26,7 @@ import { PlusIcon } from '../components/icons/PlusIcon';
 import { ExportIcon } from '../components/icons/ExportIcon';
 import { CopyIcon } from '../components/icons/CopyIcon';
 import { ClipboardListIcon } from '../components/icons/ClipboardListIcon'; // Reused for list icon
-import CrmCallLogs from '../components/CrmCallLogs';
-import { Phone, FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet } from 'lucide-react';
 import { ExcelImportModal } from '../components/ExcelImportModal';
 import FailReasonModal from '../components/FailReasonModal';
 
@@ -99,9 +98,6 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
     
-    // View Mode State
-    const [viewMode, setViewMode] = useState<'LIST' | 'CALLS'>('LIST');
-
     // CRM live status and polling states
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
     const [callLogs, setCallLogs] = useState<any[]>([]);
@@ -249,7 +245,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     useEffect(() => {
         setCurrentPage(1);
         setSelectedUserIds(new Set());
-    }, [sortConfig, filters, viewMode]);
+    }, [sortConfig, filters]);
     
     const filteredUsers = useMemo(() => {
         const lowercasedQuery = filters.query.toLowerCase();
@@ -850,64 +846,42 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="flex items-center gap-4">
                             <h2 className="text-xl font-bold text-slate-700 dark:text-slate-100 font-extrabold">مدیریت ارتباط با مشتری (CRM)</h2>
-                            
-                            {/* View Switcher */}
-                            <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
-                                <button 
-                                    onClick={() => setViewMode('LIST')}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'LIST' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
-                                >
-                                    <ClipboardListIcon className="w-4 h-4" />
-                                    لیست
-                                </button>
-                                <button 
-                                    onClick={() => setViewMode('CALLS')}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'CALLS' ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
-                                >
-                                    <Phone className="w-4 h-4 text-sky-500" />
-                                    تماس‌ها
-                                </button>
-                            </div>
                         </div>
 
-                        {viewMode !== 'CALLS' && (
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setIsImportModalOpen(true)}
-                                    className="bg-emerald-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors duration-300 shadow-sm flex items-center gap-2 text-sm"
-                                >
-                                    <FileSpreadsheet className="w-4 h-4" />
-                                    درون‌ریزی از اکسل
-                                </button>
-                                <button
-                                    onClick={handleAddNew}
-                                    className="bg-sky-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-sky-700 transition-colors duration-300 shadow-sm flex items-center gap-2 text-sm"
-                                >
-                                    <PlusIcon />
-                                    افزودن مشتری جدید
-                                </button>
-                            </div>
-                        )}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setIsImportModalOpen(true)}
+                                className="bg-emerald-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors duration-300 shadow-sm flex items-center gap-2 text-sm"
+                            >
+                                <FileSpreadsheet className="w-4 h-4" />
+                                درون‌ریزی از اکسل
+                            </button>
+                            <button
+                                onClick={handleAddNew}
+                                className="bg-sky-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-sky-700 transition-colors duration-300 shadow-sm flex items-center gap-2 text-sm"
+                            >
+                                <PlusIcon />
+                                افزودن مشتری جدید
+                            </button>
+                        </div>
                     </div>
-                    {viewMode !== 'CALLS' && (
-                        <UserFilterPanel
-                            filters={filters}
-                            onFilterChange={(newFilters: any) => setFilters(prev => ({...prev, ...newFilters}))}
-                            references={references}
-                            staffUsers={staffUsers}
-                            onClear={() => {
-                                setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all', activityFilter: 'all', meetingFilter: 'all' });
-                                onFiltersCleared();
-                            }}
-                            refreshMode={refreshMode}
-                            onRefreshModeChange={setRefreshMode}
-                            customRefreshSeconds={customRefreshSeconds}
-                            onCustomRefreshSecondsChange={setCustomRefreshSeconds}
-                            nextRefreshCountdown={nextRefreshCountdown}
-                            onManualRefresh={handleManualRefresh}
-                            isRefreshing={isRefreshing}
-                        />
-                    )}
+                    <UserFilterPanel
+                        filters={filters}
+                        onFilterChange={(newFilters: any) => setFilters(prev => ({...prev, ...newFilters}))}
+                        references={references}
+                        staffUsers={staffUsers}
+                        onClear={() => {
+                            setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all', activityFilter: 'all', meetingFilter: 'all' });
+                            onFiltersCleared();
+                        }}
+                        refreshMode={refreshMode}
+                        onRefreshModeChange={setRefreshMode}
+                        customRefreshSeconds={customRefreshSeconds}
+                        onCustomRefreshSecondsChange={setCustomRefreshSeconds}
+                        nextRefreshCountdown={nextRefreshCountdown}
+                        onManualRefresh={handleManualRefresh}
+                        isRefreshing={isRefreshing}
+                    />
                 </div>
 
                 {loading ? (
@@ -918,37 +892,27 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                     <p className="text-center text-red-500 flex-grow">{error}</p>
                 ) : (
                     <>
-                        {viewMode === 'LIST' ? (
-                            <>
-                                <UserTable 
-                                    users={paginatedUsers} 
-                                    onEdit={handleEdit} 
-                                    onDelete={handleDelete}
-                                    onViewDetails={handleViewDetails}
-                                    onSort={handleSort}
-                                    sortConfig={sortConfig}
-                                    selectedUserIds={selectedUserIds}
-                                    onSelectionChange={handleSelectionChange}
-                                    onSelectAllChange={handleSelectAllChange}
-                                    onRegisterOrder={handleOpenOrderModal}
-                                    loggedInUser={loggedInUser}
-                                    crmStatus={crmStatus}
-                                />
-                                {totalPages > 1 && (
-                                    <Pagination
-                                        currentPage={currentPage}
-                                        totalPages={totalPages}
-                                        onPageChange={setCurrentPage}
-                                        totalItems={sortedUsers.length}
-                                        itemsPerPage={ITEMS_PER_PAGE}
-                                    />
-                                )}
-                            </>
-                        ) : (
-                            <CrmCallLogs 
-                                users={users}
-                                staffUsers={staffUsers}
-                                loggedInUser={loggedInUser}
+                        <UserTable 
+                            users={paginatedUsers} 
+                            onEdit={handleEdit} 
+                            onDelete={handleDelete}
+                            onViewDetails={handleViewDetails}
+                            onSort={handleSort}
+                            sortConfig={sortConfig}
+                            selectedUserIds={selectedUserIds}
+                            onSelectionChange={handleSelectionChange}
+                            onSelectAllChange={handleSelectAllChange}
+                            onRegisterOrder={handleOpenOrderModal}
+                            loggedInUser={loggedInUser}
+                            crmStatus={crmStatus}
+                        />
+                        {totalPages > 1 && (
+                            <Pagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                onPageChange={setCurrentPage}
+                                totalItems={sortedUsers.length}
+                                itemsPerPage={ITEMS_PER_PAGE}
                             />
                         )}
                     </>
@@ -1077,7 +1041,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
             
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-            {selectedUserIds.size > 0 && viewMode === 'LIST' && (
+            {selectedUserIds.size > 0 && (
                 <div className="fixed bottom-0 left-0 right-0 bg-sky-700 text-white p-3 sm:p-4 shadow-lg z-30 flex flex-col sm:flex-row justify-between items-center gap-3 animate-slide-up">
                     <div className="flex items-center gap-4">
                         <p className="text-sm sm:text-base font-bold">{selectedUserIds.size.toLocaleString('fa-IR')} کاربر انتخاب شده</p>
