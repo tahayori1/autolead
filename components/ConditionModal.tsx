@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { CarSaleCondition, Car, User, UsedCar } from '../types';
 import { ConditionStatus, SaleType, PayType, DocumentStatus } from '../types';
-import { getUsers, createUser, usedCarsService } from '../services/api';
+import { getUsers, createUser, createCustomerJournal, createCallLog, usedCarsService } from '../services/api';
 import { CloseIcon } from './icons/CloseIcon';
 import { Search, UserCheck, CheckCircle2, AlertCircle, FileText, UserPlus, Info } from 'lucide-react';
 
@@ -227,6 +227,33 @@ const ConditionModal: React.FC<ConditionModalProps> = ({ isOpen, onClose, onSave
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             });
+
+            // Register activity logs for new lead creation
+            try {
+                if (created && created.id) {
+                    await createCustomerJournal({
+                        userId: Number(created.id),
+                        content: `✨ ایجاد سرنخ جدید در سیستم (از بخش بخشنامه‌های فروش)
+👤 نام: ${created.FullName}
+📞 شماره: ${created.Number}
+🚘 خودرو: ${created.CarModel}`,
+                        author: 'کاربر سیستم'
+                    });
+                    await createCallLog({
+                        userId: Number(created.id),
+                        customerName: created.FullName,
+                        customerNumber: created.Number,
+                        callType: 'INBOUND',
+                        callStatus: 'SUCCESSFUL',
+                        duration: 0,
+                        agentName: 'کاربر سیستم',
+                        notes: `📌 فعالیت جدید: ثبت سرنخ جدید از بخش بخشنامه‌های فروش`,
+                        timestamp: new Date().toLocaleString('fa-IR')
+                    });
+                }
+            } catch (aErr) {
+                console.warn("Failed to register CRM journal/log for ConditionModal creation:", aErr);
+            }
 
             // Update local CRM list & Select the registered user
             setCrmUsers(prev => [created, ...prev]);

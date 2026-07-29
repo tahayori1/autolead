@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
     getUsers, createUser, updateUser, deleteUser, getLeadHistory, 
     sendMessage, sendSMS, getUserByNumber, getCars, getConditions, 
     getReferences, carOrdersService, sendBulkSMS, getStaffUsers,
-    sendBaleMessage, createCustomerJournal,
+    sendBaleMessage, createCustomerJournal, createCallLog,
     getCrmStatus, getCallLogs, getAllCustomerJournals, getCrmMeetings
 } from '../services/api';
 import type { Reference } from '../services/api';
@@ -113,7 +113,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     // Fail Reason states
     const [isFailReasonModalOpen, setIsFailReasonModalOpen] = useState(false);
     const [failReasonTargetUserId, setFailReasonTargetUserId] = useState<number | null>(null);
-    const [failReasonResolve, setFailReasonResolve] = useState<((data: { reason: string; explanation: string } | null) => void) | null>(null);
+    const failReasonResolveRef = useRef<((data: { reason: string; explanation: string } | null) => void) | null>(null);
 
     useEffect(() => {
         setFilters(prev => ({ ...prev, carModel: initialFilters.carModel || 'all' }));
@@ -516,9 +516,86 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             if (currentUser) {
                 savedUser = await updateUser(currentUser.id, { ...userData, id: currentUser.id });
                 showToast('کاربر با موفقیت ویرایش شد', 'success');
+
+                // If updated to LOST
+                if (savedUser.leadStatus === LeadStatus.LOST && savedUser.failReason && currentUser.leadStatus !== LeadStatus.LOST) {
+                    const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
+                    await createCustomerJournal({
+                        userId: Number(savedUser.id),
+                        content: `❌ ثبت علت شکست و ناموفق شدن معامله
+علت شکست: ${savedUser.failReason}
+${savedUser.failExplanation ? `توضیحات تکمیلی: ${savedUser.failExplanation}` : ''}`,
+                        author: authorName
+                    });
+                    await createCallLog({
+                        userId: Number(savedUser.id),
+                        customerName: savedUser.FullName || '',
+                        customerNumber: savedUser.Number || '',
+                        callType: 'OUTBOUND',
+                        callStatus: 'REJECTED',
+                        duration: 0,
+                        agentName: authorName,
+                        notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${savedUser.failReason}${savedUser.failExplanation ? ` (${savedUser.failExplanation})` : ''}`,
+                        timestamp: new Date().toLocaleString('fa-IR')
+                    });
+                }
             } else {
                 savedUser = await createUser(userData);
-                showToast('کاربر جدید با موفقیت اضافه شد', 'success');
+                showToast('سرنخ جدید با موفقیت اضافه شد', 'success');
+
+                // 1. Create activity and call log for new lead creation
+                try {
+                    const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
+                    const initialStatus = savedUser.leadStatus || 'ثبت اولیه';
+
+                    await createCustomerJournal({
+                        userId: Number(savedUser.id),
+                        content: `✨ ایجاد سرنخ جدید در سیستم
+👤 نام مشتری: ${savedUser.FullName || '-'}
+📞 شماره تماس: ${savedUser.Number || '-'}
+🚘 مدل خودرو: ${savedUser.CarModel || 'تعیین نشده'}
+📊 وضعیت اولیه: ${initialStatus}
+${savedUser.reference ? `🏷️ مرجع: ${savedUser.reference}\n` : ''}${savedUser.Decription ? `📝 توضیحات: ${savedUser.Decription}` : ''}`,
+                        author: authorName
+                    });
+
+                    await createCallLog({
+                        userId: Number(savedUser.id),
+                        customerName: savedUser.FullName || '',
+                        customerNumber: savedUser.Number || '',
+                        callType: 'INBOUND',
+                        callStatus: 'SUCCESSFUL',
+                        duration: 0,
+                        agentName: authorName,
+                        notes: `📌 فعالیت جدید: ایجاد و ثبت سرنخ جدید در سیستم CRM (وضعیت: ${initialStatus})`,
+                        timestamp: new Date().toLocaleString('fa-IR')
+                    });
+
+                    // 2. If new lead was created directly with status LOST and failReason
+                    if (savedUser.leadStatus === LeadStatus.LOST && savedUser.failReason) {
+                        await createCustomerJournal({
+                            userId: Number(savedUser.id),
+                            content: `❌ ثبت علت شکست و ناموفق شدن معامله
+علت شکست: ${savedUser.failReason}
+${savedUser.failExplanation ? `توضیحات تکمیلی: ${savedUser.failExplanation}` : ''}`,
+                            author: authorName
+                        });
+
+                        await createCallLog({
+                            userId: Number(savedUser.id),
+                            customerName: savedUser.FullName || '',
+                            customerNumber: savedUser.Number || '',
+                            callType: 'OUTBOUND',
+                            callStatus: 'REJECTED',
+                            duration: 0,
+                            agentName: authorName,
+                            notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${savedUser.failReason}${savedUser.failExplanation ? ` (${savedUser.failExplanation})` : ''}`,
+                            timestamp: new Date().toLocaleString('fa-IR')
+                        });
+                    }
+                } catch (actErr) {
+                    console.warn("Failed to register lead creation activity:", actErr);
+                }
             }
             
             setIsModalOpen(false);
@@ -530,51 +607,86 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     };
     
     const handleStatusChange = async (userId: number, newStatus: LeadStatus, failReason?: string, failExplanation?: string): Promise<User | undefined> => {
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
+        const targetId = Number(userId);
+        const user = users.find(u => Number(u.id) === targetId) 
+            || (selectedLead && Number(selectedLead.id) === targetId ? selectedLead : null) 
+            || (modalFullUser && Number(modalFullUser.id) === targetId ? modalFullUser : null);
+
+        if (!user) {
+            console.warn("User not found for status change:", userId);
+            return undefined;
+        }
 
         if (newStatus === LeadStatus.LOST && !failReason) {
             return new Promise<User | undefined>((resolve) => {
-                setFailReasonTargetUserId(userId);
+                setFailReasonTargetUserId(targetId);
                 setIsFailReasonModalOpen(true);
-                setFailReasonResolve(() => (data: { reason: string; explanation: string } | null) => {
+                failReasonResolveRef.current = (data: { reason: string; explanation: string } | null) => {
                     if (data) {
-                        handleStatusChange(userId, LeadStatus.LOST, data.reason, data.explanation)
+                        handleStatusChange(targetId, LeadStatus.LOST, data.reason, data.explanation)
                             .then((updated) => resolve(updated));
                     } else {
                         resolve(undefined);
                     }
-                });
+                };
             });
         }
 
-        const updatedUser = { 
+        const updatedUser: User = { 
             ...user, 
             leadStatus: newStatus,
-            failReason: failReason || undefined,
-            failExplanation: failExplanation || undefined
+            failReason: newStatus === LeadStatus.LOST ? (failReason || user.failReason || undefined) : undefined,
+            failExplanation: newStatus === LeadStatus.LOST ? (failExplanation || user.failExplanation || undefined) : undefined
         };
 
         // Optimistic Update
         const originalUsers = [...users];
-        setUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
+        setUsers(prev => prev.map(u => Number(u.id) === targetId ? updatedUser : u));
+        if (selectedLead && Number(selectedLead.id) === targetId) {
+            setSelectedLead(updatedUser);
+        }
+        if (modalFullUser && Number(modalFullUser.id) === targetId) {
+            setModalFullUser(updatedUser);
+        }
         
         try {
             // Update via API
-            await updateUser(userId, updatedUser);
+            const resultUser = await updateUser(targetId, updatedUser);
+            const finalUser = resultUser ? { ...updatedUser, ...resultUser } : updatedUser;
 
-            // If it is a LOST deal, also register a customer journal/report for the timeline
+            setUsers(prev => prev.map(u => Number(u.id) === targetId ? finalUser : u));
+            if (selectedLead && Number(selectedLead.id) === targetId) {
+                setSelectedLead(finalUser);
+            }
+            if (modalFullUser && Number(modalFullUser.id) === targetId) {
+                setModalFullUser(finalUser);
+            }
+
+            // If it is a LOST deal, also register a customer journal/report and call log for the timeline
             if (newStatus === LeadStatus.LOST && failReason) {
                 const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
                 await createCustomerJournal({
-                    userId,
-                    content: `❌ معامله نا‌موفق اعلام شد.
+                    userId: targetId,
+                    content: `❌ ثبت علت شکست و ناموفق شدن معامله
 علت شکست: ${failReason}
 ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                     author: authorName
                 });
+
+                await createCallLog({
+                    userId: targetId,
+                    customerName: user.FullName || '',
+                    customerNumber: user.Number || '',
+                    callType: 'OUTBOUND',
+                    callStatus: 'REJECTED',
+                    duration: 0,
+                    agentName: authorName,
+                    notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${failReason}${failExplanation ? ` (${failExplanation})` : ''}`,
+                    timestamp: new Date().toLocaleString('fa-IR')
+                });
             }
-            return updatedUser;
+            showToast('وضعیت معامله با موفقیت به روزرسانی شد', 'success');
+            return finalUser;
         } catch (e) {
             // Revert on error
             setUsers(originalUsers);
@@ -1027,14 +1139,16 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                 isOpen={isFailReasonModalOpen}
                 onClose={() => {
                     setIsFailReasonModalOpen(false);
-                    if (failReasonResolve) {
-                        failReasonResolve(null);
+                    if (failReasonResolveRef.current) {
+                        failReasonResolveRef.current(null);
+                        failReasonResolveRef.current = null;
                     }
                 }}
                 onSubmit={(reason, explanation) => {
                     setIsFailReasonModalOpen(false);
-                    if (failReasonResolve) {
-                        failReasonResolve({ reason, explanation });
+                    if (failReasonResolveRef.current) {
+                        failReasonResolveRef.current({ reason, explanation });
+                        failReasonResolveRef.current = null;
                     }
                 }}
             />

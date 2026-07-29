@@ -89,6 +89,11 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
         if (!formState.FullName.trim()) newErrors.FullName = 'نام کامل الزامی است.';
         if (!formState.Number.trim()) newErrors.Number = 'شماره تماس الزامی است.';
         if (!/^\d{10,11}$/.test(formState.Number)) newErrors.Number = 'شماره تماس معتبر نیست.';
+        if (formState.leadStatus === LeadStatus.LOST) {
+            if (!formState.failReason || !formState.failReason.trim()) {
+                newErrors.failReason = 'لطفاً علت شکست معامله را انتخاب کنید.';
+            }
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -145,6 +150,39 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                 ))}
                             </select>
                         </div>
+
+                        {formState.leadStatus === LeadStatus.LOST && (
+                            <div className="md:col-span-2 p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl space-y-3">
+                                <label className="block text-xs font-bold text-red-700 dark:text-red-400">⚠️ علت شکست معامله (معامله ناموفق)</label>
+                                <div>
+                                    <select
+                                        value={formState.failReason || ''}
+                                        onChange={(e) => handleChange('failReason', e.target.value)}
+                                        className="w-full px-3 py-2 text-xs border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white border-slate-300"
+                                    >
+                                        <option value="">-- انتخاب علت شکست معامله --</option>
+                                        <option value="قیمت بالا / عدم توافق مالی روی جزئیات معامله">قیمت بالا / عدم توافق مالی روی جزئیات معامله</option>
+                                        <option value="انصراف مشتری از خرید خودرو / تغییر تصمیم">انصراف مشتری از خرید خودرو / تغییر تصمیم</option>
+                                        <option value="خرید از رقیب یا همکار دیگر">خرید از رقیب یا همکار دیگر</option>
+                                        <option value="عدم تایید خودرو در کارشناسی فنی و بدنه">عدم تایید خودرو در کارشناسی فنی و بدنه</option>
+                                        <option value="عدم تامین نقدینگی / عدم موافقت با شرایط پرداخت">عدم تامین نقدینگی / عدم موافقت با شرایط پرداخت</option>
+                                        <option value="عدم پاسخگویی مشتری به تماس‌ها و پیگیری‌های مکرر">عدم پاسخگویی مشتری به تماس‌ها و پیگیری‌های مکرر</option>
+                                        <option value="یافتن مورد مناسب‌تر در بازار آزاد">یافتن مورد مناسب‌تر در بازار آزاد</option>
+                                        <option value="سایر دلایل">سایر دلایل</option>
+                                    </select>
+                                    {errors.failReason && <p className="text-red-500 text-xs mt-1 font-bold">{errors.failReason}</p>}
+                                </div>
+                                <div>
+                                    <textarea
+                                        value={formState.failExplanation || ''}
+                                        onChange={(e) => handleChange('failExplanation', e.target.value)}
+                                        placeholder="توضیحات تکمیلی علت شکست معامله..."
+                                        rows={2}
+                                        className="w-full px-3 py-2 text-xs border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white border-slate-300"
+                                    />
+                                </div>
+                            </div>
+                        )}
                          <div>
                             <label htmlFor="reference" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">مرجع</label>
                             <input type="text" id="reference" value={formState.reference} onChange={(e) => handleChange('reference', e.target.value)}

@@ -113,6 +113,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [editReference, setEditReference] = useState('');
     const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>(LeadStatus.NEW);
     const [editFailReason, setEditFailReason] = useState('');
+    const [customFailReason, setCustomFailReason] = useState('');
     const [editFailExplanation, setEditFailExplanation] = useState('');
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [isSavingEditLead, setIsSavingEditLead] = useState(false);
@@ -225,7 +226,24 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setEditDescription(targetUser.Decription || '');
             setEditReference(targetUser.reference || '');
             setEditLeadStatus(targetUser.leadStatus || LeadStatus.NEW);
-            setEditFailReason(targetUser.failReason || '');
+            
+            const existingReason = targetUser.failReason || '';
+            const PREDEFINED_LIST = [
+                "قیمت بالا / عدم توافق مالی روی جزئیات معامله",
+                "انصراف مشتری از خرید خودرو / تغییر تصمیم",
+                "خرید از رقیب یا همکار دیگر",
+                "عدم تایید خودرو در کارشناسی فنی و بدنه",
+                "عدم تامین نقدینگی / عدم موافقت با شرایط پرداخت",
+                "عدم پاسخگویی مشتری به تماس‌ها و پیگیری‌های مکرر",
+                "یافتن مورد مناسب‌تر در بازار آزاد"
+            ];
+            if (existingReason && !PREDEFINED_LIST.includes(existingReason)) {
+                setEditFailReason('سایر دلایل');
+                setCustomFailReason(existingReason);
+            } else {
+                setEditFailReason(existingReason);
+                setCustomFailReason('');
+            }
             setEditFailExplanation(targetUser.failExplanation || '');
             setEditErrors({});
         } else if (!isOpen) {
@@ -265,6 +283,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setEditReference('');
             setEditLeadStatus(LeadStatus.NEW);
             setEditFailReason('');
+            setCustomFailReason('');
             setEditFailExplanation('');
             setEditErrors({});
         }
@@ -395,9 +414,13 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
         if (!editNumber.trim()) newErrors.Number = 'شماره تماس الزامی است.';
         if (!/^\d{10,11}$/.test(editNumber)) newErrors.Number = 'شماره تماس معتبر نیست.';
         
+        const finalFailReason = editLeadStatus === LeadStatus.LOST
+            ? (editFailReason === 'سایر دلایل' ? customFailReason.trim() : editFailReason.trim())
+            : undefined;
+
         if (editLeadStatus === LeadStatus.LOST) {
-            if (!editFailReason) {
-                newErrors.FailReason = 'لطفاً علت شکست معامله را انتخاب کنید.';
+            if (!finalFailReason) {
+                newErrors.FailReason = 'لطفاً علت شکست معامله را انتخاب یا وارد کنید.';
             }
         }
         
@@ -420,8 +443,8 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
                 Decription: editDescription.trim(),
                 reference: editReference.trim(),
                 leadStatus: editLeadStatus,
-                failReason: editLeadStatus === LeadStatus.LOST ? editFailReason : undefined,
-                failExplanation: editLeadStatus === LeadStatus.LOST ? editFailExplanation : undefined,
+                failReason: editLeadStatus === LeadStatus.LOST ? finalFailReason : undefined,
+                failExplanation: editLeadStatus === LeadStatus.LOST ? editFailExplanation.trim() : undefined,
                 LastAction: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -438,6 +461,12 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             if ((targetUser.City || '') !== (updatedUser.City || '')) changes.push(`شهر: "${targetUser.City || ''}" ← "${updatedUser.City || ''}"`);
             if ((targetUser.reference || '') !== (updatedUser.reference || '')) changes.push(`مرجع: "${targetUser.reference || ''}" ← "${updatedUser.reference || ''}"`);
             if (targetUser.leadStatus !== updatedUser.leadStatus) changes.push(`وضعیت: "${targetUser.leadStatus || ''}" ← "${updatedUser.leadStatus || ''}"`);
+            if (updatedUser.leadStatus === LeadStatus.LOST && updatedUser.failReason) {
+                changes.push(`علت شکست معامله: "${updatedUser.failReason}"`);
+                if (updatedUser.failExplanation) {
+                    changes.push(`توضیحات شکست: "${updatedUser.failExplanation}"`);
+                }
+            }
             if (targetUser.Decription !== updatedUser.Decription) changes.push(`توضیحات به‌روز شد.`);
 
             const journalContent = `✏️ ویرایش مشخصات اصلی مشتری:
@@ -448,6 +477,24 @@ ${changes.length > 0 ? changes.join('\n') : 'تغییری در اطلاعات پ
                 content: journalContent,
                 author: authorName
             });
+
+            if (updatedUser.leadStatus === LeadStatus.LOST && updatedUser.failReason) {
+                try {
+                    await createCallLog({
+                        userId,
+                        customerName: updatedUser.FullName || '',
+                        customerNumber: updatedUser.Number || '',
+                        callType: 'OUTBOUND',
+                        callStatus: 'REJECTED',
+                        duration: 0,
+                        agentName: authorName,
+                        notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${updatedUser.failReason}${updatedUser.failExplanation ? ` (${updatedUser.failExplanation})` : ''}`,
+                        timestamp: new Date().toLocaleString('fa-IR')
+                    });
+                } catch (cErr) {
+                    console.warn("Failed to create call log on LOST edit:", cErr);
+                }
+            }
 
             if (onUserUpdate) {
                 onUserUpdate(result);
@@ -777,6 +824,14 @@ ${changes.length > 0 ? changes.join('\n') : 'تغییری در اطلاعات پ
     const handleQuickStatusChange = async (newStatus: LeadStatus) => {
         const userId = fullUserDetails?.id || lead?.id;
         if (!userId || isJournalSending) return;
+
+        if (newStatus === LeadStatus.LOST) {
+            if (onStatusChange) {
+                await onStatusChange(userId, newStatus);
+                fetchJournals();
+            }
+            return;
+        }
 
         setIsJournalSending(true);
         try {
@@ -1777,13 +1832,33 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             } else if (item.type === 'JOURNAL') {
                                                 // Journal Log
                                                 const isSurvey = item.content.includes('نظرسنجی');
-                                                const borderCol = isSurvey ? 'border-r-emerald-500' : 'border-r-amber-400';
+                                                const isLostDeal = item.content.includes('علت شکست') || item.content.includes('ناموفق شدن معامله') || item.content.includes('معامله نا‌موفق');
+                                                const isNewLead = item.content.includes('سرنخ جدید') || item.content.includes('ایجاد سرنخ');
+
+                                                let borderCol = 'border-r-amber-400';
+                                                let badgeText = 'گزارش فعالیت CRM';
+                                                let badgeStyle = 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 font-bold';
+
+                                                if (isSurvey) {
+                                                    borderCol = 'border-r-emerald-500';
+                                                    badgeText = 'نظرسنجی';
+                                                    badgeStyle = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 font-bold';
+                                                } else if (isLostDeal) {
+                                                    borderCol = 'border-r-rose-600';
+                                                    badgeText = '❌ علت شکست معامله';
+                                                    badgeStyle = 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 font-extrabold';
+                                                } else if (isNewLead) {
+                                                    borderCol = 'border-r-indigo-500';
+                                                    badgeText = '✨ ایجاد سرنخ جدید';
+                                                    badgeStyle = 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400 font-extrabold';
+                                                }
+
                                                 return (
                                                     <div key={item.id} className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border-r-4 border-l border-y ${borderCol} border-l-slate-200 dark:border-l-slate-850 border-y-slate-200 dark:border-y-slate-850 shadow-sm flex flex-col gap-1.5`}>
                                                         <div className="flex justify-between items-center text-[10px] text-slate-500 border-b border-slate-50 dark:border-slate-800/40 pb-1.5">
                                                             <div className="flex items-center gap-1.5">
-                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${isSurvey ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'}`}>
-                                                                    {isSurvey ? 'نظرسنجی' : 'گزارش تماس CRM'}
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] ${badgeStyle}`}>
+                                                                    {badgeText}
                                                                 </span>
                                                                 <span className="font-bold text-slate-600 dark:text-slate-300">{item.author}</span>
                                                             </div>
@@ -2021,7 +2096,13 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                     <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">علت شکست معامله:</label>
                                                     <select
                                                         value={editFailReason}
-                                                        onChange={(e) => setEditFailReason(e.target.value)}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setEditFailReason(val);
+                                                            if (val !== 'سایر دلایل') {
+                                                                setCustomFailReason('');
+                                                            }
+                                                        }}
                                                         className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white"
                                                     >
                                                         <option value="">-- انتخاب علت شکست --</option>
@@ -2042,8 +2123,8 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">علت شکست دلخواه شما:</label>
                                                         <input
                                                             type="text"
-                                                            value={editFailReason === 'سایر دلایل' ? '' : editFailReason}
-                                                            onChange={(e) => setEditFailReason(e.target.value)}
+                                                            value={customFailReason}
+                                                            onChange={(e) => setCustomFailReason(e.target.value)}
                                                             placeholder="علت شکست دلخواه را اینجا وارد کنید..."
                                                             className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-850 dark:text-white"
                                                         />
