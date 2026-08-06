@@ -400,6 +400,20 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
             }
         });
 
+        // Sort by approved price (custom manual price) ascending, placing models with approved prices first
+        overridden.sort((a, b) => {
+            const manualA = prices.find(p => p.model_name === a.model_name && p.source_name === 'custom');
+            const manualB = prices.find(p => p.model_name === b.model_name && p.source_name === 'custom');
+
+            const valA = manualA ? manualA.price_rial : Number.MAX_SAFE_INTEGER;
+            const valB = manualB ? manualB.price_rial : Number.MAX_SAFE_INTEGER;
+
+            if (valA !== valB) {
+                return valA - valB;
+            }
+            return a.model_name.localeCompare(b.model_name, 'fa');
+        });
+
         return overridden;
     }, [priceStats, prices]);
 
