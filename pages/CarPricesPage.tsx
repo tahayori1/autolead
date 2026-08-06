@@ -128,10 +128,13 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
     };
 
     const toggleCardExpanded = (modelName: string) => {
-        setExpandedCards(prev => ({
-            ...prev,
-            [modelName]: !prev[modelName]
-        }));
+        setExpandedCards(prev => {
+            const isCurrentlyExpanded = prev[modelName] !== undefined ? prev[modelName] : true;
+            return {
+                ...prev,
+                [modelName]: !isCurrentlyExpanded
+            };
+        });
     };
 
     const existingModelsList = useMemo(() => {
@@ -151,6 +154,32 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
         await addCustomPrice(payload);
         showToast('قیمت دستی خودرو با موفقیت ثبت شد', 'success');
         await fetchAllData();
+    };
+
+    const handleSelectAsApprovedPrice = async (modelName: string, sourceName: string, priceRial: number) => {
+        const formattedPrice = priceRial.toLocaleString('fa-IR');
+        const isConfirmed = window.confirm(
+            `آیا می‌خواهید این قیمت (${formattedPrice} تومان از مرجع «${sourceName}») را به عنوان قیمت مصوب انتخاب کنید؟`
+        );
+
+        if (!isConfirmed) return;
+
+        try {
+            setLoading(true);
+            await addCustomPrice({
+                source_name: 'custom',
+                model_name: modelName,
+                price_rial: priceRial,
+                price_text: `انتخاب شده از مرجع ${sourceName}`,
+                captured_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+            });
+            showToast(`قیمت ${formattedPrice} تومان به عنوان قیمت مصوب برای ${modelName} ثبت شد`, 'success');
+            await fetchAllData();
+        } catch (err) {
+            showToast('خطا در ثبت قیمت مصوب', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const showToast = (message: string, type: 'success' | 'error') => {
@@ -456,8 +485,14 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {priceStatsWithOverride.map(stat => {
                         const manualPrice = prices.find(p => p.model_name === stat.model_name && p.source_name === 'custom');
-                        const otherPrices = prices.filter(p => p.model_name === stat.model_name && p.source_name !== 'custom' && p.price_rial > 0);
+                        const otherPrices = prices
+                            .filter(p => p.model_name === stat.model_name && p.source_name !== 'custom' && p.price_rial > 0)
+                            .sort((a, b) => a.price_rial - b.price_rial);
                         
+                        const isCardExpanded = expandedCards[stat.model_name] !== undefined 
+                            ? expandedCards[stat.model_name] 
+                            : true;
+
                         // Change: Highest limit is now +2% instead of +7%
                         const highestLimit = stat.maximum * 1.02;
                         
@@ -478,19 +513,19 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                             {manualPrice && (
                                 <div className="absolute top-0 right-0 bg-sky-500 text-white text-[10px] font-black px-2 py-0.5 rounded-bl-lg flex items-center gap-1.5 shadow-sm">
                                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
-                                    قیمت دستی مصوب
+                                    قیمت مصوب
                                 </div>
                             )}
                             <div>
                                 <h3 className="font-black text-slate-800 dark:text-white text-lg mb-4 truncate pr-16">{stat.model_name}</h3>
                                 <div className="space-y-4 text-sm">
                                     
-                                    {/* Base Price */}
+                                    {/* Base / Approved Price */}
                                     <div className="pb-3 border-b border-slate-100 dark:border-slate-700">
                                         {manualPrice ? (
                                             <div>
                                                 <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-sky-600 dark:text-sky-400 font-bold text-xs">قیمت دستی اصلی:</span>
+                                                    <span className="text-sky-600 dark:text-sky-400 font-bold text-xs">قیمت مصوب:</span>
                                                     <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                                                         <Clock className="w-3 h-3" />
                                                         {timeAgo(manualPrice.captured_at)}
@@ -500,21 +535,18 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                                     <span className="font-mono font-black text-sky-700 dark:text-sky-300 text-2xl">
                                                         {manualPrice.price_rial.toLocaleString('fa-IR')} <span className="text-xs font-bold font-sans">تومان</span>
                                                     </span>
-                                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-1">
-                                                        {manualPrice.price_text}
-                                                    </span>
+                                                    {manualPrice.price_text && (
+                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-1">
+                                                            {manualPrice.price_text}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
-                                                    قیمت:
-                                                    {isOlderThan24Hours(stat.computed_at) && (
-                                                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" title="بیش از ۲۴ ساعت از آخرین بروزرسانی گذشته است" />
-                                                    )}
-                                                </span>
-                                                <span className="font-mono font-black text-blue-700 dark:text-blue-300 text-lg">
-                                                    {stat.maximum.toLocaleString('fa-IR')} <span className="text-[10px] font-bold font-sans">تومان</span>
+                                            <div className="flex justify-between items-center py-1">
+                                                <span className="text-slate-500 dark:text-slate-400 font-bold text-xs">قیمت مصوب:</span>
+                                                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700/50 px-2.5 py-1 rounded-lg">
+                                                    وارد نشده
                                                 </span>
                                             </div>
                                         )}
@@ -589,28 +621,36 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                             className="w-full flex items-center justify-between text-xs py-1.5 px-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/40 dark:hover:bg-slate-850 rounded-lg text-slate-500 dark:text-slate-400 font-semibold transition-all outline-none"
                                         >
                                             <span>مشاهده قیمت سایر مراجع ({otherPrices.length} مرجع)</span>
-                                            {expandedCards[stat.model_name] ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                                            {isCardExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
                                         </button>
                                         
-                                        {expandedCards[stat.model_name] && (
-                                            <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                        {isCardExpanded && (
+                                            <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
                                                 {otherPrices.length === 0 ? (
                                                     <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center py-1">مرجع فعال دیگری یافت نشد.</p>
                                                 ) : (
                                                     otherPrices.map(op => {
                                                         const isStale = isOlderThan24Hours(op.captured_at);
                                                         return (
-                                                            <div key={op.id} className="flex justify-between items-center text-[11px] border-b border-slate-100/50 dark:border-slate-800/50 py-1 last:border-0">
-                                                                <span className="font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                                            <div key={op.id} className="flex justify-between items-center text-[11px] border-b border-slate-100/50 dark:border-slate-800/50 py-1.5 last:border-0 gap-2">
+                                                                <span className="font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 truncate">
                                                                     {op.source_name}
                                                                     {isStale && (
                                                                         <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" title="بیش از ۲۴ ساعت از آخرین بروزرسانی گذشته است" />
                                                                     )}
                                                                     :
                                                                 </span>
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span className="font-mono font-semibold text-slate-755 dark:text-slate-300">{op.price_rial.toLocaleString('fa-IR')}</span>
-                                                                    <span className="text-[10px] text-slate-455 font-normal">({timeAgo(op.captured_at)})</span>
+                                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                                    <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{op.price_rial.toLocaleString('fa-IR')}</span>
+                                                                    <span className="text-[10px] text-slate-400 font-normal">({timeAgo(op.captured_at)})</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleSelectAsApprovedPrice(stat.model_name, op.source_name, op.price_rial)}
+                                                                        className="w-6 h-6 rounded-md bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white dark:bg-sky-950/40 dark:hover:bg-sky-600 dark:text-sky-400 dark:hover:text-white border border-sky-200 dark:border-sky-800 transition-all flex items-center justify-center font-bold shadow-sm"
+                                                                        title="انتخاب این قیمت به عنوان قیمت مصوب"
+                                                                    >
+                                                                        <Plus className="w-3.5 h-3.5" />
+                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         );
