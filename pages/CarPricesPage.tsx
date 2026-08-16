@@ -9,9 +9,10 @@ import { CopyIcon } from '../components/icons/CopyIcon';
 import { EyeIcon } from '../components/icons/EyeIcon';
 import CarPriceCopySettingsModal, { PRIORITY_MODELS, getModelPriorityIndex } from '../components/CarPriceCopySettingsModal';
 import AddCustomPriceModal from '../components/AddCustomPriceModal';
+import SalesManagerPriceAssistant from '../components/SalesManagerPriceAssistant';
 import { 
     Plus, Clock, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, 
-    TrendingUp, Search, Filter, ArrowUpDown, X, Car, Sparkles, Layers, Calendar
+    TrendingUp, Search, Filter, ArrowUpDown, X, Car, Sparkles, Layers, Calendar, Target, ShieldCheck, BarChart3, TableProperties, ShieldAlert, CheckCircle2, Scale
 } from 'lucide-react';
 
 export interface ModelYearParsed {
@@ -141,6 +142,13 @@ interface ModelVariant {
     havaleh2Min: number;
     havaleh2Max: number;
     sourcePricesMap: Record<string, ScrapedCarPrice>;
+    sourceCount: number;
+    isSufficientSources: boolean; // >= 3
+    lowestMarketPrice: number; // کمترین نرخ معامله بر اساس مراجع
+    highestMarketPrice: number; // بیشترین نرخ معامله بر اساس مراجع
+    averageMarketPrice: number; // میانگین نرخ معامله
+    modePrice: number; // پرتکرارترین نرخ معامله بر اساس مراجع
+    modeCount: number; // تعداد مراجع متفق‌القول روی پرتکرارترین نرخ
 }
 
 interface GroupedCardData {
@@ -151,7 +159,10 @@ interface GroupedCardData {
     primaryApprovedPrice?: number;
     highestMarketPrice: number;
     lowestMarketPrice: number;
+    modePrice: number;
     allSources: string[];
+    maxSourceCount: number;
+    isSufficientSources: boolean;
 }
 
 interface CarPricesPageProps {}
@@ -166,16 +177,20 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     
+    // Main Navigation Tab (Default is 'market_cards', Sales Manager Assistant is non-default)
+    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'sales_assistant'>('market_cards');
+
     // Auto Refresh State
     const [refreshInterval, setRefreshInterval] = useState<number>(0); // 0 means manual
     const [secondsLeft, setSecondsLeft] = useState<number>(0);
 
     // Search, Filter & Sort states for Price Summary
     const [statsSearchQuery, setStatsSearchQuery] = useState<string>('');
-    const [statsSortField, setStatsSortField] = useState<'priority' | 'approved_price' | 'model_name' | 'max_price' | 'min_price'>('priority');
+    const [statsSortField, setStatsSortField] = useState<'priority' | 'credibility_desc' | 'credibility_asc' | 'approved_price' | 'model_name' | 'max_price' | 'min_price' | 'mode_price'>('priority');
     const [statsSortDirection, setStatsSortDirection] = useState<'asc' | 'desc'>('asc');
     const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all'); // 'all', 'custom', or specific source name
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all'); // 'all' or specific year like '1404'
+    const [selectedCredibilityTab, setSelectedCredibilityTab] = useState<'all' | 'sufficient' | 'insufficient'>('all');
     const [selectedYearByModel, setSelectedYearByModel] = useState<Record<string, string>>({});
 
     const formatTimeLeft = (seconds: number) => {
@@ -493,12 +508,43 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                 .sort((a, b) => a.price_rial - b.price_rial);
 
             const sourcePricesMap: Record<string, ScrapedCarPrice> = {};
-            prices.filter(p => p.model_name === stat.model_name && p.price_rial > 0).forEach(p => {
+            const validSourcePrices = prices.filter(p => p.model_name === stat.model_name && p.price_rial > 0);
+            validSourcePrices.forEach(p => {
                 sourcePricesMap[p.source_name] = p;
             });
 
-            const highestLimit = stat.maximum * 1.02;
-            const lowestLimit = (manualPrice ? manualPrice.price_rial : (stat.minimum && stat.minimum > 0 ? stat.minimum : stat.maximum)) * 0.98;
+            // Prices list for metric calculations (using scraped sources, or manual price if only custom exists)
+            const priceValues = validSourcePrices.map(p => p.price_rial);
+            const lowestMarketPrice = priceValues.length > 0 ? Math.min(...priceValues) : (stat.minimum && stat.minimum > 0 ? stat.minimum : stat.maximum);
+            const highestMarketPrice = priceValues.length > 0 ? Math.max(...priceValues) : stat.maximum;
+            const averageMarketPrice = priceValues.length > 0 
+                ? Math.round(priceValues.reduce((sum, p) => sum + p, 0) / priceValues.length)
+                : (stat.average || stat.maximum);
+
+            // Frequency Map for Mode Calculation (پرتکرارترین نرخ معامله بین مراجع)
+            const priceFreq = new Map<number, number>();
+            priceValues.forEach(p => {
+                priceFreq.set(p, (priceFreq.get(p) || 0) + 1);
+            });
+
+            let modePrice = 0;
+            let modeCount = 0;
+            priceFreq.forEach((cnt, p) => {
+                if (cnt > modeCount || (cnt === modeCount && p > modePrice)) {
+                    modeCount = cnt;
+                    modePrice = p;
+                }
+            });
+            if (modePrice === 0 && priceValues.length > 0) {
+                modePrice = priceValues[0];
+                modeCount = 1;
+            }
+
+            const sourceCount = Object.keys(sourcePricesMap).length;
+            const isSufficientSources = sourceCount >= 3;
+
+            const highestLimit = highestMarketPrice * 1.02;
+            const lowestLimit = (manualPrice ? manualPrice.price_rial : lowestMarketPrice) * 0.98;
 
             const havaleh1Min = stat.maximum * 0.95;
             const havaleh1Max = stat.maximum * 0.97;
@@ -517,7 +563,14 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                 havaleh1Max,
                 havaleh2Min,
                 havaleh2Max,
-                sourcePricesMap
+                sourcePricesMap,
+                sourceCount,
+                isSufficientSources,
+                lowestMarketPrice,
+                highestMarketPrice,
+                averageMarketPrice,
+                modePrice,
+                modeCount
             };
 
             if (!groupsMap.has(baseName)) {
@@ -527,9 +580,12 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     years: year ? [year] : [],
                     hasApprovedPrice: !!manualPrice,
                     primaryApprovedPrice: manualPrice?.price_rial,
-                    highestMarketPrice: stat.maximum,
-                    lowestMarketPrice: stat.minimum && stat.minimum > 0 ? stat.minimum : stat.maximum,
-                    allSources: Object.keys(sourcePricesMap)
+                    highestMarketPrice,
+                    lowestMarketPrice,
+                    modePrice,
+                    allSources: Object.keys(sourcePricesMap),
+                    maxSourceCount: sourceCount,
+                    isSufficientSources
                 });
             } else {
                 const group = groupsMap.get(baseName)!;
@@ -543,11 +599,17 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                         group.primaryApprovedPrice = manualPrice.price_rial;
                     }
                 }
-                if (stat.maximum > group.highestMarketPrice) {
-                    group.highestMarketPrice = stat.maximum;
+                if (highestMarketPrice > group.highestMarketPrice) {
+                    group.highestMarketPrice = highestMarketPrice;
                 }
-                if (stat.minimum && stat.minimum > 0 && stat.minimum < group.lowestMarketPrice) {
-                    group.lowestMarketPrice = stat.minimum;
+                if (lowestMarketPrice < group.lowestMarketPrice) {
+                    group.lowestMarketPrice = lowestMarketPrice;
+                }
+                if (sourceCount > group.maxSourceCount) {
+                    group.maxSourceCount = sourceCount;
+                }
+                if (isSufficientSources) {
+                    group.isSufficientSources = true;
                 }
                 Object.keys(sourcePricesMap).forEach(s => {
                     if (!group.allSources.includes(s)) group.allSources.push(s);
@@ -578,11 +640,27 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
         return Array.from(yearsSet).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
     }, [groupedModelCards]);
 
+    // Summary KPI statistics
+    const summaryStats = useMemo(() => {
+        const total = groupedModelCards.length;
+        const sufficient = groupedModelCards.filter(g => g.isSufficientSources).length;
+        const insufficient = total - sufficient;
+        const withApproved = groupedModelCards.filter(g => g.hasApprovedPrice).length;
+        return { total, sufficient, insufficient, withApproved };
+    }, [groupedModelCards]);
+
     // Filter & Sort Grouped Cards
     const filteredAndSortedCards = useMemo(() => {
         let result = [...groupedModelCards];
 
-        // 1. Search Filter (by Car Name)
+        // 1. Credibility Tab Filter (تفکیک خودروها بر مبنای کافی بودن مراجع)
+        if (selectedCredibilityTab === 'sufficient') {
+            result = result.filter(card => card.isSufficientSources);
+        } else if (selectedCredibilityTab === 'insufficient') {
+            result = result.filter(card => !card.isSufficientSources);
+        }
+
+        // 2. Search Filter (by Car Name)
         if (statsSearchQuery.trim()) {
             const q = statsSearchQuery.trim().toLowerCase();
             result = result.filter(card => {
@@ -595,7 +673,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
             });
         }
 
-        // 2. Source Filter (نمایش قیمت بر اساس مرجع)
+        // 3. Source Filter (نمایش قیمت بر اساس مرجع)
         if (selectedSourceFilter !== 'all') {
             if (selectedSourceFilter === 'custom') {
                 result = result.filter(card => card.hasApprovedPrice);
@@ -606,12 +684,12 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
             }
         }
 
-        // 3. Year of Manufacture Filter (فیلتر بر اساس سال ساخت)
+        // 4. Year of Manufacture Filter (فیلتر بر اساس سال ساخت)
         if (selectedYearFilter !== 'all') {
             result = result.filter(card => card.years.includes(selectedYearFilter));
         }
 
-        // 4. Sorting
+        // 5. Sorting
         result.sort((a, b) => {
             if (statsSortField === 'priority') {
                 const pA = getModelPriorityIndex(a.baseModelName);
@@ -624,6 +702,18 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     return a.hasApprovedPrice ? -1 : 1;
                 }
                 return a.baseModelName.localeCompare(b.baseModelName, 'fa');
+            }
+
+            if (statsSortField === 'credibility_desc') {
+                return statsSortDirection === 'asc'
+                    ? a.maxSourceCount - b.maxSourceCount
+                    : b.maxSourceCount - a.maxSourceCount;
+            }
+
+            if (statsSortField === 'credibility_asc') {
+                return statsSortDirection === 'asc'
+                    ? b.maxSourceCount - a.maxSourceCount
+                    : a.maxSourceCount - b.maxSourceCount;
             }
 
             if (statsSortField === 'approved_price') {
@@ -658,11 +748,17 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     : b.lowestMarketPrice - a.lowestMarketPrice;
             }
 
+            if (statsSortField === 'mode_price') {
+                return statsSortDirection === 'asc'
+                    ? a.modePrice - b.modePrice
+                    : b.modePrice - a.modePrice;
+            }
+
             return 0;
         });
 
         return result;
-    }, [groupedModelCards, statsSearchQuery, selectedSourceFilter, selectedYearFilter, statsSortField, statsSortDirection]);
+    }, [groupedModelCards, selectedCredibilityTab, statsSearchQuery, selectedSourceFilter, selectedYearFilter, statsSortField, statsSortDirection]);
 
     const renderPriceStats = () => (
         <div className="mb-8 space-y-4">
@@ -749,6 +845,72 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                  </div>
             </div>
 
+            {/* Credibility Segmentation & Filter Tabs */}
+            <div className="bg-white dark:bg-slate-850 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-1">تفکیک مراجع:</span>
+                        <button
+                            type="button"
+                            onClick={() => setSelectedCredibilityTab('all')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                selectedCredibilityTab === 'all'
+                                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                            }`}
+                        >
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>همه خودروها</span>
+                            <span className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold">
+                                {summaryStats.total}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setSelectedCredibilityTab('sufficient')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                selectedCredibilityTab === 'sufficient'
+                                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-800/50'
+                            }`}
+                        >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>مراجع معتبر و قابل استناد (۳+ مرجع)</span>
+                            <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold ${
+                                selectedCredibilityTab === 'sufficient' ? 'bg-white/20 text-white' : 'bg-emerald-200/70 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100'
+                            }`}>
+                                {summaryStats.sufficient}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setSelectedCredibilityTab('insufficient')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                selectedCredibilityTab === 'insufficient'
+                                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 border border-amber-200/60 dark:border-amber-800/50'
+                            }`}
+                        >
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span>مراجع ناکافی (&lt; ۳ مرجع)</span>
+                            <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold ${
+                                selectedCredibilityTab === 'insufficient' ? 'bg-white/20 text-white' : 'bg-amber-200/70 dark:bg-amber-900 text-amber-900 dark:text-amber-100'
+                            }`}>
+                                {summaryStats.insufficient}
+                            </span>
+                        </button>
+                    </div>
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        <span>دارای نرخ مصوب: </span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{summaryStats.withApproved}</span>
+                        <span className="text-[11px] text-slate-400 mr-1">از {summaryStats.total} مدل</span>
+                    </div>
+                </div>
+            </div>
+
             {/* Filter, Search & Sorting Controls Bar */}
             <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3 flex-grow">
@@ -820,10 +982,13 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                             className="bg-transparent border-none text-slate-800 dark:text-slate-200 font-bold outline-none cursor-pointer"
                         >
                             <option value="priority" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">اولویت اختصاصی (KMC EAGLE، JAC J4، ...)</option>
+                            <option value="credibility_desc" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">بیشترین مراجع استعلام (بالاترین اعتبار)</option>
+                            <option value="credibility_asc" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">کمترین مراجع استعلام (نیازمند بررسی)</option>
+                            <option value="mode_price" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">پرتکرارترین نرخ مراجع</option>
+                            <option value="max_price" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">بیشترین نرخ معامله (سقف)</option>
+                            <option value="min_price" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">کمترین نرخ معامله (کف)</option>
                             <option value="approved_price" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">بر اساس قیمت مصوب</option>
                             <option value="model_name" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">بر اساس نام خودرو (الفبایی)</option>
-                            <option value="max_price" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">بالاترین قیمت بازار</option>
-                            <option value="min_price" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">کمترین قیمت بازار</option>
                         </select>
                         <button
                             type="button"
@@ -841,12 +1006,13 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     <span className="bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
                         نمایش <span className="font-mono text-indigo-600 dark:text-indigo-400 font-black">{filteredAndSortedCards.length}</span> از <span className="font-mono">{groupedModelCards.length}</span> مدل
                     </span>
-                    {(statsSearchQuery || selectedSourceFilter !== 'all' || selectedYearFilter !== 'all') && (
+                    {(statsSearchQuery || selectedSourceFilter !== 'all' || selectedYearFilter !== 'all' || selectedCredibilityTab !== 'all') && (
                         <button
                             onClick={() => {
                                 setStatsSearchQuery('');
                                 setSelectedSourceFilter('all');
                                 setSelectedYearFilter('all');
+                                setSelectedCredibilityTab('all');
                             }}
                             className="text-xs text-rose-500 hover:text-rose-600 font-bold underline px-1"
                         >
@@ -857,7 +1023,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
             </div>
 
             <p className="text-[11px] text-slate-500 dark:text-slate-400 px-1">
-                * سال‌های ساخت مختلف هر خودرو در یک کارت تجمیع شده‌اند. کمترین نرخ معامله (کف) برابر با کمترین قیمت منبع - ۲٪ و بیشترین نرخ معامله (سقف) برابر با بیشترین قیمت منبع + ۲٪ است.
+                * خودروهای دارای حداقل ۳ مرجع قیمت استعلام شده به عنوان قیمت‌های قابل استناد مشخص شده‌اند. کمترین، بیشترین و پرتکرارترین نرخ معامله بر مبنای آخرین دیتای مراجع فعال محاسبه شده است.
             </p>
 
             {loading ? (
@@ -873,13 +1039,14 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     <Car className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
                     <h4 className="text-base font-black text-slate-800 dark:text-white">خودرویی با این مشخصات یافت نشد</h4>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                        لطفاً عبارت جستجو یا فیلتر سال ساخت و مرجع را تغییر دهید.
+                        لطفاً عبارت جستجو یا فیلتر سال ساخت، مرجع و اعتبار را تغییر دهید.
                     </p>
                     <button
                         onClick={() => {
                             setStatsSearchQuery('');
                             setSelectedSourceFilter('all');
                             setSelectedYearFilter('all');
+                            setSelectedCredibilityTab('all');
                         }}
                         className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 font-bold text-xs rounded-xl hover:bg-indigo-100 transition-colors"
                     >
@@ -915,13 +1082,18 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                             ? activeVariant.sourcePricesMap[selectedSourceFilter]
                             : null;
 
+                        const isSufficient = activeVariant.isSufficientSources;
+                        const sourceCount = activeVariant.sourceCount;
+
                         return (
                         <div 
                             key={card.baseModelName} 
                             className={`bg-white dark:bg-slate-850 rounded-2xl shadow-sm p-5 border ${
                                 manualPrice 
                                     ? 'border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-50 dark:ring-indigo-950/20' 
-                                    : 'border-slate-200/80 dark:border-slate-800'
+                                    : isSufficient 
+                                        ? 'border-slate-200/80 dark:border-slate-800' 
+                                        : 'border-amber-200/70 dark:border-amber-900/40'
                             } flex flex-col justify-between hover:shadow-md transition-all relative overflow-hidden`}
                         >
                             {/* Approved Price Badge */}
@@ -985,6 +1157,125 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                     ) : null}
                                 </div>
 
+                                {/* 1. Base / Dealership Approved Price (قیمت مصوب نمایندگی) */}
+                                {manualPrice ? (
+                                    <div className="bg-indigo-50/70 dark:bg-indigo-950/40 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center gap-1">
+                                                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                <span>قیمت مصوب نمایندگی:</span>
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 shrink-0">
+                                                <Clock className="w-3 h-3" />
+                                                {timeAgo(manualPrice.captured_at)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-mono font-black text-indigo-950 dark:text-indigo-100 text-xl sm:text-2xl whitespace-nowrap">
+                                                {manualPrice.price_rial.toLocaleString('fa-IR')}
+                                            </span>
+                                            <span className="text-xs font-bold font-sans text-indigo-700 dark:text-indigo-300">تومان</span>
+                                        </div>
+                                        {manualPrice.price_text && (
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-1">
+                                                {manualPrice.price_text}
+                                            </span>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-between items-center py-2 px-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <span className="text-slate-500 dark:text-slate-400 font-bold text-xs">قیمت مصوب نمایندگی:</span>
+                                        <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-lg">
+                                            وارد نشده
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* 2. Credibility / Source Sufficiency Notification Badge (وضعیت استناد) */}
+                                {isSufficient ? (
+                                    <div className="bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-3 py-2 rounded-xl flex items-center justify-between gap-2 overflow-hidden">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 min-w-0">
+                                            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                            <span className="truncate">قیمت‌ها قابل استناد است</span>
+                                        </div>
+                                        <span className="text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 px-2 py-0.5 rounded-lg shrink-0 whitespace-nowrap">
+                                            {sourceCount} مرجع برخط
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-3 py-2 rounded-xl flex items-center justify-between gap-2 overflow-hidden">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300 min-w-0">
+                                            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                            <span className="truncate">مرجع کافی نیست (نیازمند استعلام)</span>
+                                        </div>
+                                        <span className="text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-lg shrink-0 whitespace-nowrap">
+                                            {sourceCount > 0 ? `${sourceCount} مرجع` : 'فاقد مرجع'}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Key 3-Rate Box: Lowest, Highest & Most Frequent (Mode) Market Rates - Compact, Single-Line, Zero-Overflow */}
+                                <div className="bg-slate-50/90 dark:bg-slate-800/60 p-2.5 sm:p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 space-y-2 overflow-hidden">
+                                    <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/50 pb-1.5 gap-1">
+                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1 shrink-0">
+                                            <BarChart3 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                            <span className="whitespace-nowrap">نرخ‌های مراجع</span>
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap shrink-0">
+                                            میانگین: <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{Math.round(activeVariant.averageMarketPrice).toLocaleString('fa-IR')}</span> <span className="text-[9px]">تومان</span>
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        {/* Lowest Market Rate - Single-Line */}
+                                        <div className="bg-white dark:bg-slate-850 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-slate-100 dark:border-slate-750 shadow-xs flex items-center justify-between gap-1 sm:gap-2 overflow-hidden">
+                                            <div className="flex items-center gap-1 text-[11px] sm:text-xs font-bold text-rose-600 dark:text-rose-400 shrink-0 whitespace-nowrap">
+                                                <span className="text-xs">📉</span>
+                                                <span>کمترین نرخ:</span>
+                                            </div>
+                                            <div className="flex items-baseline gap-1 font-mono shrink-0 whitespace-nowrap">
+                                                <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white">
+                                                    {activeVariant.lowestMarketPrice.toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[9px] text-slate-400 font-sans font-normal">تومان</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Highest Market Rate - Single-Line */}
+                                        <div className="bg-white dark:bg-slate-850 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-slate-100 dark:border-slate-750 shadow-xs flex items-center justify-between gap-1 sm:gap-2 overflow-hidden">
+                                            <div className="flex items-center gap-1 text-[11px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 shrink-0 whitespace-nowrap">
+                                                <span className="text-xs">📈</span>
+                                                <span>بیشترین نرخ:</span>
+                                            </div>
+                                            <div className="flex items-baseline gap-1 font-mono shrink-0 whitespace-nowrap">
+                                                <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white">
+                                                    {activeVariant.highestMarketPrice.toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[9px] text-slate-400 font-sans font-normal">تومان</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Most Frequent Rate (Mode) - Single-Line Guaranteed */}
+                                        <div className="bg-indigo-50/70 dark:bg-indigo-950/40 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs flex items-center justify-between gap-1 sm:gap-2 overflow-hidden">
+                                            <div className="flex items-center gap-1 text-[11px] sm:text-xs font-bold text-indigo-800 dark:text-indigo-300 shrink-0 whitespace-nowrap">
+                                                <span className="text-xs">🎯</span>
+                                                <span>پرتکرارترین:</span>
+                                                {activeVariant.modeCount > 1 && (
+                                                    <span className="text-[9px] font-bold bg-indigo-200/80 dark:bg-indigo-900/90 text-indigo-950 dark:text-indigo-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                                                        {activeVariant.modeCount} مرجع
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-baseline gap-1 font-mono shrink-0 whitespace-nowrap">
+                                                <span className="font-black text-xs sm:text-sm text-indigo-950 dark:text-indigo-100">
+                                                    {activeVariant.modePrice.toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[9px] text-indigo-600/80 dark:text-indigo-400 font-sans font-normal">تومان</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Active Source Highlight Box (When filtered by a specific source) */}
                                 {activeSourcePrice && (
                                     <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 p-3 rounded-2xl flex items-center justify-between gap-2">
@@ -1012,41 +1303,6 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                 )}
 
                                 <div className="space-y-4 text-sm">
-                                    {/* Base / Approved Price */}
-                                    <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
-                                        {manualPrice ? (
-                                            <div>
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center gap-1">
-                                                        <Sparkles className="w-3.5 h-3.5" />
-                                                        <span>قیمت مصوب:</span>
-                                                    </span>
-                                                    <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                                                        <Clock className="w-3 h-3" />
-                                                        {timeAgo(manualPrice.captured_at)}
-                                                    </span>
-                                                </div>
-                                                <div className="bg-indigo-50/60 dark:bg-indigo-950/30 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 flex flex-col">
-                                                    <span className="font-mono font-black text-indigo-900 dark:text-indigo-200 text-2xl">
-                                                        {manualPrice.price_rial.toLocaleString('fa-IR')} <span className="text-xs font-bold font-sans">تومان</span>
-                                                    </span>
-                                                    {manualPrice.price_text && (
-                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-1">
-                                                            {manualPrice.price_text}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="flex justify-between items-center py-1">
-                                                <span className="text-slate-500 dark:text-slate-400 font-bold text-xs">قیمت مصوب:</span>
-                                                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-                                                    وارد نشده
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-
                                     {/* Havaleh Section Toggle */}
                                     <div className="pt-1">
                                         <button
@@ -1094,22 +1350,6 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                                 </div>
                                             </div>
                                         )}
-                                    </div>
-
-                                    {/* Limits */}
-                                    <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-slate-500 dark:text-slate-400 font-bold text-xs">کمترین نرخ معامله (کف):</span>
-                                            <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
-                                                {Math.round(activeVariant.lowestLimit).toLocaleString('fa-IR')} <span className="text-[9px] font-sans font-normal">تومان</span>
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-slate-500 dark:text-slate-400 font-bold text-xs">بیشترین نرخ معامله (سقف):</span>
-                                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                                {Math.round(activeVariant.highestLimit).toLocaleString('fa-IR')} <span className="text-[9px] font-sans font-normal">تومان</span>
-                                            </span>
-                                        </div>
                                     </div>
 
                                     {/* Collapsible Panel for other source prices */}
@@ -1234,9 +1474,54 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
 
     return (
         <>
-            <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {renderPriceStats()}
-                {renderComparisonTable()}
+            <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+                {/* Tab Navigation Selector */}
+                <div className="flex flex-wrap p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-2xl border border-slate-200/50 dark:border-slate-800/40 gap-1">
+                    <button
+                        type="button"
+                        onClick={() => setActiveMainTab('market_cards')}
+                        className={`flex-1 min-w-[160px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            activeMainTab === 'market_cards'
+                                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/40 dark:border-slate-700/50'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <BarChart3 className="w-4 h-4" />
+                        <span>کارت‌ها و مراجع قیمت روز 📊</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setActiveMainTab('sales_assistant')}
+                        className={`flex-1 min-w-[180px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            activeMainTab === 'sales_assistant'
+                                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-200 dark:shadow-none'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <Target className={`w-4 h-4 ${activeMainTab === 'sales_assistant' ? 'text-amber-300 animate-pulse' : 'text-indigo-500'}`} />
+                        <span>دستیار و ابزار کمکی مدیر فروش 🎯</span>
+                    </button>
+                </div>
+
+                {/* Conditional Tab Rendering */}
+                {activeMainTab === 'sales_assistant' ? (
+                    <SalesManagerPriceAssistant
+                        groupedCards={groupedModelCards}
+                        allPrices={prices}
+                        allSources={sources}
+                        priceStats={priceStatsWithOverride}
+                        lastUpdated={lastUpdated}
+                        onSelectApprovedPrice={handleSelectAsApprovedPrice}
+                        onAddCustomPriceSubmit={handleAddCustomPriceSubmit}
+                        showToast={showToast}
+                    />
+                ) : (
+                    <>
+                        {renderPriceStats()}
+                        {renderComparisonTable()}
+                    </>
+                )}
             </main>
             
             <CarPriceCopySettingsModal 

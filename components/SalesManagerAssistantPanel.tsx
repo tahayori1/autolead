@@ -9,7 +9,8 @@ import {
     PieChart as PieIcon, ChevronDown, ChevronUp, CheckCircle2, 
     Boxes, Sparkles, Building2, Ticket, FileText, Send, Printer, 
     Download, Copy, Check, Eye, X, Plus, Minus, Search, RotateCcw,
-    Layers, DollarSign, Calendar, Clock, HelpCircle
+    Layers, DollarSign, Calendar, Clock, HelpCircle, Filter, Tag,
+    CreditCard, SlidersHorizontal
 } from 'lucide-react';
 import { ConditionStatus, SaleType, PayType } from '../types';
 import type { CarSaleCondition, Car } from '../types';
@@ -59,10 +60,13 @@ export const SalesManagerAssistantPanel: React.FC<SalesManagerAssistantPanelProp
     onSwitchTab,
     showToast
 }) => {
-    // Channel Scope inside Radar: 'all' (Unified) | 'warehouse' | 'transfer'
-    const [channelScope, setChannelScope] = useState<'all' | 'warehouse' | 'transfer'>('all');
     const [isExpanded, setIsExpanded] = useState<boolean>(true);
     const [activeChartTab, setActiveChartTab] = useState<'frequency' | 'share'>('frequency');
+
+    // Multi-Select Filters for Sale Types, Payment Methods, and Manufacturing Years
+    const [selectedSaleTypes, setSelectedSaleTypes] = useState<string[]>([]);
+    const [selectedPayTypes, setSelectedPayTypes] = useState<string[]>([]);
+    const [selectedModelYears, setSelectedModelYears] = useState<string[]>([]);
 
     // Modals for Report Generation
     const [isManagerReportModalOpen, setIsManagerReportModalOpen] = useState<boolean>(false);
@@ -72,17 +76,94 @@ export const SalesManagerAssistantPanel: React.FC<SalesManagerAssistantPanelProp
     const [radarSearchTerm, setRadarSearchTerm] = useState<string>('');
     const [radarStockFilter, setRadarStockFilter] = useState<'high_stock' | 'single_unit' | 'out_of_stock' | 'all'>('all');
 
-    // Filter relevant conditions based on chosen Channel Scope
+    // Available Sale Types, Pay Types, and Model Years dynamically derived from catalogue & conditions
+    const availableSaleTypes = useMemo(() => {
+        const set = new Set<string>();
+        [
+            SaleType.NEW_MARKET,
+            SaleType.USED,
+            SaleType.TRANSFER,
+            SaleType.FACTORY_REGISTRATION,
+            SaleType.LEASING
+        ].forEach(val => set.add(val));
+        conditions.forEach(c => {
+            if (c.sale_type) set.add(c.sale_type);
+        });
+        return Array.from(set);
+    }, [conditions]);
+
+    const availablePayTypes = useMemo(() => {
+        const set = new Set<string>();
+        [PayType.CASH, PayType.INSTALLMENT, PayType.PRE_SALE].forEach(val => set.add(val));
+        conditions.forEach(c => {
+            if (c.pay_type) set.add(c.pay_type);
+        });
+        return Array.from(set);
+    }, [conditions]);
+
+    const availableModelYears = useMemo(() => {
+        const set = new Set<string>();
+        conditions.forEach(c => {
+            if (c.model) set.add(String(c.model).trim());
+        });
+        (allCarsCatalog || []).forEach(car => {
+            if (car.model) set.add(String(car.model).trim());
+        });
+        return Array.from(set).filter(Boolean).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    }, [conditions, allCarsCatalog]);
+
+    const toggleSaleType = (type: string) => {
+        setSelectedSaleTypes(prev =>
+            prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+        );
+    };
+
+    const togglePayType = (type: string) => {
+        setSelectedPayTypes(prev =>
+            prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+        );
+    };
+
+    const toggleModelYear = (year: string) => {
+        setSelectedModelYears(prev =>
+            prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]
+        );
+    };
+
+    const clearMultiFilters = () => {
+        setSelectedSaleTypes([]);
+        setSelectedPayTypes([]);
+        setSelectedModelYears([]);
+    };
+
+    // Filter relevant conditions based on Multi-Selected Filters
     const scopedConditions = useMemo(() => {
         return conditions.filter(c => {
-            if (channelScope === 'warehouse') {
-                return c.sale_type === SaleType.NEW_MARKET || c.sale_type === SaleType.USED;
-            } else if (channelScope === 'transfer') {
-                return c.sale_type === SaleType.TRANSFER;
+            // Multi-Select Sale Type Filter
+            if (selectedSaleTypes.length > 0) {
+                if (!selectedSaleTypes.includes(c.sale_type)) {
+                    return false;
+                }
             }
-            return true; // 'all' - Unified inventory
+
+            // Multi-Select Pay Type Filter
+            if (selectedPayTypes.length > 0) {
+                if (!selectedPayTypes.includes(c.pay_type)) {
+                    return false;
+                }
+            }
+
+            // Multi-Select Model Year Filter
+            if (selectedModelYears.length > 0) {
+                const cYear = c.model ? String(c.model).trim() : '';
+                if (!selectedModelYears.includes(cYear)) {
+                    return false;
+                }
+            }
+
+            return true;
         });
-    }, [conditions, channelScope]);
+    }, [conditions, selectedSaleTypes, selectedPayTypes, selectedModelYears]);
 
     // 1. Group stock by model name
     const modelStockStats = useMemo(() => {
@@ -360,54 +441,185 @@ export const SalesManagerAssistantPanel: React.FC<SalesManagerAssistantPanelProp
                     </div>
                 </div>
 
-                {/* Channel Scope Selector: Unified vs Warehouse vs Transfer */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-5 relative z-10">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-slate-300">محدوده بررسی داده‌ها:</span>
-                        <div className="flex items-center bg-slate-900/90 p-1 rounded-2xl border border-slate-700/80">
-                            <button
-                                onClick={() => setChannelScope('all')}
-                                className={`px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
-                                    channelScope === 'all'
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/50'
-                                        : 'text-slate-400 hover:text-slate-200'
-                                }`}
-                            >
-                                <Layers className="w-3.5 h-3.5" />
-                                <span>همه کانال‌ها (یکپارچه: انبار + نمایشگاه + حواله)</span>
-                            </button>
+                {/* Header Summary & Reset */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 relative z-10">
+                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                        <span className="font-bold">تعداد کل رکوردهای منطبق بر فیلترها:</span>
+                        <span className="font-mono font-black text-amber-300 bg-slate-850 border border-slate-700/80 px-2.5 py-1 rounded-xl">
+                            {scopedConditions.length.toLocaleString('fa-IR')} مورد
+                        </span>
+                    </div>
+                </div>
 
-                            <button
-                                onClick={() => setChannelScope('warehouse')}
-                                className={`px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
-                                    channelScope === 'warehouse'
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/50'
-                                        : 'text-slate-400 hover:text-slate-200'
-                                }`}
-                            >
-                                <Building2 className="w-3.5 h-3.5" />
-                                <span>فقط انبار و نمایشگاه فیزیکی</span>
-                            </button>
+                {/* Multi-Select Filters Bar for Sale Types, Pay Types, and Model Years */}
+                <div className="bg-slate-900/90 rounded-2xl p-4 border border-indigo-900/50 mt-3 relative z-10 space-y-3.5 shadow-lg shadow-black/20">
+                    {/* Header with quick stats and reset button */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                                <Filter className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="text-xs font-black text-slate-200">فیلترهای چندانتخابی گزارشات دستیار و رادار:</span>
+                            {(selectedSaleTypes.length > 0 || selectedPayTypes.length > 0 || selectedModelYears.length > 0) && (
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-500/50 flex items-center gap-1">
+                                    <span>{(selectedSaleTypes.length + selectedPayTypes.length + selectedModelYears.length).toLocaleString('fa-IR')} فیلتر همزمان فعال</span>
+                                </span>
+                            )}
+                        </div>
 
+                        {(selectedSaleTypes.length > 0 || selectedPayTypes.length > 0 || selectedModelYears.length > 0) && (
                             <button
-                                onClick={() => setChannelScope('transfer')}
-                                className={`px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
-                                    channelScope === 'transfer'
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/50'
-                                        : 'text-slate-400 hover:text-slate-200'
+                                onClick={clearMultiFilters}
+                                className="text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/50 px-2.5 py-1 rounded-xl"
+                            >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>حذف تمام فیلترهای انتخابی</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Filter Row 1: Sale Types (نوع عرضه - چندانتخابی) */}
+                    <div className="flex flex-col md:flex-row md:items-center gap-2">
+                        <div className="min-w-[120px] flex items-center gap-1.5 text-[11px] font-black text-sky-400">
+                            <Tag className="w-3.5 h-3.5" />
+                            <span>نوع عرضه (چندانتخابی):</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                            <button
+                                onClick={() => setSelectedSaleTypes([])}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer ${
+                                    selectedSaleTypes.length === 0
+                                        ? 'bg-sky-600 text-white shadow-md shadow-sky-900/50 border border-sky-400'
+                                        : 'bg-slate-800/90 text-slate-400 hover:text-slate-200 border border-slate-700/60'
                                 }`}
                             >
-                                <Ticket className="w-3.5 h-3.5" />
-                                <span>فقط حواله و کاردکس</span>
+                                همه انواع عرضه
                             </button>
+                            {availableSaleTypes.map(type => {
+                                const isSelected = selectedSaleTypes.includes(type);
+                                const count = conditions.filter(c => {
+                                    if (selectedPayTypes.length > 0 && !selectedPayTypes.includes(c.pay_type)) return false;
+                                    if (selectedModelYears.length > 0 && !selectedModelYears.includes(String(c.model).trim())) return false;
+                                    return c.sale_type === type;
+                                }).length;
+
+                                return (
+                                    <button
+                                        key={type}
+                                        onClick={() => toggleSaleType(type)}
+                                        className={`px-2.5 py-1 rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                                            isSelected
+                                                ? 'bg-sky-500 text-white shadow-md shadow-sky-950/50 border border-sky-300 ring-2 ring-sky-400/30'
+                                                : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700/70 border border-slate-700/60'
+                                        }`}
+                                    >
+                                        <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-500'}`}></span>
+                                        <span>{type}</span>
+                                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                                            isSelected ? 'bg-sky-700 text-white' : 'bg-slate-700 text-slate-400'
+                                        }`}>
+                                            {count.toLocaleString('fa-IR')}
+                                        </span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <span className="font-bold">تعداد کل رکوردها:</span>
-                        <span className="font-mono font-black text-amber-300 bg-slate-800 px-2 py-0.5 rounded-lg">
-                            {scopedConditions.length.toLocaleString('fa-IR')} مورد
-                        </span>
+                    {/* Filter Row 2: Pay Types (روش پرداخت - چندانتخابی) */}
+                    <div className="flex flex-col md:flex-row md:items-center gap-2 pt-2 border-t border-slate-800/60">
+                        <div className="min-w-[120px] flex items-center gap-1.5 text-[11px] font-black text-emerald-400">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>روش پرداخت (چندانتخابی):</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                            <button
+                                onClick={() => setSelectedPayTypes([])}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer ${
+                                    selectedPayTypes.length === 0
+                                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/50 border border-emerald-400'
+                                        : 'bg-slate-800/90 text-slate-400 hover:text-slate-200 border border-slate-700/60'
+                                }`}
+                            >
+                                همه روش‌های پرداخت
+                            </button>
+                            {availablePayTypes.map(type => {
+                                const isSelected = selectedPayTypes.includes(type);
+                                const count = conditions.filter(c => {
+                                    if (selectedSaleTypes.length > 0 && !selectedSaleTypes.includes(c.sale_type)) return false;
+                                    if (selectedModelYears.length > 0 && !selectedModelYears.includes(String(c.model).trim())) return false;
+                                    return c.pay_type === type;
+                                }).length;
+
+                                return (
+                                    <button
+                                        key={type}
+                                        onClick={() => togglePayType(type)}
+                                        className={`px-2.5 py-1 rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                                            isSelected
+                                                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-950/50 border border-emerald-300 ring-2 ring-emerald-400/30'
+                                                : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700/70 border border-slate-700/60'
+                                        }`}
+                                    >
+                                        <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-500'}`}></span>
+                                        <span>{type}</span>
+                                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                                            isSelected ? 'bg-emerald-700 text-white' : 'bg-slate-700 text-slate-400'
+                                        }`}>
+                                            {count.toLocaleString('fa-IR')}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Filter Row 3: Model Years (سال ساخت - چندانتخابی) */}
+                    <div className="flex flex-col md:flex-row md:items-center gap-2 pt-2 border-t border-slate-800/60">
+                        <div className="min-w-[120px] flex items-center gap-1.5 text-[11px] font-black text-amber-400">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>سال ساخت (چندانتخابی):</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                            <button
+                                onClick={() => setSelectedModelYears([])}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer ${
+                                    selectedModelYears.length === 0
+                                        ? 'bg-amber-600 text-white shadow-md shadow-amber-900/50 border border-amber-400'
+                                        : 'bg-slate-800/90 text-slate-400 hover:text-slate-200 border border-slate-700/60'
+                                }`}
+                            >
+                                همه سال‌های ساخت
+                            </button>
+                            {availableModelYears.map(year => {
+                                const isSelected = selectedModelYears.includes(year);
+                                const count = conditions.filter(c => {
+                                    if (selectedSaleTypes.length > 0 && !selectedSaleTypes.includes(c.sale_type)) return false;
+                                    if (selectedPayTypes.length > 0 && !selectedPayTypes.includes(c.pay_type)) return false;
+                                    return String(c.model).trim() === year;
+                                }).length;
+
+                                return (
+                                    <button
+                                        key={year}
+                                        onClick={() => toggleModelYear(year)}
+                                        className={`px-2.5 py-1 rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                                            isSelected
+                                                ? 'bg-amber-500 text-white shadow-md shadow-amber-950/50 border border-amber-300 ring-2 ring-amber-400/30'
+                                                : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700/70 border border-slate-700/60'
+                                        }`}
+                                    >
+                                        <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-500'}`}></span>
+                                        <span>مدل {year}</span>
+                                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                                            isSelected ? 'bg-amber-700 text-white' : 'bg-slate-700 text-slate-400'
+                                        }`}>
+                                            {count.toLocaleString('fa-IR')}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
 
@@ -1005,6 +1217,16 @@ export const SalesManagerAssistantPanel: React.FC<SalesManagerAssistantPanelProp
                 highStockModels={highStockModels}
                 singleUnitModels={singleUnitModels}
                 outOfStockInfo={outOfStockInfo}
+                selectedSaleTypes={selectedSaleTypes}
+                selectedPayTypes={selectedPayTypes}
+                selectedModelYears={selectedModelYears}
+                availableSaleTypes={availableSaleTypes}
+                availablePayTypes={availablePayTypes}
+                availableModelYears={availableModelYears}
+                onToggleSaleType={toggleSaleType}
+                onTogglePayType={togglePayType}
+                onToggleModelYear={toggleModelYear}
+                onClearFilters={clearMultiFilters}
                 showToast={showToast}
             />
 
@@ -1016,6 +1238,16 @@ export const SalesManagerAssistantPanel: React.FC<SalesManagerAssistantPanelProp
                 highStockModels={highStockModels}
                 singleUnitModels={singleUnitModels}
                 outOfStockInfo={outOfStockInfo}
+                selectedSaleTypes={selectedSaleTypes}
+                selectedPayTypes={selectedPayTypes}
+                selectedModelYears={selectedModelYears}
+                availableSaleTypes={availableSaleTypes}
+                availablePayTypes={availablePayTypes}
+                availableModelYears={availableModelYears}
+                onToggleSaleType={toggleSaleType}
+                onTogglePayType={togglePayType}
+                onToggleModelYear={toggleModelYear}
+                onClearFilters={clearMultiFilters}
                 showToast={showToast}
             />
         </div>
@@ -1040,6 +1272,16 @@ interface ExecutiveReportModalProps {
     highStockModels: any[];
     singleUnitModels: any[];
     outOfStockInfo: any;
+    selectedSaleTypes?: string[];
+    selectedPayTypes?: string[];
+    selectedModelYears?: string[];
+    availableSaleTypes?: string[];
+    availablePayTypes?: string[];
+    availableModelYears?: string[];
+    onToggleSaleType?: (type: string) => void;
+    onTogglePayType?: (type: string) => void;
+    onToggleModelYear?: (year: string) => void;
+    onClearFilters?: () => void;
     showToast?: (message: string, type: 'success' | 'error') => void;
 }
 
@@ -1052,6 +1294,16 @@ const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
     highStockModels,
     singleUnitModels,
     outOfStockInfo,
+    selectedSaleTypes = [],
+    selectedPayTypes = [],
+    selectedModelYears = [],
+    availableSaleTypes = [],
+    availablePayTypes = [],
+    availableModelYears = [],
+    onToggleSaleType,
+    onTogglePayType,
+    onToggleModelYear,
+    onClearFilters,
     showToast
 }) => {
     const [copied, setCopied] = useState<boolean>(false);
@@ -1068,9 +1320,25 @@ const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
         let text = `📊 گزارش راهبردی و تحلیلی موجودی ناوگان (مدیریت فروش)\n`;
         text += `🏢 نمایندگی ۲۶۰۶ کرمان موتور\n`;
         text += `📅 تاریخ تهیه: ${nowStr.date} - ساعت: ${nowStr.time}\n`;
+
+        if (selectedSaleTypes.length > 0 || selectedPayTypes.length > 0 || selectedModelYears.length > 0) {
+            text += `🔍 فیلترهای اعمال‌شده بر گزارش:\n`;
+            if (selectedSaleTypes.length > 0) {
+                text += `  • نوع عرضه: ${selectedSaleTypes.join('، ')}\n`;
+            }
+            if (selectedPayTypes.length > 0) {
+                text += `  • روش پرداخت: ${selectedPayTypes.join('، ')}\n`;
+            }
+            if (selectedModelYears.length > 0) {
+                text += `  • سال ساخت: ${selectedModelYears.join('، ')}\n`;
+            }
+        } else {
+            text += `🔍 دامنه گزارش: جامع (کلیه انواع عرضه، روش‌های پرداخت و سال‌های ساخت)\n`;
+        }
+
         text += `═══════════════════════════════════════\n\n`;
 
-        text += `۱️⃣ آمار جامع تجمیعی ناوگان:\n`;
+        text += `۱️⃣ آمار تجمیعی ناوگان در این محدوده:\n`;
         text += `• کل ظرفیت واگذاری: ${totals.totalUnits.toLocaleString('fa-IR')} دستگاه/فقره\n`;
         text += `• موجودی فیزیکی انبار و نمایشگاه: ${totals.warehouseUnits.toLocaleString('fa-IR')} دستگاه\n`;
         text += `• حواله‌ها و کاردکس‌های آماده انتقال: ${totals.transferUnits.toLocaleString('fa-IR')} فقره\n`;
@@ -1096,14 +1364,14 @@ const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
                 text += `  ${idx + 1}. ${m.modelName} ⚡ (فقط ۱ دستگاه باقی‌مانده)\n`;
             });
         } else {
-            text += `  خودروی تک‌موجود نداریم.\n`;
+            text += `  خودروی تک‌موجود در این فیلتر نداریم.\n`;
         }
         text += `\n`;
 
         text += `۴️⃣ وضعیت کسری و اتمام ظرفیت:\n`;
         text += `• تعداد مدل‌های ناموجود / پایان یافته: ${outOfStockInfo.totalUnavailableCount.toLocaleString('fa-IR')} مورد\n`;
         outOfStockInfo.soldOutConditions.slice(0, 5).forEach((c: any) => {
-            text += `  - ${c.car_model} (${c.sale_type}) [اتمام موجودی]\n`;
+            text += `  - ${c.car_model} (${c.sale_type} - ${c.pay_type}) [اتمام موجودی]\n`;
         });
         text += `\n`;
 
@@ -1116,7 +1384,7 @@ const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
         text += `امضای مدیر فروش: ___________________\n`;
 
         return text;
-    }, [nowStr, totals, highStockModels, singleUnitModels, outOfStockInfo]);
+    }, [nowStr, totals, highStockModels, singleUnitModels, outOfStockInfo, selectedSaleTypes, selectedPayTypes]);
 
     if (!isOpen) return null;
 
@@ -1162,17 +1430,49 @@ const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
                         </div>
                     </div>
 
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer">
                         <X className="w-5 h-5 text-slate-400" />
                     </button>
                 </div>
+
+                {/* Filter Pills Quick Scope Banner */}
+                {(selectedSaleTypes.length > 0 || selectedPayTypes.length > 0 || selectedModelYears.length > 0) && (
+                    <div className="px-6 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-slate-500 dark:text-slate-400 text-[11px] font-black">فیلترهای فعال روی گزارش:</span>
+                            {selectedSaleTypes.map(t => (
+                                <span key={t} className="px-2 py-0.5 rounded-lg bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 text-[11px] font-black border border-sky-300 dark:border-sky-700">
+                                    🏷️ {t}
+                                </span>
+                            ))}
+                            {selectedPayTypes.map(p => (
+                                <span key={p} className="px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-black border border-emerald-300 dark:border-emerald-700">
+                                    💳 {p}
+                                </span>
+                            ))}
+                            {selectedModelYears.map(y => (
+                                <span key={y} className="px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-[11px] font-black border border-amber-300 dark:border-amber-700">
+                                    📅 {y}
+                                </span>
+                            ))}
+                        </div>
+                        {onClearFilters && (
+                            <button 
+                                onClick={onClearFilters}
+                                className="text-[11px] text-rose-500 hover:text-rose-600 font-black cursor-pointer"
+                            >
+                                حذف فیلترها و گزارش جامع
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* Report Content Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                     {/* Executive Summary Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/60">
-                            <span className="text-[11px] font-black text-slate-400 block mb-1">کل ظرفیت قابل واگذاری</span>
+                            <span className="text-[11px] font-black text-slate-400 block mb-1">ظرفیت واگذاری فیلترشده</span>
                             <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
                                 {totals.totalUnits.toLocaleString('fa-IR')} <span className="text-xs text-slate-400">دستگاه</span>
                             </div>
@@ -1228,6 +1528,13 @@ const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
                                             </td>
                                         </tr>
                                     ))}
+                                    {highStockModels.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} className="p-4 text-center text-slate-400 font-bold">
+                                                موردی با انباشت موجودی در این فیلتر ثبت نشده است.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -1298,6 +1605,16 @@ interface SalesSpecialistsBriefingModalProps {
     highStockModels: any[];
     singleUnitModels: any[];
     outOfStockInfo: any;
+    selectedSaleTypes?: string[];
+    selectedPayTypes?: string[];
+    selectedModelYears?: string[];
+    availableSaleTypes?: string[];
+    availablePayTypes?: string[];
+    availableModelYears?: string[];
+    onToggleSaleType?: (type: string) => void;
+    onTogglePayType?: (type: string) => void;
+    onToggleModelYear?: (year: string) => void;
+    onClearFilters?: () => void;
     showToast?: (message: string, type: 'success' | 'error') => void;
 }
 
@@ -1307,6 +1624,16 @@ const SalesSpecialistsBriefingModal: React.FC<SalesSpecialistsBriefingModalProps
     highStockModels,
     singleUnitModels,
     outOfStockInfo,
+    selectedSaleTypes = [],
+    selectedPayTypes = [],
+    selectedModelYears = [],
+    availableSaleTypes = [],
+    availablePayTypes = [],
+    availableModelYears = [],
+    onToggleSaleType,
+    onTogglePayType,
+    onToggleModelYear,
+    onClearFilters,
     showToast
 }) => {
     const [managerNote, setManagerNote] = useState<string>(
@@ -1326,7 +1653,18 @@ const SalesSpecialistsBriefingModal: React.FC<SalesSpecialistsBriefingModalProps
     const formattedBriefingText = useMemo(() => {
         let text = `📢 ابلاغیه و اهداف فروش روزانه (تیم فروش)\n`;
         text += `🏢 نمایندگی ۲۶۰۶ کرمان موتور\n`;
-        text += `📅 تاریخ: ${nowStr.date} - ساعت: ${nowStr.time}\n\n`;
+        text += `📅 تاریخ: ${nowStr.date} - ساعت: ${nowStr.time}\n`;
+
+        if (selectedSaleTypes.length > 0 || selectedPayTypes.length > 0 || selectedModelYears.length > 0) {
+            text += `🎯 محدوده تارگت ابلاغیه: `;
+            const parts: string[] = [];
+            if (selectedSaleTypes.length > 0) parts.push(`عرضه: ${selectedSaleTypes.join('، ')}`);
+            if (selectedPayTypes.length > 0) parts.push(`پرداخت: ${selectedPayTypes.join('، ')}`);
+            if (selectedModelYears.length > 0) parts.push(`سال ساخت: ${selectedModelYears.join('، ')}`);
+            text += `${parts.join(' | ')}\n`;
+        }
+
+        text += `\n`;
 
         if (managerNote.trim()) {
             text += `📌 پیام و دستور کار مدیر فروش:\n`;
@@ -1366,7 +1704,7 @@ const SalesSpecialistsBriefingModal: React.FC<SalesSpecialistsBriefingModalProps
             text += `━━━━━━━━━━━━━━━━━━━━━\n`;
             text += `🚫 وضعیت خودروهای ناموجود (هدایت به جایگزین):\n`;
             outOfStockInfo.soldOutConditions.slice(0, 4).forEach((c: any) => {
-                text += `• ${c.car_model} ⬅️ اتمام ظرفیت (پیشنهاد مدل‌های مشابه)\n`;
+                text += `• ${c.car_model} (${c.sale_type}) ⬅️ اتمام ظرفیت (پیشنهاد مدل‌های مشابه)\n`;
             });
             text += `\n`;
         }
@@ -1375,7 +1713,7 @@ const SalesSpecialistsBriefingModal: React.FC<SalesSpecialistsBriefingModalProps
         text += `${footerText}\n`;
 
         return text;
-    }, [nowStr, managerNote, highStockModels, singleUnitModels, outOfStockInfo, footerText]);
+    }, [nowStr, managerNote, highStockModels, singleUnitModels, outOfStockInfo, footerText, selectedSaleTypes, selectedPayTypes, selectedModelYears]);
 
     if (!isOpen) return null;
 
@@ -1405,10 +1743,39 @@ const SalesSpecialistsBriefingModal: React.FC<SalesSpecialistsBriefingModalProps
                         </div>
                     </div>
 
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer">
                         <X className="w-5 h-5 text-slate-400" />
                     </button>
                 </div>
+
+                {/* Filter Scope Tag Banner */}
+                {(selectedSaleTypes.length > 0 || selectedPayTypes.length > 0 || selectedModelYears.length > 0) && (
+                    <div className="px-6 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-slate-500 dark:text-slate-400 text-[11px] font-black">هدف‌گذاری بر اساس فیلترهای:</span>
+                            {selectedSaleTypes.map(t => (
+                                <span key={t} className="px-2 py-0.5 rounded-lg bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 text-[11px] font-black border border-sky-300 dark:border-sky-700">
+                                    🏷️ {t}
+                                </span>
+                            ))}
+                            {selectedPayTypes.map(p => (
+                                <span key={p} className="px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-black border border-emerald-300 dark:border-emerald-700">
+                                    💳 {p}
+                                </span>
+                            ))}
+                            {selectedModelYears.map(y => (
+                                <span key={y} className="px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-[11px] font-black border border-amber-300 dark:border-amber-700">
+                                    📅 {y}
+                                </span>
+                            ))}
+                        </div>
+                        {onClearFilters && (
+                            <button onClick={onClearFilters} className="text-[11px] text-rose-500 hover:text-rose-600 font-black cursor-pointer">
+                                حذف همه فیلترها
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* Body Content */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">
