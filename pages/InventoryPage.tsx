@@ -10,16 +10,26 @@ import type { CarSaleCondition, Car } from '../types';
 import Spinner from '../components/Spinner';
 import Toast from '../components/Toast';
 import PersianDatePicker from '../components/PersianDatePicker';
+import { SalesManagerAssistantPanel } from '../components/SalesManagerAssistantPanel';
 import { 
     Boxes, Search, Filter, RefreshCw, Copy, Download, 
     Plus, Minus, Check, AlertTriangle, AlertCircle, X, ChevronDown, CheckCircle2,
-    Calendar, Layers, Palette, DollarSign, Clock, HelpCircle, ArrowUpDown, Eye, Building2, Ticket
+    Calendar, Layers, Palette, DollarSign, Clock, HelpCircle, ArrowUpDown, Eye, Building2, Ticket,
+    Flame, Zap, Sparkles, Target, RotateCcw
 } from 'lucide-react';
 
 declare const moment: any;
 
 type SortConfig = { key: keyof CarSaleCondition; direction: 'ascending' | 'descending' } | null;
-type ActiveTab = 'warehouse' | 'transfer' | 'customer';
+type ActiveTab = 'radar' | 'warehouse' | 'transfer' | 'customer';
+
+const DEFAULT_DEALERSHIP_FOOTER = `☎️تماس بگیرید:
+(پاسخگویی ۹ تا ۲۰)
+
+07191690906
+
+📌 آدرس نمایندگی ۲۶۰۶:
+ شیراز، چهارراه بنفشه، نرسیده به فلکه هنگ، روبروی کوچه ۱۸`;
 
 const InventoryPage: React.FC = () => {
     const [conditions, setConditions] = useState<CarSaleCondition[]>([]);
@@ -29,13 +39,14 @@ const InventoryPage: React.FC = () => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<ActiveTab>('warehouse');
+    const [activeTab, setActiveTab] = useState<ActiveTab>('customer');
 
-    // Filter and Sort states
+    // Filter and Sort states - Priority display by highest stock first
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [selectedStatus, setSelectedStatus] = useState<ConditionStatus | 'all'>('all');
     const [selectedSaleType, setSelectedSaleType] = useState<SaleType | 'all'>('all');
-    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'id', direction: 'descending' });
+    const [stockFilter, setStockFilter] = useState<'high_stock' | 'single_unit' | 'out_of_stock' | 'all'>('all');
+    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'stock_quantity', direction: 'descending' });
 
     // Copy Modal State
     const [isCopyModalOpen, setIsCopyModalOpen] = useState<boolean>(false);
@@ -197,7 +208,17 @@ const InventoryPage: React.FC = () => {
                 matchesTab = selectedSaleType === 'all' || c.sale_type === selectedSaleType;
             }
 
-            return matchesSearch && matchesStatus && matchesTab;
+            // Stock filter from Sales Manager Assistant
+            let matchesStock = true;
+            if (stockFilter === 'high_stock') {
+                matchesStock = (c.stock_quantity || 0) >= 2;
+            } else if (stockFilter === 'single_unit') {
+                matchesStock = (c.stock_quantity || 0) === 1;
+            } else if (stockFilter === 'out_of_stock') {
+                matchesStock = (c.stock_quantity || 0) === 0 || c.status === ConditionStatus.SOLD_OUT || c.status === ConditionStatus.CAPACITY_FULL;
+            }
+
+            return matchesSearch && matchesStatus && matchesTab && matchesStock;
         });
 
         if (sortConfig !== null) {
@@ -219,7 +240,7 @@ const InventoryPage: React.FC = () => {
             });
         }
         return filtered;
-    }, [conditions, searchTerm, selectedStatus, selectedSaleType, activeTab, sortConfig]);
+    }, [conditions, searchTerm, selectedStatus, selectedSaleType, stockFilter, activeTab, sortConfig]);
 
     // Summary Metrics per Tab
     const metrics = useMemo(() => {
@@ -358,7 +379,22 @@ const InventoryPage: React.FC = () => {
             </div>
 
             {/* Elegant Tab Selector */}
-            <div className="flex flex-wrap p-1 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-3xl border border-slate-200/50 dark:border-slate-800/40 gap-1 md:gap-0">
+            <div className="flex flex-wrap p-1 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-4xl border border-slate-200/50 dark:border-slate-800/40 gap-1 md:gap-0">
+                <button
+                    onClick={() => {
+                        setActiveTab('radar');
+                        setSearchTerm('');
+                    }}
+                    className={`flex-1 min-w-[150px] flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-xs font-black transition-all ${
+                        activeTab === 'radar'
+                            ? 'bg-gradient-to-r from-indigo-600 via-sky-600 to-indigo-700 text-white shadow-md shadow-indigo-200 dark:shadow-none'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Target className={`w-4 h-4 ${activeTab === 'radar' ? 'text-amber-300 animate-pulse' : 'text-indigo-500'}`} />
+                    <span>رادار و دستیار هوشمند مدیر 🎯</span>
+                </button>
+
                 <button
                     onClick={() => {
                         setActiveTab('warehouse');
@@ -405,105 +441,122 @@ const InventoryPage: React.FC = () => {
                 </button>
             </div>
 
-            {/* KPI Cards / Statistics dynamic per tab */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Metric 1 */}
-                <motion.div 
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
-                >
-                    <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">
-                            {activeTab === 'warehouse' ? 'تیپ‌های نمایشگاه و انبار' : activeTab === 'transfer' ? 'تعداد کل بخشنامه‌های حواله' : 'کل خودروهای قابل ارایه'}
-                        </span>
-                        <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
-                            {metrics.totalModels.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">تیپ</span>
-                        </h4>
-                    </div>
-                    <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-2xl">
-                        <Layers className="w-6 h-6" />
-                    </div>
-                </motion.div>
+            {/* Conditional Rendering: If 'radar' tab is active, show the Dedicated Sales Manager Assistant & Strategic Radar.
+               Otherwise, show the specific tab's KPI metrics, filters, and condition inventory table */}
+            {activeTab === 'radar' ? (
+                <SalesManagerAssistantPanel
+                    conditions={conditions}
+                    allCarsCatalog={cars}
+                    onFilterByModel={(modelName) => setSearchTerm(modelName)}
+                    onFilterByStockType={(type) => setStockFilter(type)}
+                    currentStockFilter={stockFilter}
+                    onStockChange={handleStockChange}
+                    onDirectStockChange={handleDirectStockChange}
+                    onStatusChange={handleStatusChange}
+                    onSwitchTab={(tab) => setActiveTab(tab)}
+                    showToast={showToast}
+                />
+            ) : (
+                <>
+                    {/* KPI Cards / Statistics dynamic per tab */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Metric 1 */}
+                        <motion.div 
+                            layout
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                        >
+                            <div className="space-y-1.5">
+                                <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">
+                                    {activeTab === 'warehouse' ? 'تیپ‌های نمایشگاه و انبار' : activeTab === 'transfer' ? 'تعداد کل بخشنامه‌های حواله' : 'کل خودروهای قابل ارایه'}
+                                </span>
+                                <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                                    {metrics.totalModels.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">تیپ</span>
+                                </h4>
+                            </div>
+                            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                                <Layers className="w-6 h-6" />
+                            </div>
+                        </motion.div>
 
-                {/* Metric 2 (Hidden or modified for customer tab to hide absolute count) */}
-                {activeTab !== 'customer' ? (
-                    <motion.div 
-                        layout
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
-                    >
-                        <div className="space-y-1.5">
-                            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">
-                                {activeTab === 'warehouse' ? 'مجموع خودروهای انبار' : 'مجموع تعداد حواله قابل واگذاری'}
-                            </span>
-                            <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
-                                {metrics.totalStock.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">{activeTab === 'warehouse' ? 'دستگاه' : 'فقره'}</span>
-                            </h4>
-                        </div>
-                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
-                            <Boxes className="w-6 h-6" />
-                        </div>
-                    </motion.div>
-                ) : (
-                    <motion.div 
-                        layout
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
-                    >
-                        <div className="space-y-1.5">
-                            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">روش‌های فروش فعال برای مشتری</span>
-                            <h4 className="text-2xl font-black text-emerald-600 font-mono">
-                                {conditions.length.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">کانال</span>
-                            </h4>
-                        </div>
-                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
-                            <CheckCircle2 className="w-6 h-6" />
-                        </div>
-                    </motion.div>
-                )}
+                        {/* Metric 2 (Hidden or modified for customer tab to hide absolute count) */}
+                        {activeTab !== 'customer' ? (
+                            <motion.div 
+                                layout
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                            >
+                                <div className="space-y-1.5">
+                                    <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">
+                                        {activeTab === 'warehouse' ? 'مجموع خودروهای انبار' : 'مجموع تعداد حواله قابل واگذاری'}
+                                    </span>
+                                    <h4 className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                                        {metrics.totalStock.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">{activeTab === 'warehouse' ? 'دستگاه' : 'فقره'}</span>
+                                    </h4>
+                                </div>
+                                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                                    <Boxes className="w-6 h-6" />
+                                </div>
+                            </motion.div>
+                        ) : (
+                            <motion.div 
+                                layout
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                            >
+                                <div className="space-y-1.5">
+                                    <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">روش‌های فروش فعال برای مشتری</span>
+                                    <h4 className="text-2xl font-black text-emerald-600 font-mono">
+                                        {conditions.length.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">کانال</span>
+                                    </h4>
+                                </div>
+                                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                                    <CheckCircle2 className="w-6 h-6" />
+                                </div>
+                            </motion.div>
+                        )}
 
-                {/* Metric 3 */}
-                <motion.div 
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
-                >
-                    <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">آماده واگذاری / موجود</span>
-                        <h4 className="text-2xl font-black text-emerald-600 font-mono font-bold">
-                            {metrics.availableCount.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">تیپ فعال</span>
-                        </h4>
-                    </div>
-                    <div className="p-3 bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 rounded-2xl">
-                        <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                </motion.div>
+                        {/* Metric 3 */}
+                        <motion.div 
+                            layout
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                        >
+                            <div className="space-y-1.5">
+                                <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">آماده واگذاری / موجود</span>
+                                <h4 className="text-2xl font-black text-emerald-600 font-mono font-bold">
+                                    {metrics.availableCount.toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">تیپ فعال</span>
+                                </h4>
+                            </div>
+                            <div className="p-3 bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 rounded-2xl">
+                                <CheckCircle2 className="w-6 h-6" />
+                            </div>
+                        </motion.div>
 
-                {/* Metric 4 */}
-                <motion.div 
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
-                >
-                    <div className="space-y-1.5">
-                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">اتمام ظرفیت / فروخته شد</span>
-                        <h4 className="text-2xl font-black text-rose-500 font-mono">
-                            {(metrics.soldOutCount + metrics.capacityFullCount).toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">مورد</span>
-                        </h4>
+                        {/* Metric 4 */}
+                        <motion.div 
+                            layout
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center justify-between"
+                        >
+                            <div className="space-y-1.5">
+                                <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 block">اتمام ظرفیت / فروخته شد</span>
+                                <h4 className="text-2xl font-black text-rose-500 font-mono">
+                                    {(metrics.soldOutCount + metrics.capacityFullCount).toLocaleString('fa-IR')} <span className="text-xs font-bold text-slate-400">مورد</span>
+                                </h4>
+                            </div>
+                            <div className="p-3 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-2xl">
+                                <AlertTriangle className="w-6 h-6" />
+                            </div>
+                        </motion.div>
                     </div>
-                    <div className="p-3 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-2xl">
-                        <AlertTriangle className="w-6 h-6" />
-                    </div>
-                </motion.div>
-            </div>
 
-            {/* Filter and Search Panel */}
+                    {/* Filter and Search Panel */}
             <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm space-y-4">
                 <div className="flex flex-col lg:flex-row gap-3">
                     {/* Search Input */}
@@ -562,6 +615,44 @@ const InventoryPage: React.FC = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Active Filter Indicators */}
+                {(stockFilter !== 'all' || searchTerm) && (
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex-wrap text-xs">
+                        <span className="text-slate-400 text-[11px] font-bold">فیلترهای فعال:</span>
+                        {stockFilter !== 'all' && (
+                            <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1 font-bold">
+                                <span>
+                                    {stockFilter === 'high_stock' && '🔥 فقط پرموجودی‌ها و اولویت‌های فروش'}
+                                    {stockFilter === 'single_unit' && '⚡ فقط آخرین دستگاه‌ها (تک‌موجود)'}
+                                    {stockFilter === 'out_of_stock' && '🚫 فقط اتمام موجودی و ناموجود'}
+                                </span>
+                                <button onClick={() => setStockFilter('all')} className="hover:text-rose-500 mr-1">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        )}
+                        {searchTerm && (
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 flex items-center gap-1 font-bold">
+                                <span>جستجو: {searchTerm}</span>
+                                <button onClick={() => setSearchTerm('')} className="hover:text-rose-500 mr-1">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        )}
+                        <button
+                            onClick={() => {
+                                setStockFilter('all');
+                                setSearchTerm('');
+                                setSelectedStatus('all');
+                            }}
+                            className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1 mr-auto"
+                        >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>پاک کردن همه فیلترها</span>
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Inventory Data Table */}
@@ -611,16 +702,43 @@ const InventoryPage: React.FC = () => {
                                 const isAvailable = condition.status === ConditionStatus.AVAILABLE;
                                 const isCapacityFull = condition.status === ConditionStatus.CAPACITY_FULL;
                                 const isSoldOut = condition.status === ConditionStatus.SOLD_OUT;
+                                const isSingleUnit = condition.stock_quantity === 1 && isAvailable;
+                                const isHighStock = (condition.stock_quantity || 0) >= 3 && isAvailable;
 
                                 return (
                                     <tr key={condition.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
-                                        {/* Car Model */}
+                                        {/* Car Model with Smart Badges */}
                                         <td className="p-4">
-                                            <div className="font-black text-slate-900 dark:text-white flex items-center gap-2">
-                                                <span className={`w-1.5 h-1.5 rounded-full ${
-                                                    activeTab === 'warehouse' ? 'bg-indigo-500' : activeTab === 'transfer' ? 'bg-sky-500' : 'bg-emerald-500'
-                                                }`}></span>
-                                                {condition.car_model}
+                                            <div className="space-y-1">
+                                                <div className="font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                                        activeTab === 'warehouse' ? 'bg-indigo-500' : activeTab === 'transfer' ? 'bg-sky-500' : 'bg-emerald-500'
+                                                    }`}></span>
+                                                    <span>{condition.car_model}</span>
+
+                                                    {/* Single Unit Alert (آخرین دستگاه) */}
+                                                    {isSingleUnit && (
+                                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/50 flex items-center gap-1 shadow-sm">
+                                                            <Zap className="w-3 h-3 text-amber-500 fill-amber-500 animate-pulse" />
+                                                            <span>آخرین دستگاه (تک‌موجود)</span>
+                                                        </span>
+                                                    )}
+
+                                                    {/* High Stock Alert (اولویت فروش مدیر) */}
+                                                    {isHighStock && (
+                                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                                            <Flame className="w-3 h-3 text-rose-500" />
+                                                            <span>اولویت فروش</span>
+                                                        </span>
+                                                    )}
+
+                                                    {/* Sold Out Badge */}
+                                                    {isSoldOut && (
+                                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                            اتمام موجودی
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         
@@ -755,6 +873,8 @@ const InventoryPage: React.FC = () => {
                     </table>
                 </div>
             </div>
+            </>
+            )}
 
             {/* COPY SETTINGS MODAL */}
             <CopyInventorySettingsModal 
@@ -792,7 +912,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     const [showDateInHeader, setShowDateInHeader] = useState(true);
     const [useCustomDate, setUseCustomDate] = useState(false);
     const [customDate, setCustomDate] = useState('');
-    const [footerText, setFooterText] = useState('https://t.me/kermanmotor2606');
+    const [footerText, setFooterText] = useState(DEFAULT_DEALERSHIP_FOOTER);
     
     // Toggleable fields to include in copied text
     const [includeModelYear, setIncludeModelYear] = useState(true);
@@ -803,6 +923,8 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     const [includePrice, setIncludePrice] = useState(true);
     const [includeStockQty, setIncludeStockQty] = useState(true);
     const [includeStatus, setIncludeStatus] = useState(false);
+    const [includeSingleUnitBadge, setIncludeSingleUnitBadge] = useState(true);
+    const [sortByHighestStock, setSortByHighestStock] = useState(true);
 
     // Compact mode state
     const [isCompact, setIsCompact] = useState<boolean>(() => {
@@ -892,9 +1014,13 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     };
 
     const generatedText = useMemo(() => {
-        const selectedConditions = conditions.filter(c => selectedIds.has(c.id));
+        let selectedConditions = conditions.filter(c => selectedIds.has(c.id));
         
-        const rows = selectedConditions.map((c, index) => {
+        if (sortByHighestStock) {
+            selectedConditions = [...selectedConditions].sort((a, b) => (b.stock_quantity || 0) - (a.stock_quantity || 0));
+        }
+
+        const rows = selectedConditions.map((c) => {
             let statusEmoji = '🟢';
             if (c.status === ConditionStatus.CAPACITY_FULL) statusEmoji = '🟡';
             if (c.status === ConditionStatus.SOLD_OUT) statusEmoji = '🔴';
@@ -902,6 +1028,11 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
             let title = includeStatus ? `${statusEmoji} ${c.car_model}` : c.car_model;
             if (includeModelYear && c.model) {
                 title += ` (مدل ${c.model.toLocaleString('fa-IR', { useGrouping: false })})`;
+            }
+
+            // Single unit badge
+            if (includeSingleUnitBadge && c.stock_quantity === 1 && c.status === ConditionStatus.AVAILABLE) {
+                title += ' ⚡[تک‌موجود/آخرین دستگاه]';
             }
 
             if (isCompact) {
@@ -1028,7 +1159,8 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     }, [
         conditions, selectedIds, headerText, footerText, activeTab,
         includeModelYear, includeSaleType, includePayType,
-        includeColors, includeDeliveryTime, includePrice, includeStockQty, isCompact, includeStatus
+        includeColors, includeDeliveryTime, includePrice, includeStockQty, isCompact, includeStatus,
+        includeSingleUnitBadge, sortByHighestStock
     ]);
 
     const handleCopy = () => {
@@ -1046,8 +1178,8 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                 {/* Modal Header */}
                 <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
                     <div>
-                        <h3 className="text-lg lg:text-xl font-black text-slate-800 dark:text-white">شخصی‌سازی و کپی لیست {activeTab === 'customer' ? 'مشتریان (بدون تعداد)' : 'موجودی'} 📊📋</h3>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">بخش‌ها و موارد دلخواه را جهت کپی در پیام‌رسان‌ها گزینش نمایید.</p>
+                        <h3 className="text-lg lg:text-xl font-black text-slate-800 dark:text-white">شخصی‌سازی و کپی هوشمند لیست {activeTab === 'customer' ? 'مشتریان (بدون تعداد)' : 'موجودی انبار'} 📊📋</h3>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">تنظیم و استخراج فرمت استاندارد برای کانال تلگرام، واتساپ و شبکه‌های اجتماعی</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">
                         <X className="text-slate-500 w-5 h-5" />
@@ -1124,20 +1256,39 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                             </div>
                         </div>
 
-                        {/* Compact Layout Toggle */}
-                        <div className="bg-amber-50 dark:bg-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-900/30 space-y-1">
+                        {/* Layout & Ordering Options */}
+                        <div className="space-y-2 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+                            <label className="block text-[11px] font-black text-indigo-900 dark:text-indigo-200">تنظیمات اولویت و ظاهر:</label>
+                            
                             <label className="flex items-center gap-2.5 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={sortByHighestStock} 
+                                    onChange={e => setSortByHighestStock(e.target.checked)} 
+                                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
+                                />
+                                <span className="text-xs font-black text-indigo-900 dark:text-indigo-200">مرتب‌سازی هوشمند بر اساس بیشترین موجودی</span>
+                            </label>
+
+                            <label className="flex items-center gap-2.5 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={includeSingleUnitBadge} 
+                                    onChange={e => setIncludeSingleUnitBadge(e.target.checked)} 
+                                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
+                                />
+                                <span className="text-xs font-black text-amber-800 dark:text-amber-300">درج برچسب ⚡ آخرین دستگاه (تک‌موجود)</span>
+                            </label>
+
+                            <label className="flex items-center gap-2.5 cursor-pointer pt-1">
                                 <input 
                                     type="checkbox" 
                                     checked={isCompact} 
                                     onChange={e => handleSetIsCompact(e.target.checked)} 
                                     className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
                                 />
-                                <span className="text-xs font-black text-amber-800 dark:text-amber-300">قالب بسیار کوتاه و خلاصه (حذف تکراری‌ها)</span>
+                                <span className="text-xs font-black text-slate-800 dark:text-slate-200">قالب فشرده و تلگرامی (۲ الی ۳ خط به ازای هر خودرو)</span>
                             </label>
-                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium leading-relaxed">
-                                ادغام اطلاعات خودروها در ۲ الی ۳ خط کوتاه، حذف عبارات تکراری و حذف خطوط جداکننده بزرگ جهت کپی سریع.
-                            </p>
                         </div>
 
                         {/* Toggle Switches */}
@@ -1207,22 +1358,22 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                                             className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
                                         />
                                         <span className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
-                                            {c.car_model} ({c.sale_type})
+                                            {c.car_model} {c.stock_quantity === 1 ? '⚡[تک]' : ''} ({c.sale_type})
                                         </span>
                                     </label>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Footer Text Input */}
+                        {/* Multi-line Footer Text Input */}
                         <div className="space-y-1.5">
-                            <label className="block text-[11px] font-black text-slate-500">متن امضا و پاورقی پیام:</label>
-                            <input 
-                                type="text" 
+                            <label className="block text-[11px] font-black text-slate-500">متن پاورقی و اطلاعات تماس نمایندگی:</label>
+                            <textarea 
                                 value={footerText}
                                 onChange={e => setFooterText(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold outline-none focus:border-indigo-500"
-                                dir="ltr"
+                                rows={6}
+                                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-mono font-medium outline-none focus:border-indigo-500 leading-relaxed"
+                                dir="rtl"
                             />
                         </div>
                     </div>
