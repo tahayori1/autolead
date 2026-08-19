@@ -190,9 +190,10 @@ const InventoryPage: React.FC = () => {
 
     // Filter & search conditions based on selected tab and options
     const filteredConditions = useMemo(() => {
+        const term = (searchTerm || '').toLowerCase();
         const filtered = conditions.filter(c => {
-            const matchesSearch = c.car_model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                 (c.descriptions && c.descriptions.toLowerCase().includes(searchTerm.toLowerCase()));
+            const matchesSearch = (c?.car_model || '').toLowerCase().includes(term) ||
+                                 (c?.descriptions && c.descriptions.toLowerCase().includes(term));
             const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus;
             
             // Tab condition

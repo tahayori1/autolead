@@ -344,9 +344,9 @@ export const SalesManagerPriceAssistant: React.FC<SalesManagerPriceAssistantProp
         if (searchQuery.trim()) {
             const q = searchQuery.trim().toLowerCase();
             result = result.filter(r => 
-                r.rawModelName.toLowerCase().includes(q) ||
-                r.baseModelName.toLowerCase().includes(q) ||
-                (r.year && r.year.includes(q))
+                (r?.rawModelName || '').toLowerCase().includes(q) ||
+                (r?.baseModelName || '').toLowerCase().includes(q) ||
+                (r?.year && r.year.includes(q))
             );
         }
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw } from 'lucide-react';
+import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import ConditionsPage from './pages/ConditionsPage';
 import InventoryPage from './pages/InventoryPage';
@@ -27,6 +27,7 @@ import CarOrderPage from './pages/CarOrderPage';
 import SalaryAdvancePage from './pages/SalaryAdvancePage';
 import OvertimePage from './pages/OvertimePage';
 import { AdvertisingPage } from './pages/AdvertisingPage';
+import MarketingReportManager from './components/MarketingReportManager';
 import AboutPage from './pages/AboutPage';
 import Spinner from './components/Spinner';
 import { LogoutIcon } from './components/icons/LogoutIcon';
@@ -57,7 +58,7 @@ import { ClipboardListIcon } from './components/icons/ClipboardListIcon';
 import { getMyProfile } from './services/api';
 import type { MyProfile } from './types';
 
-export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
+export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
 
 interface MenuItemProps {
     label: string;
@@ -242,6 +243,7 @@ const App: React.FC = () => {
         { view: 'car-prices' as ActiveView, label: 'قیمت روز خودرو', icon: <PriceIcon className="w-5 h-5" /> },
         { view: 'users' as ActiveView, label: 'مدیریت مشتریان (CRM)', icon: <UsersIcon className="w-5 h-5" /> },
         { view: 'notification-center' as ActiveView, label: 'پیام‌رسان هوشمند', icon: <ChatAltIcon className="w-5 h-5" /> },
+        { view: 'advertising-report' as ActiveView, label: 'گزارش عملکرد تبلیغات', icon: <FileText className="w-5 h-5 text-indigo-500" /> },
         { view: 'advertising-campaigns' as ActiveView, label: 'آنالیز کمپین‌ها', icon: <RocketIcon className="w-5 h-5 text-emerald-500" /> },
         { view: 'advertising-writer' as ActiveView, label: 'تبلیغ نویس', icon: <Sparkles className="w-5 h-5 text-indigo-500" /> },
         { view: 'advertising-titles' as ActiveView, label: 'title ساز', icon: <Layers className="w-5 h-5 text-purple-500" /> },
@@ -252,7 +254,7 @@ const App: React.FC = () => {
         { view: 'zero-car-delivery' as ActiveView, label: 'تحویل خودرو صفر', icon: <TruckIcon className="w-5 h-5" /> },
         { view: 'used-cars' as ActiveView, label: 'کارشناسی خودرو کارکرده', icon: <ClipboardListIcon className="w-5 h-5" /> },
         { view: 'vehicle-exit' as ActiveView, label: 'خروج نهایی خودرو', icon: <ExitFormIcon className="w-5 h-5" /> },
-        { view: 'commission' as ActiveView, label: 'محاسبه پورسانت', icon: <CalculatorIcon className="w-5 h-5" /> },
+        { view: 'commission' as ActiveView, label: 'کمیسیون و پورسانت', icon: <CalculatorIcon className="w-5 h-5" /> },
         { view: 'poll' as ActiveView, label: 'نظرسنجی مشتریان', icon: <PollIcon className="w-5 h-5" /> },
         { view: 'reports' as ActiveView, label: 'آمار و گزارشات', icon: <ChartBarIcon className="w-5 h-5" /> },
         { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
@@ -306,6 +308,7 @@ const App: React.FC = () => {
             isCollapsible: true,
             icon: <SpeakerphoneIcon className="w-5 h-5" />,
             items: [
+                { view: 'advertising-report' as ActiveView, label: 'گزارش عملکرد تبلیغات', icon: <FileText className="w-5 h-5 text-indigo-500" /> },
                 ...(currentUser?.isAdmin === 1 ? [
                     { view: 'advertising-campaigns' as ActiveView, label: 'آنالیز کمپین‌ها', icon: <RocketIcon className="w-5 h-5 text-emerald-500" /> }
                 ] : []),
@@ -335,7 +338,7 @@ const App: React.FC = () => {
             icon: <ChartBarIcon className="w-5 h-5" />,
             items: [
                 { view: 'reports' as ActiveView, label: 'گزارشات و نمودارها', icon: <ChartBarIcon className="w-5 h-5" /> },
-                { view: 'commission' as ActiveView, label: 'محاسبه پورسانت', icon: <CalculatorIcon className="w-5 h-5" /> },
+                { view: 'commission' as ActiveView, label: 'کمیسیون و پورسانت', icon: <CalculatorIcon className="w-5 h-5" /> },
                 { view: 'poll' as ActiveView, label: 'نظرسنجی مشتریان', icon: <PollIcon className="w-5 h-5" /> },
             ]
         },
@@ -659,6 +662,7 @@ const App: React.FC = () => {
                 {activeView === 'my-profile' && <MyProfilePage />}
                 {activeView === 'notification-center' && <NotificationCenterPage />}
                 {activeView === 'used-cars' && <UsedCarPage />}
+                {activeView === 'advertising-report' && <MarketingReportManager loggedInUser={currentUser} />}
                 {activeView === 'advertising-writer' && <AdvertisingPage loggedInUser={currentUser} initialTab="writer" />}
                 {activeView === 'advertising-campaigns' && <AdvertisingPage loggedInUser={currentUser} initialTab="campaigns" />}
                 {activeView === 'advertising-titles' && <AdvertisingPage loggedInUser={currentUser} initialTab="titles" />}

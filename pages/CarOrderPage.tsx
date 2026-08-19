@@ -131,17 +131,17 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
             // Manual Filters
             // 1. Search (Phone, National ID, Address, Postal, City, Notes)
             if (filters.search) {
-                const q = filters.search.toLowerCase();
+                const q = (filters.search || '').toLowerCase();
                 const matchesSearch = 
-                    (order.buyerName?.toLowerCase().includes(q)) ||
-                    (order.buyerPhone?.includes(q)) ||
-                    (order.buyerNationalId?.includes(q)) ||
-                    (order.buyerPostalCode?.includes(q)) ||
-                    (order.buyerAddress?.toLowerCase().includes(q)) ||
-                    (order.buyerCity?.toLowerCase().includes(q)) ||
-                    (order.userNotes?.toLowerCase().includes(q)) ||
-                    (order.adminNotes?.toLowerCase().includes(q)) ||
-                    (order.trackingCode?.toLowerCase().includes(q));
+                    (order?.buyerName?.toLowerCase() || '').includes(q) ||
+                    (order?.buyerPhone || '').includes(q) ||
+                    (order?.buyerNationalId || '').includes(q) ||
+                    (order?.buyerPostalCode || '').includes(q) ||
+                    (order?.buyerAddress?.toLowerCase() || '').includes(q) ||
+                    (order?.buyerCity?.toLowerCase() || '').includes(q) ||
+                    (order?.userNotes?.toLowerCase() || '').includes(q) ||
+                    (order?.adminNotes?.toLowerCase() || '').includes(q) ||
+                    (order?.trackingCode?.toLowerCase() || '').includes(q);
                 
                 if (!matchesSearch) return false;
             }

@@ -539,6 +539,46 @@ export interface AdCampaign {
     notes?: string;
 }
 
+export interface AdvertisementReport {
+    id: number;
+    title: string;
+    campaign_date?: string;
+    start_time?: string;
+    author_name?: string;
+    ig_total_followers?: number;
+    ig_story_views?: number;
+    ig_story_replies?: number;
+    ig_story_notes?: string;
+    ig_reels_views?: number;
+    ig_reels_notes?: string;
+    ig_channel_members?: number;
+    ig_channel_notes?: string;
+    telegram_members?: number;
+    telegram_new_members?: number;
+    telegram_notes?: string;
+    bale_members?: number;
+    bale_notes?: string;
+    whatsapp_members?: number;
+    whatsapp_notes?: string;
+    threads_members?: number;
+    threads_notes?: string;
+    sms_sent_count?: number;
+    sms_database_total?: number;
+    sms_target_audience?: string;
+    sms_notes?: string;
+    call_center_inbound?: number;
+    call_center_notes?: string;
+    website_status?: string;
+    sales_team_coordination?: string;
+    total_views?: number;
+    total_leads_calls?: number;
+    executive_summary?: string;
+    attachments?: string[];
+    status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'ARCHIVED';
+    created_at?: string;
+    updated_at?: string;
+}
+
 // --- Used Car Types ---
 
 export type UsedCarLocation = 'OWNER' | 'SHOWROOM' | 'WAREHOUSE' | 'OTHER';
@@ -607,5 +647,96 @@ export interface CrmMeeting {
     agentName: string;
     createdAt?: string;
 }
+
+export type CommissionPaymentStatus = 'PAID' | 'PENDING' | 'PARTIAL';
+export type CommissionCategory = 'ANBAR' | 'AZAD' | 'HAVALEH' | 'LEASING' | 'REGISTRATION';
+
+export interface CommissionDeal {
+    id: string;
+    rowNumber?: number;
+    periodId: string; // e.g. '1405-05', '1405-04'
+    periodName: string; // e.g. 'مرداد ۱۴۰۵', 'تیر ۱۴۰۵'
+    category: CommissionCategory; // انبار، آزاد، حواله، لیزینگ، ثبت‌نام
+    
+    purchaseDate?: string; // تاریخ خرید
+    saleDate: string; // تاریخ فروش
+    salesPerson: string; // نام پرسنل فروش (یا اشتراکی مثل درسا محمدی / ندا قاسمی)
+    contractWriter?: string; // قولنامه‌نویس
+    customerName: string; // نام مشتری / خریدار
+    sellerName?: string; // نام فروشنده (برای فروش آزاد)
+    buyerName?: string; // نام خریدار
+    customerPhone?: string; // شماره تماس مشتری
+    carModel: string; // مدل خودرو
+    
+    purchasePrice?: number; // نرخ خرید
+    dailyPrice?: number; // قیمت روز / مبنا
+    salePrice?: number; // نرخ فروش
+    nextBasketAmount?: number; // مبلغ سبد بعدی (برای حواله)
+    downPayment?: number; // پیش‌پرداخت (برای لیزینگ و ثبت‌نام)
+    contractNumber?: string; // شماره قرارداد (برای ثبت‌نام)
+    deliveryDate?: string; // تاریخ تحویل خودرو (برای ثبت‌نام)
+    
+    dailyProfitLoss?: number; // سود یا زیان روز (نرخ فروش - قیمت روز) یا سود حواله (نرخ فروش - سبد بعدی)
+    grossProfit?: number; // سود ناخالص / کمیسیون کل معامله (نرخ فروش - نرخ خرید)
+    commissionRate?: number; // درصد پورسانت
+    commissionAmount: number; // مبلغ پورسانت کل
+    paidCommissionShare?: number; // سهم پورسانت پرداختی / تسهیم شده
+    sharedPersons?: string[]; // تفکیک اسامی برای تسهیم ۵۰/۵۰
+    
+    paymentStatus: CommissionPaymentStatus; // وضعیت واریز
+    paymentDate?: string; // تاریخ واریز
+    paymentNotes?: string; // یادداشت و جزئیات واریز
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface PersonnelCommissionAdjustment {
+    staffName: string;
+    bonus: number; // پاداش
+    deductions: number; // کسورات / جریمه
+    notes?: string;
+}
+
+export interface CommissionPeriod {
+    id: string; // e.g. '1405-05'
+    title: string; // e.g. 'مرداد ۱۴۰۵'
+    startDate?: string;
+    endDate?: string;
+    isLocked?: boolean;
+    adjustments?: Record<string, { bonus: number; deductions: number; notes?: string }>;
+    approvals?: {
+        salesApproved?: boolean;
+        salesApprovedBy?: string;
+        salesApprovedAt?: string;
+        financeApproved?: boolean;
+        financeApprovedBy?: string;
+        financeApprovedAt?: string;
+        ceoApproved?: boolean;
+        ceoApprovedBy?: string;
+        ceoApprovedAt?: string;
+        voucherNumber?: string;
+    };
+}
+
+export type CommissionUserRole = 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER' | 'SALES_REP';
+
+
+export interface CarYardItem {
+    id: string;
+    rowNumber?: number;
+    periodId?: string;
+    carModel: string; // نوع خودرو
+    carColor: string; // رنگ خودرو
+    chassisNumber?: string; // شماره شاسی
+    plateNumber?: string; // شماره پلاک
+    ownerName: string; // نام مالک سند
+    entryDate: string; // تاریخ ورود
+    releaseDate?: string; // تاریخ ترخیص
+    storageLocation: string; // محل نگهداری خودرو (پارکینگ ۱، نمایشگاه مرکزی، انبار و...)
+    deliveredBy: string; // نام تحویل‌دهنده خودرو
+    status: 'PARKED' | 'RELEASED' | 'IN_REPAIR'; // وضعیت (در پارکینگ / ترخیص شده)
+    notes?: string;
+}
+
 
 

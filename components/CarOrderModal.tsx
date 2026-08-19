@@ -149,9 +149,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({ isOpen, onClose, onSave, 
             setCrmResults([]);
             return;
         }
+        const q = (query || '').toLowerCase();
         const filtered = crmUsers.filter(u => 
-            (u.FullName && u.FullName.toLowerCase().includes(query.toLowerCase())) ||
-            (u.Number && u.Number.includes(query))
+            (u?.FullName && u.FullName.toLowerCase().includes(q)) ||
+            (u?.Number && u.Number.includes(query))
         );
         setCrmResults(filtered);
     };
@@ -159,10 +160,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({ isOpen, onClose, onSave, 
     const handleSelectCrmUser = (u: User) => {
         setFormData(prev => ({
             ...prev,
-            buyerName: u.FullName || prev.buyerName,
-            buyerPhone: u.Number || prev.buyerPhone,
-            buyerCity: u.City || prev.buyerCity,
-            buyerAddress: [u.Province, u.Decription].filter(Boolean).join(' - ') || prev.buyerAddress,
+            buyerName: u?.FullName || prev.buyerName,
+            buyerPhone: u?.Number || prev.buyerPhone,
+            buyerCity: u?.City || prev.buyerCity,
+            buyerAddress: [u?.Province, u?.Decription].filter(Boolean).join(' - ') || prev.buyerAddress,
         }));
         setCrmSearchQuery('');
         setCrmResults([]);
@@ -171,13 +172,14 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({ isOpen, onClose, onSave, 
     // Find if the currently typed info matches any CRM customer
     const autoMatchCrmUser = useMemo(() => {
         if (formData.buyerPhone && formData.buyerPhone.length >= 4) {
-            const foundByPhone = crmUsers.find(u => u.Number && u.Number.includes(formData.buyerPhone));
+            const foundByPhone = crmUsers.find(u => u?.Number && u.Number.includes(formData.buyerPhone));
             if (foundByPhone && (formData.buyerName !== foundByPhone.FullName || formData.buyerCity !== foundByPhone.City)) {
                 return foundByPhone;
             }
         }
         if (formData.buyerName && formData.buyerName.length >= 3) {
-            const foundByName = crmUsers.find(u => u.FullName && u.FullName.toLowerCase().includes(formData.buyerName.toLowerCase()));
+            const nameSearch = (formData.buyerName || '').toLowerCase();
+            const foundByName = crmUsers.find(u => u?.FullName && u.FullName.toLowerCase().includes(nameSearch));
             if (foundByName && (formData.buyerPhone !== foundByName.Number || formData.buyerCity !== foundByName.City)) {
                 return foundByName;
             }

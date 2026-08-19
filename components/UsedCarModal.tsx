@@ -82,9 +82,10 @@ const UsedCarModal: React.FC<UsedCarModalProps> = ({ isOpen, onClose, onSave, ca
             setCrmResults([]);
             return;
         }
+        const q = (query || '').toLowerCase();
         const filtered = crmUsers.filter(u => 
-            (u.FullName && u.FullName.toLowerCase().includes(query.toLowerCase())) ||
-            (u.Number && u.Number.includes(query))
+            (u?.FullName && u.FullName.toLowerCase().includes(q)) ||
+            (u?.Number && u.Number.includes(query))
         );
         setCrmResults(filtered);
     };
@@ -92,8 +93,8 @@ const UsedCarModal: React.FC<UsedCarModalProps> = ({ isOpen, onClose, onSave, ca
     const handleSelectCrmUser = (u: User) => {
         setFormData(prev => ({
             ...prev,
-            sellerName: u.FullName || prev.sellerName,
-            sellerPhone1: u.Number || prev.sellerPhone1,
+            sellerName: u?.FullName || prev.sellerName,
+            sellerPhone1: u?.Number || prev.sellerPhone1,
         }));
         setCrmSearchQuery('');
         setCrmResults([]);
@@ -102,13 +103,14 @@ const UsedCarModal: React.FC<UsedCarModalProps> = ({ isOpen, onClose, onSave, ca
     // Find if the currently typed info matches any CRM customer
     const autoMatchCrmUser = useMemo(() => {
         if (formData.sellerPhone1 && formData.sellerPhone1.length >= 4) {
-            const foundByPhone = crmUsers.find(u => u.Number && u.Number.includes(formData.sellerPhone1!));
+            const foundByPhone = crmUsers.find(u => u?.Number && u.Number.includes(formData.sellerPhone1!));
             if (foundByPhone && formData.sellerName !== foundByPhone.FullName) {
                 return foundByPhone;
             }
         }
         if (formData.sellerName && formData.sellerName.length >= 3) {
-            const foundByName = crmUsers.find(u => u.FullName && u.FullName.toLowerCase().includes(formData.sellerName!.toLowerCase()));
+            const nameSearch = (formData.sellerName || '').toLowerCase();
+            const foundByName = crmUsers.find(u => u?.FullName && u.FullName.toLowerCase().includes(nameSearch));
             if (foundByName && formData.sellerPhone1 !== foundByName.Number) {
                 return foundByName;
             }

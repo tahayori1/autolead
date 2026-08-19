@@ -72,10 +72,10 @@ const CarsPage: React.FC<CarsPageProps> = ({ onNavigateToLeads, initialFilters, 
     
     const filteredCars = useMemo(() => {
         if (!filterQuery) return cars;
-        const lowercasedQuery = filterQuery.toLowerCase();
-        return cars.filter(car => 
-            car.name.toLowerCase().includes(lowercasedQuery) ||
-            car.brand.toLowerCase().includes(lowercasedQuery)
+        const lowercasedQuery = (filterQuery || '').toLowerCase();
+        return (cars || []).filter(car => 
+            (car?.name || '').toLowerCase().includes(lowercasedQuery) ||
+            (car?.brand || '').toLowerCase().includes(lowercasedQuery)
         );
     }, [cars, filterQuery]);
     

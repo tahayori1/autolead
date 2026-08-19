@@ -339,13 +339,13 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         }
 
         return users.filter(user => {
-            const queryMatch = filters.query === '' ||
-                (user.FullName?.toLowerCase().includes(lowercasedQuery)) ||
-                (user.Number?.includes(lowercasedQuery)) ||
-                (user.CarModel?.toLowerCase().includes(lowercasedQuery)) ||
-                (user.Province?.toLowerCase().includes(lowercasedQuery)) ||
-                (user.City?.toLowerCase().includes(lowercasedQuery)) ||
-                (user.Decription?.toLowerCase().includes(lowercasedQuery));
+            const queryMatch = !lowercasedQuery ||
+                (user.FullName?.toLowerCase() || '').includes(lowercasedQuery) ||
+                (user.Number || '').includes(lowercasedQuery) ||
+                (user.CarModel?.toLowerCase() || '').includes(lowercasedQuery) ||
+                (user.Province?.toLowerCase() || '').includes(lowercasedQuery) ||
+                (user.City?.toLowerCase() || '').includes(lowercasedQuery) ||
+                (user.Decription?.toLowerCase() || '').includes(lowercasedQuery);
 
             const carModelMatch = filters.carModel === 'all' || user.CarModel === filters.carModel;
             const referenceMatch = filters.reference === 'all' || user.reference === filters.reference;

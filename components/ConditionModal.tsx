@@ -309,14 +309,14 @@ const ConditionModal: React.FC<ConditionModalProps> = ({ isOpen, onClose, onSave
 
     // Filter CRM users for owner search suggestion
     const filteredCRMUsers = ownerSearch.trim() === '' ? [] : crmUsers.filter(u =>
-        (u.FullName && u.FullName.toLowerCase().includes(ownerSearch.toLowerCase())) ||
-        (u.Number && u.Number.includes(ownerSearch))
+        (u?.FullName && u.FullName.toLowerCase().includes((ownerSearch || '').toLowerCase())) ||
+        (u?.Number && u.Number.includes(ownerSearch))
     ).slice(0, 5);
 
     // Filter appraised used cars
     const filteredUsedCars = appraisalSearch.trim() === '' ? [] : usedCars.filter(c =>
-        (c.carName && c.carName.toLowerCase().includes(appraisalSearch.toLowerCase())) ||
-        (c.sellerName && c.sellerName.toLowerCase().includes(appraisalSearch.toLowerCase()))
+        (c?.carName && c.carName.toLowerCase().includes((appraisalSearch || '').toLowerCase())) ||
+        (c?.sellerName && c.sellerName.toLowerCase().includes((appraisalSearch || '').toLowerCase()))
     ).slice(0, 5);
 
     const isOwnerRequired = formState.sale_type === SaleType.NEW_MARKET || formState.sale_type === SaleType.USED;

@@ -153,7 +153,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
     const sortedAndFilteredConditions = useMemo(() => {
         const filtered = conditions.filter(c => {
             const statusMatch = filters.status === 'all' || c.status === filters.status;
-            const carModelMatch = filters.car_model === 'all' || (c.car_model && c.car_model.toLowerCase() === filters.car_model.toLowerCase());
+            const carModelMatch = filters.car_model === 'all' || (c?.car_model && c.car_model.toLowerCase() === (filters.car_model || '').toLowerCase());
             const saleTypeMatch = filters.sale_type === 'all' || c.sale_type === filters.sale_type;
             return statusMatch && carModelMatch && saleTypeMatch;
         });

@@ -61,8 +61,8 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     const filteredPrices = useMemo(() => {
         if (!priceSearch.trim()) return priceStats;
         const query = priceSearch.toLowerCase().trim();
-        return priceStats.filter(stat => 
-            stat.model_name.toLowerCase().includes(query)
+        return (priceStats || []).filter(stat => 
+            (stat?.model_name || '').toLowerCase().includes(query)
         );
     }, [priceStats, priceSearch]);
 
@@ -70,10 +70,10 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     const filteredConditions = useMemo(() => {
         if (!conditionSearch.trim()) return conditions;
         const query = conditionSearch.toLowerCase().trim();
-        return conditions.filter(cond => 
-            cond.car_model.toLowerCase().includes(query) ||
-            cond.sale_type.toLowerCase().includes(query) ||
-            cond.pay_type.toLowerCase().includes(query)
+        return (conditions || []).filter(cond => 
+            (cond?.car_model || '').toLowerCase().includes(query) ||
+            (cond?.sale_type || '').toLowerCase().includes(query) ||
+            (cond?.pay_type || '').toLowerCase().includes(query)
         );
     }, [conditions, conditionSearch]);
 

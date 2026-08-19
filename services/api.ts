@@ -32,7 +32,8 @@ import type {
     OvertimeRequest,
     CrmCallLog,
     SalaryAdvanceRequest,
-    CrmMeeting
+    CrmMeeting,
+    AdvertisementReport
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -953,6 +954,7 @@ const MY_PROFILE_URL = `${API_BASE_URL}/MyProfile`;
 const PERMISSIONS_URL = `${API_BASE_URL}/Permissions`;
 const MEETING_MINUTES_URL = `${API_BASE_URL}/MeetingMinutes`;
 const AD_CAMPAIGNS_URL = `${API_BASE_URL}/AdCampaigns`;
+const ADVERTISEMENT_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/advertisment';
 const USED_CARS_URL = `${API_BASE_URL}/UsedCars`;
 const CAR_ORDERS_URL = `${API_BASE_URL}/CarOrders`;
 const OVERTIME_URL = `${API_BASE_URL}/overtime`;
@@ -1005,6 +1007,7 @@ export const anonymousSuggestionsService = createCrudService<AnonymousFeedback>(
 export const permissionsService = createCrudService<any>(PERMISSIONS_URL);
 export const meetingMinutesService = createCrudService<MeetingMinute>(MEETING_MINUTES_URL);
 export const adCampaignsService = createCrudService<AdCampaign>(AD_CAMPAIGNS_URL);
+export const advertisementService = createCrudService<AdvertisementReport>(ADVERTISEMENT_URL);
 export const usedCarsService = createCrudService<UsedCar>(USED_CARS_URL);
 export const carOrdersService = createCrudService<CarOrder>(CAR_ORDERS_URL);
 

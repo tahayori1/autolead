@@ -1,490 +1,1256 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { CalculatorIcon } from '../components/icons/CalculatorIcon';
-import { ChartBarIcon } from '../components/icons/ChartBarIcon';
+import { 
+    CommissionDeal, 
+    CommissionPeriod, 
+    CommissionCategory,
+    CommissionPaymentStatus, 
+    CarYardItem,
+    CommissionUserRole,
+    User 
+} from '../types';
+import { 
+    getCommissionPeriods, 
+    saveCommissionPeriods, 
+    getCommissionDeals, 
+    saveCommissionDeals,
+    getCarYardItems,
+    saveCarYardItems,
+    resetCommissionDataToDefaults,
+    parseSalesPersons
+} from '../services/commissionService';
+import { getUsers } from '../services/api';
+import { CommissionDealModal } from '../components/commission/CommissionDealModal';
+import { CommissionExcelImportModal } from '../components/commission/CommissionExcelImportModal';
+import { CommissionPersonnelReport } from '../components/commission/CommissionPersonnelReport';
+import { CommissionMultiFactorCalculator } from '../components/commission/CommissionMultiFactorCalculator';
+import { CommissionCarYardLedger } from '../components/commission/CommissionCarYardLedger';
+import { CommissionSalesAnalytics } from '../components/commission/CommissionSalesAnalytics';
 
-// --- Types ---
-interface KPI {
-    id: string;
-    label: string;
-    weight: number; // Percentage (e.g., 30 for 30%)
-    score: number; // 0-100
-}
+// Role-based views & Reports Modal
+import { CommissionCeoView } from '../components/commission/roles/CommissionCeoView';
+import { CommissionSalesManagerView } from '../components/commission/roles/CommissionSalesManagerView';
+import { CommissionFinanceView } from '../components/commission/roles/CommissionFinanceView';
+import { CommissionStaffView } from '../components/commission/roles/CommissionStaffView';
+import { CommissionRoleReportsModal, ReportRoleType } from '../components/commission/roles/CommissionRoleReportsModal';
 
-interface AttendanceZone {
-    name: string;
-    label: string;
-    color: string;
-    bgColor: string;
-    factor: number;
-    range: [number, number]; // [min, max] minutes
-}
+import { 
+    Calculator, 
+    Table, 
+    Users, 
+    FileSpreadsheet, 
+    Download, 
+    Upload, 
+    Plus, 
+    Search, 
+    Filter, 
+    CheckCircle, 
+    Clock, 
+    AlertCircle, 
+    Printer, 
+    RotateCcw, 
+    Trash2, 
+    Edit, 
+    Calendar,
+    Layers,
+    Building2,
+    Repeat,
+    FileText,
+    CreditCard,
+    ClipboardList,
+    TrendingUp,
+    TrendingDown,
+    Share2,
+    Car,
+    Warehouse,
+    ShieldCheck,
+    Trophy,
+    Crown,
+    Star,
+    Award,
+    Landmark,
+    Briefcase,
+    UserCheck,
+    FileCheck2
+} from 'lucide-react';
+
+type MainPerspective = 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER' | 'STAFF' | 'OPERATIONS';
+type ActiveSheetTab = 'analytics' | 'summary' | 'ANBAR' | 'AZAD' | 'HAVALEH' | 'LEASING' | 'REGISTRATION' | 'yard' | 'all' | 'calculator';
 
 const CommissionPage: React.FC = () => {
-    // --- State ---
-    // 1. Raw Commission by Sale Type
-    const [havalehProfit, setHavalehProfit] = useState<number | ''>('');
-    const [havalehRate, setHavalehRate] = useState<number | ''>(3);
+    // --- States ---
+    const [currentPerspective, setCurrentPerspective] = useState<MainPerspective>('CEO');
+    const [activeTab, setActiveTab] = useState<ActiveSheetTab>('analytics');
+    const [periods, setPeriods] = useState<CommissionPeriod[]>([]);
+    const [activePeriodId, setActivePeriodId] = useState<string>('1405-05');
+    const [deals, setDeals] = useState<CommissionDeal[]>([]);
+    const [yardItems, setYardItems] = useState<CarYardItem[]>([]);
+    const [crmUsers, setCrmUsers] = useState<User[]>([]);
 
-    const [leasingCount, setLeasingCount] = useState<number | ''>('');
-    const [leasingRate, setLeasingRate] = useState<number | ''>(200000);
+    // Currency mode: Rials (Excel raw) or Tomans
+    const [currencyUnit, setCurrencyUnit] = useState<'RIAL' | 'TOMAN'>('RIAL');
 
-    const [usedProfit, setUsedProfit] = useState<number | ''>('');
-    const [usedRate, setUsedRate] = useState<number | ''>(10);
+    // Filters & Search
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedPersonnel, setSelectedPersonnel] = useState<string>('ALL');
+    const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+    const [selectedCarModel, setSelectedCarModel] = useState<string>('ALL');
 
-    const [factoryCount, setFactoryCount] = useState<number | ''>('');
-    const [factoryRate, setFactoryRate] = useState<number | ''>(50000);
+    // Modals
+    const [isDealModalOpen, setIsDealModalOpen] = useState(false);
+    const [editingDeal, setEditingDeal] = useState<CommissionDeal | null>(null);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-    // 2. Sales Volume Targets (New Section)
-    const [leasingTarget, setLeasingTarget] = useState<number | ''>(5);
-    const [leasingActual, setLeasingActual] = useState<number | ''>('');
-    
-    const [factoryTarget, setFactoryTarget] = useState<number | ''>(10);
-    const [factoryActual, setFactoryActual] = useState<number | ''>('');
+    // Role Reports Modal
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [activeReportRole, setActiveReportRole] = useState<ReportRoleType>('CEO');
+    const [reportTargetStaff, setReportTargetStaff] = useState<string>('درسا محمدی');
 
-    const [usedTarget, setUsedTarget] = useState<number | ''>(3);
-    const [usedActual, setUsedActual] = useState<number | ''>('');
+    // New Period Modal
+    const [isNewPeriodModalOpen, setIsNewPeriodModalOpen] = useState(false);
+    const [newPeriodTitle, setNewPeriodTitle] = useState('');
 
-    const [havalehTarget, setHavalehTarget] = useState<number | ''>(5);
-    const [havalehActual, setHavalehActual] = useState<number | ''>('');
+    // Load initial data
+    useEffect(() => {
+        const loadedPeriods = getCommissionPeriods();
+        const loadedDeals = getCommissionDeals();
+        const loadedYard = getCarYardItems();
 
-    // 3. Quality KPIs
-    const [kpis, setKpis] = useState<KPI[]>([
-        { id: 'acquisition', label: 'جذب مشتری جدید', weight: 30, score: 90 },
-        { id: 'reporting', label: 'گزارش‌دهی و پیگیری', weight: 20, score: 100 },
-        { id: 'teamwork', label: 'روحیه کار تیمی', weight: 30, score: 80 },
-        { id: 'csat', label: 'رضایت مشتری (CSAT)', weight: 20, score: 95 },
-    ]);
+        setPeriods(loadedPeriods);
+        setDeals(loadedDeals);
+        setYardItems(loadedYard);
 
-    // 4. Attendance
-    const [delayMinutes, setDelayMinutes] = useState<number | ''>(0);
+        if (loadedPeriods.length > 0 && !loadedPeriods.some(p => p.id === activePeriodId)) {
+            setActivePeriodId(loadedPeriods[0].id);
+        }
 
-    // --- Logic ---
+        // Fetch CRM users for autocomplete
+        getUsers().then(users => {
+            if (Array.isArray(users)) setCrmUsers(users);
+        }).catch(() => {
+            // Safe fallback
+        });
+    }, []);
 
-    // Zone Definitions
-    const ZONES: AttendanceZone[] = [
-        { name: 'green', label: 'ناحیه سبز (عالی)', color: 'text-emerald-600', bgColor: 'bg-emerald-100 dark:bg-emerald-900/30', factor: 1.0, range: [0, 60] },
-        { name: 'yellow1', label: 'ناحیه زرد ۱ (خفیف)', color: 'text-amber-600', bgColor: 'bg-amber-100 dark:bg-amber-900/30', factor: 0.9, range: [61, 120] },
-        { name: 'yellow2', label: 'ناحیه زرد ۲ (متوسط)', color: 'text-orange-600', bgColor: 'bg-orange-100 dark:bg-orange-900/30', factor: 0.7, range: [121, 180] },
-        { name: 'red', label: 'ناحیه قرمز (خطر)', color: 'text-rose-600', bgColor: 'bg-rose-100 dark:bg-rose-900/30', factor: 0.0, range: [181, Infinity] },
-    ];
-
-    const currentZone = useMemo(() => {
-        const delays = Number(delayMinutes) || 0;
-        return ZONES.find(z => delays >= z.range[0] && delays <= z.range[1]) || ZONES[3];
-    }, [delayMinutes]);
-
-    // Calculations
-    const rawCommission = useMemo(() => {
-        const havalehComm = (Number(havalehProfit) || 0) * ((Number(havalehRate) || 0) / 100);
-        const leasingComm = (Number(leasingCount) || 0) * (Number(leasingRate) || 0);
-        const usedComm = (Number(usedProfit) || 0) * ((Number(usedRate) || 0) / 100);
-        const factoryComm = (Number(factoryCount) || 0) * (Number(factoryRate) || 0);
-        return havalehComm + leasingComm + usedComm + factoryComm;
-    }, [havalehProfit, havalehRate, leasingCount, leasingRate, usedProfit, usedRate, factoryCount, factoryRate]);
-
-    const salesPerformanceFactor = useMemo(() => {
-        let totalAchievement = 0;
-        let activeTargets = 0;
-
-        const calculateAchievement = (actual: number | '', target: number | '') => {
-            const t = Number(target);
-            const a = Number(actual);
-            if (t > 0) {
-                activeTargets++;
-                // Cap achievement at 120% to reward over-performance slightly but not infinitely, 
-                // or keep it at 1.0 max. Let's cap at 1.0 for standard commission logic.
-                return Math.min(1, a / t); 
-            }
-            return 0;
-        };
-
-        totalAchievement += calculateAchievement(leasingActual, leasingTarget);
-        totalAchievement += calculateAchievement(factoryActual, factoryTarget);
-        totalAchievement += calculateAchievement(usedActual, usedTarget);
-        totalAchievement += calculateAchievement(havalehActual, havalehTarget);
-
-        if (activeTargets === 0) return 1; // If no targets set, don't penalize
-        return totalAchievement / activeTargets;
-    }, [leasingActual, leasingTarget, factoryActual, factoryTarget, usedActual, usedTarget, havalehActual, havalehTarget]);
-
-    const qualityScore = useMemo(() => {
-        // Sum(Score * Weight) / 100
-        const totalWeightedScore = kpis.reduce((acc, kpi) => acc + (kpi.score * kpi.weight), 0);
-        return totalWeightedScore / 100; // Returns score out of 100
-    }, [kpis]);
-
-    const qualityFactor = qualityScore / 100; // Returns factor 0.0 - 1.0
-
-    const finalCommission = rawCommission * salesPerformanceFactor * qualityFactor * currentZone.factor;
-
-    // Handlers
-    const handleKpiChange = (id: string, val: number) => {
-        setKpis(prev => prev.map(k => k.id === id ? { ...k, score: Math.min(100, Math.max(0, val)) } : k));
+    // Save deals whenever updated
+    const handleUpdateDeals = (newDeals: CommissionDeal[]) => {
+        setDeals(newDeals);
+        saveCommissionDeals(newDeals);
     };
 
-    const SalesTargetRow = ({ label, actual, setActual, target, setTarget }: { label: string, actual: number | '', setActual: (v: number | '') => void, target: number | '', setTarget: (v: number | '') => void }) => {
-        const percent = target && Number(target) > 0 ? Math.min(100, Math.round((Number(actual) / Number(target)) * 100)) : 0;
-        return (
-            <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-200 dark:border-slate-600">
-                <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{label}</span>
-                    <span className={`text-xs font-mono font-bold ${percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{percent}%</span>
-                </div>
-                <div className="flex gap-2 items-center">
-                    <div className="flex-1 relative">
-                        <label className="absolute -top-3 right-2 text-[9px] text-slate-400 bg-slate-50 dark:bg-slate-700 px-1">تارگت</label>
-                        <input 
-                            type="number" 
-                            value={target} 
-                            onChange={e => setTarget(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full px-2 py-1.5 text-center text-sm border border-slate-300 dark:border-slate-500 rounded-lg bg-white dark:bg-slate-800 outline-none focus:border-sky-500"
-                            placeholder="0"
-                        />
-                    </div>
-                    <span className="text-slate-400">/</span>
-                    <div className="flex-1 relative">
-                        <label className="absolute -top-3 right-2 text-[9px] text-slate-400 bg-slate-50 dark:bg-slate-700 px-1">فروش</label>
-                        <input 
-                            type="number" 
-                            value={actual} 
-                            onChange={e => setActual(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full px-2 py-1.5 text-center text-sm border border-slate-300 dark:border-slate-500 rounded-lg bg-white dark:bg-slate-800 outline-none focus:border-sky-500 font-bold text-slate-800 dark:text-white"
-                            placeholder="0"
-                        />
-                    </div>
-                </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-600 h-1.5 rounded-full mt-3 overflow-hidden">
-                    <div className={`h-full ${percent >= 100 ? 'bg-emerald-500' : 'bg-amber-500'} transition-all duration-500`} style={{ width: `${percent}%` }}></div>
-                </div>
-            </div>
-        );
+    // Save yard items
+    const handleUpdateYardItems = (newYard: CarYardItem[]) => {
+        setYardItems(newYard);
+        saveCarYardItems(newYard);
+    };
+
+    // Current active period object
+    const activePeriod = useMemo(() => {
+        return periods.find(p => p.id === activePeriodId) || { id: activePeriodId, title: activePeriodId };
+    }, [periods, activePeriodId]);
+
+    // Save adjustments to current period
+    const handleSaveAdjustments = (adjustments: Record<string, { bonus: number; deductions: number; notes?: string }>) => {
+        const updated = periods.map(p => {
+            if (p.id === activePeriodId) {
+                return { ...p, adjustments };
+            }
+            return p;
+        });
+        setPeriods(updated);
+        saveCommissionPeriods(updated);
+    };
+
+    // Handle Role Approvals Workflow
+    const handleApproveRole = (role: 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER') => {
+        const updated = periods.map(p => {
+            if (p.id === activePeriodId) {
+                const currentApp = { ...(p.approvals || {}) };
+                const now = new Date().toISOString();
+                if (role === 'CEO') {
+                    currentApp.ceoApproved = !currentApp.ceoApproved;
+                    currentApp.ceoApprovedAt = currentApp.ceoApproved ? now : undefined;
+                    currentApp.ceoApprovedBy = currentApp.ceoApproved ? 'مدیرعامل محترم' : undefined;
+                } else if (role === 'SALES_MANAGER') {
+                    currentApp.salesApproved = !currentApp.salesApproved;
+                    currentApp.salesApprovedAt = currentApp.salesApproved ? now : undefined;
+                    currentApp.salesApprovedBy = currentApp.salesApproved ? 'مدیر فروش' : undefined;
+                } else if (role === 'FINANCE_MANAGER') {
+                    currentApp.financeApproved = !currentApp.financeApproved;
+                    currentApp.financeApprovedAt = currentApp.financeApproved ? now : undefined;
+                    currentApp.financeApprovedBy = currentApp.financeApproved ? 'مدیر مالی' : undefined;
+                    if (currentApp.financeApproved && !currentApp.voucherNumber) {
+                        currentApp.voucherNumber = `VCH-${p.id.replace('-', '')}-01`;
+                    }
+                }
+                return { ...p, approvals: currentApp };
+            }
+            return p;
+        });
+        setPeriods(updated);
+        saveCommissionPeriods(updated);
+    };
+
+    // Deals for active period
+    const periodDeals = useMemo(() => {
+        return deals.filter(d => d.periodId === activePeriodId);
+    }, [deals, activePeriodId]);
+
+    // Open report modal helper
+    const handleOpenPrintReport = (type: ReportRoleType, staffName?: string) => {
+        setActiveReportRole(type);
+        if (staffName) setReportTargetStaff(staffName);
+        setIsReportModalOpen(true);
+    };
+
+
+    // Top performers summary for top banner highlights
+    const topPerformersHighlight = useMemo(() => {
+        const counts: Record<string, number> = {};
+        const volumes: Record<string, number> = {};
+        const profits: Record<string, number> = {};
+
+        periodDeals.forEach(deal => {
+            const persons = deal.sharedPersons && deal.sharedPersons.length > 0 
+                ? deal.sharedPersons 
+                : parseSalesPersons(deal.salesPerson);
+            const share = 1 / (persons.length || 1);
+            const volume = (deal.salePrice || deal.downPayment || 0) * share;
+            const profit = (deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0)) * share;
+
+            persons.forEach(p => {
+                counts[p] = (counts[p] || 0) + share;
+                volumes[p] = (volumes[p] || 0) + volume;
+                profits[p] = (profits[p] || 0) + profit;
+            });
+        });
+
+        const topCountPerson = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || ['-', 0];
+        const topVolumePerson = Object.entries(volumes).sort((a, b) => b[1] - a[1])[0] || ['-', 0];
+        const topProfitPerson = Object.entries(profits).sort((a, b) => b[1] - a[1])[0] || ['-', 0];
+
+        return {
+            topCount: { name: topCountPerson[0], value: topCountPerson[1] },
+            topVolume: { name: topVolumePerson[0], value: topVolumePerson[1] },
+            topProfit: { name: topProfitPerson[0], value: topProfitPerson[1] }
+        };
+    }, [periodDeals]);
+
+    // Distinct list of personnel in active period
+    const personnelList = useMemo(() => {
+        const set = new Set<string>();
+        periodDeals.forEach(d => {
+            if (d.salesPerson) {
+                d.salesPerson.split(/[/،+&]/).forEach(p => set.add(p.trim()));
+            }
+            if (d.contractWriter) set.add(d.contractWriter.trim());
+        });
+        return Array.from(set).sort();
+    }, [periodDeals]);
+
+    // Distinct list of car models in active period
+    const carModelList = useMemo(() => {
+        const set = new Set<string>();
+        periodDeals.forEach(d => {
+            if (d.carModel) set.add(d.carModel);
+        });
+        return Array.from(set).sort();
+    }, [periodDeals]);
+
+    // Filtered deals according to current tab & filters
+    const filteredDeals = useMemo(() => {
+        return periodDeals.filter(deal => {
+            // Category filter if in specific sheet tab
+            if (activeTab === 'ANBAR' && deal.category !== 'ANBAR') return false;
+            if (activeTab === 'AZAD' && deal.category !== 'AZAD') return false;
+            if (activeTab === 'HAVALEH' && deal.category !== 'HAVALEH') return false;
+            if (activeTab === 'LEASING' && deal.category !== 'LEASING') return false;
+            if (activeTab === 'REGISTRATION' && deal.category !== 'REGISTRATION') return false;
+
+            // Search query
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                const matchName = (deal.customerName || '').toLowerCase().includes(q) || (deal.buyerName || '').toLowerCase().includes(q) || (deal.sellerName || '').toLowerCase().includes(q);
+                const matchPerson = (deal.salesPerson || '').toLowerCase().includes(q) || (deal.contractWriter || '').toLowerCase().includes(q);
+                const matchCar = (deal.carModel || '').toLowerCase().includes(q);
+                const matchNotes = (deal.paymentNotes || '').toLowerCase().includes(q);
+                if (!matchName && !matchPerson && !matchCar && !matchNotes) return false;
+            }
+
+            // Filter Personnel
+            if (selectedPersonnel !== 'ALL') {
+                const isMatch = (deal.salesPerson || '').includes(selectedPersonnel) || (deal.contractWriter || '').includes(selectedPersonnel);
+                if (!isMatch) return false;
+            }
+
+            // Filter Status
+            if (selectedStatus !== 'ALL') {
+                if (deal.paymentStatus !== selectedStatus) return false;
+            }
+
+            // Filter Car Model
+            if (selectedCarModel !== 'ALL') {
+                if (deal.carModel !== selectedCarModel) return false;
+            }
+
+            return true;
+        });
+    }, [periodDeals, activeTab, searchQuery, selectedPersonnel, selectedStatus, selectedCarModel]);
+
+    // Financial Metrics for Active Period & Tab
+    const metrics = useMemo(() => {
+        const divisor = currencyUnit === 'TOMAN' ? 10 : 1;
+
+        let totalPurchase = 0;
+        let totalDailyPrice = 0;
+        let totalSales = 0;
+        let totalDailyProfitLoss = 0;
+        let totalGrossProfit = 0;
+        let totalCommission = 0;
+        let totalPaidCommission = 0;
+
+        filteredDeals.forEach(d => {
+            totalPurchase += d.purchasePrice || 0;
+            totalDailyPrice += d.dailyPrice || 0;
+            totalSales += d.salePrice || (d.downPayment || 0);
+            totalDailyProfitLoss += d.dailyProfitLoss || 0;
+            totalGrossProfit += d.grossProfit || 0;
+            totalCommission += d.commissionAmount || 0;
+
+            if (d.paymentStatus === 'PAID') {
+                totalPaidCommission += d.paidCommissionShare ?? d.commissionAmount;
+            } else if (d.paymentStatus === 'PARTIAL') {
+                totalPaidCommission += d.paidCommissionShare ?? 0;
+            }
+        });
+
+        const pendingCommission = Math.max(0, totalCommission - totalPaidCommission);
+        const payoutPercentage = totalCommission > 0 ? Math.round((totalPaidCommission / totalCommission) * 100) : 0;
+
+        return {
+            totalDealsCount: filteredDeals.length,
+            totalPurchase: Math.round(totalPurchase / divisor),
+            totalDailyPrice: Math.round(totalDailyPrice / divisor),
+            totalSales: Math.round(totalSales / divisor),
+            totalDailyProfitLoss: Math.round(totalDailyProfitLoss / divisor),
+            totalGrossProfit: Math.round(totalGrossProfit / divisor),
+            totalCommission: Math.round(totalCommission / divisor),
+            totalPaidCommission: Math.round(totalPaidCommission / divisor),
+            pendingCommission: Math.round(pendingCommission / divisor),
+            payoutPercentage,
+            divisor,
+            unitLabel: currencyUnit === 'TOMAN' ? 'تومان' : 'ریال'
+        };
+    }, [filteredDeals, currencyUnit]);
+
+    // Handle Save Single Deal
+    const handleSaveDeal = (deal: CommissionDeal) => {
+        let updated: CommissionDeal[];
+        const exists = deals.some(d => d.id === deal.id);
+        if (exists) {
+            updated = deals.map(d => d.id === deal.id ? deal : d);
+        } else {
+            updated = [deal, ...deals];
+        }
+        handleUpdateDeals(updated);
+        setEditingDeal(null);
+    };
+
+    // Handle Delete Single Deal
+    const handleDeleteDeal = (id: string) => {
+        if (!confirm('آیا از حذف این ردیف کمیسیون و معامله اطمینان دارید؟')) return;
+        const updated = deals.filter(d => d.id !== id);
+        handleUpdateDeals(updated);
+    };
+
+    // Handle Quick Payment Status Toggle
+    const handleTogglePaymentStatus = (id: string) => {
+        const deal = deals.find(d => d.id === id);
+        if (!deal) return;
+
+        let nextStatus: CommissionPaymentStatus = 'PAID';
+        if (deal.paymentStatus === 'PAID') nextStatus = 'PENDING';
+        else if (deal.paymentStatus === 'PENDING') nextStatus = 'PARTIAL';
+        else if (deal.paymentStatus === 'PARTIAL') nextStatus = 'PAID';
+
+        const updated = deals.map(d => {
+            if (d.id === id) {
+                return {
+                    ...d,
+                    paymentStatus: nextStatus,
+                    paymentDate: nextStatus === 'PAID' ? (d.paymentDate || d.saleDate) : d.paymentDate,
+                    paidCommissionShare: nextStatus === 'PAID' ? d.commissionAmount : (nextStatus === 'PENDING' ? 0 : d.paidCommissionShare)
+                };
+            }
+            return d;
+        });
+
+        handleUpdateDeals(updated);
+    };
+
+    // Handle Excel Import
+    const handleImportDeals = (importedDeals: CommissionDeal[]) => {
+        const updated = [...importedDeals, ...deals];
+        handleUpdateDeals(updated);
+    };
+
+    // Handle Export to CSV (Excel format)
+    const handleExportCSV = () => {
+        if (filteredDeals.length === 0) {
+            alert('هیچ معامله‌ای برای خروجی وجود ندارد.');
+            return;
+        }
+
+        const headers = [
+            'ردیف',
+            'دسته‌بندی',
+            'تاریخ فروش',
+            'نام پرسنل فروش',
+            'نام خریدار / مشتری',
+            'نام فروشنده',
+            'مدل خودرو',
+            'نرخ خرید (ریال)',
+            'قیمت روز (ریال)',
+            'نرخ فروش / پیش پرداخت (ریال)',
+            'سود یا زیان روز (ریال)',
+            'کمیسیون کل / سود ناخالص',
+            'پورسانت کل (ریال)',
+            'وضعیت واریز',
+            'توضیحات واریز'
+        ];
+
+        const rows = filteredDeals.map((d, index) => [
+            index + 1,
+            `"${d.category === 'ANBAR' ? 'فروش انبار' : d.category === 'AZAD' ? 'فروش آزاد' : d.category === 'HAVALEH' ? 'فروش حواله' : d.category === 'LEASING' ? 'لیزینگ' : 'ثبت نام'}"`,
+            `"${d.saleDate || ''}"`,
+            `"${d.salesPerson || ''}"`,
+            `"${d.customerName || d.buyerName || ''}"`,
+            `"${d.sellerName || ''}"`,
+            `"${d.carModel || ''}"`,
+            d.purchasePrice || 0,
+            d.dailyPrice || 0,
+            d.salePrice || d.downPayment || 0,
+            d.dailyProfitLoss || 0,
+            d.grossProfit || 0,
+            d.commissionAmount || 0,
+            `"${d.paymentStatus === 'PAID' ? 'واریز شد' : d.paymentStatus === 'PARTIAL' ? 'علی‌الحساب' : 'در انتظار'}"`,
+            `"${(d.paymentNotes || '').replace(/"/g, '""')}"`
+        ]);
+
+        const csvContent = '\uFEFF' + [
+            headers.join(','),
+            ...rows.map(r => r.join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `commission_${activeTab}_${activePeriod.title.replace(/\s+/g, '_')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // Reset to defaults
+    const handleResetDefaults = () => {
+        if (!confirm('آیا مایلید داده‌ها به ۵ شیت کامل فایل اکسل تیر و مرداد ماه بازنشانی شوند؟')) return;
+        const res = resetCommissionDataToDefaults();
+        setPeriods(res.periods);
+        setDeals(res.deals);
+        setYardItems(res.yard);
+        setActivePeriodId('1405-05');
+    };
+
+    // Add New Period
+    const handleCreatePeriod = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newPeriodTitle.trim()) return;
+
+        const newId = `1405-${periods.length + 1 < 10 ? '0' : ''}${periods.length + 1}`;
+        const newPeriod: CommissionPeriod = {
+            id: newId,
+            title: newPeriodTitle.trim()
+        };
+
+        const updated = [newPeriod, ...periods];
+        setPeriods(updated);
+        saveCommissionPeriods(updated);
+        setActivePeriodId(newId);
+        setNewPeriodTitle('');
+        setIsNewPeriodModalOpen(false);
     };
 
     return (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in pb-20">
-            {/* Header */}
-            <div className="flex items-center gap-3 mb-8">
-                <div className="p-3 bg-teal-100 dark:bg-teal-900/30 rounded-xl text-teal-600 dark:text-teal-400">
-                    <CalculatorIcon className="w-6 h-6" />
-                </div>
-                <div>
-                    <h2 className="text-2xl font-black text-slate-800 dark:text-white">محاسبه پورسانت</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">مدل جامع (عملکرد، کیفیت، انضباط)</p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Left Column: Inputs */}
-                <div className="lg:col-span-2 space-y-6">
-                    
-                    {/* Step 1: Raw Commission */}
-                    <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-6">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">۱</span>
-                            پورسانت پایه بر اساس نوع فروش
-                        </h3>
-
-                        <div className="space-y-6">
-                            {/* Havaleh */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
-                                <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3">فروش حواله</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">مجموع سود (تفاضل قیمت کارخانه و فروش)</label>
-                                        <input 
-                                            type="number" 
-                                            value={havalehProfit} 
-                                            onChange={e => setHavalehProfit(e.target.value === '' ? '' : Number(e.target.value))} 
-                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm"
-                                            placeholder="تومان" 
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">درصد پورسانت</label>
-                                        <div className="relative">
-                                            <input 
-                                                type="number" 
-                                                value={havalehRate} 
-                                                onChange={e => setHavalehRate(e.target.value === '' ? '' : Number(e.target.value))} 
-                                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm pl-8"
-                                            />
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-3 text-left text-sm font-bold text-blue-600 dark:text-blue-400">
-                                    پورسانت حواله: {((Number(havalehProfit) || 0) * ((Number(havalehRate) || 0) / 100)).toLocaleString('fa-IR')} تومان
-                                </div>
-                            </div>
-
-                            {/* Leasing */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
-                                <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3">فروش لیزینگی</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">تعداد پرونده‌های لیزینگ</label>
-                                        <input 
-                                            type="number" 
-                                            value={leasingCount} 
-                                            onChange={e => setLeasingCount(e.target.value === '' ? '' : Number(e.target.value))} 
-                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm"
-                                            placeholder="عدد" 
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">مبلغ پورسانت هر پرونده (تومان)</label>
-                                        <input 
-                                            type="number" 
-                                            value={leasingRate} 
-                                            onChange={e => setLeasingRate(e.target.value === '' ? '' : Number(e.target.value))} 
-                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="mt-3 text-left text-sm font-bold text-blue-600 dark:text-blue-400">
-                                    پورسانت لیزینگ: {((Number(leasingCount) || 0) * (Number(leasingRate) || 0)).toLocaleString('fa-IR')} تومان
-                                </div>
-                            </div>
-
-                            {/* Used/Zero */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
-                                <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3">فروش صفر یا کارکرده (نقدی)</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">مجموع کارمزد یا سود فروش</label>
-                                        <input 
-                                            type="number" 
-                                            value={usedProfit} 
-                                            onChange={e => setUsedProfit(e.target.value === '' ? '' : Number(e.target.value))} 
-                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm"
-                                            placeholder="تومان" 
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">درصد پورسانت</label>
-                                        <div className="relative">
-                                            <input 
-                                                type="number" 
-                                                value={usedRate} 
-                                                onChange={e => setUsedRate(e.target.value === '' ? '' : Number(e.target.value))} 
-                                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm pl-8"
-                                            />
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-3 text-left text-sm font-bold text-blue-600 dark:text-blue-400">
-                                    پورسانت نقدی: {((Number(usedProfit) || 0) * ((Number(usedRate) || 0) / 100)).toLocaleString('fa-IR')} تومان
-                                </div>
-                            </div>
-
-                            {/* Factory */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
-                                <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3">ثبت نام کارخانه</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">تعداد ثبت نام</label>
-                                        <input 
-                                            type="number" 
-                                            value={factoryCount} 
-                                            onChange={e => setFactoryCount(e.target.value === '' ? '' : Number(e.target.value))} 
-                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm"
-                                            placeholder="عدد" 
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">مبلغ پورسانت هر ثبت نام (تومان)</label>
-                                        <input 
-                                            type="number" 
-                                            value={factoryRate} 
-                                            onChange={e => setFactoryRate(e.target.value === '' ? '' : Number(e.target.value))} 
-                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-sm"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="mt-3 text-left text-sm font-bold text-blue-600 dark:text-blue-400">
-                                    پورسانت ثبت نام: {((Number(factoryCount) || 0) * (Number(factoryRate) || 0)).toLocaleString('fa-IR')} تومان
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex justify-between items-center border border-blue-100 dark:border-blue-800">
-                            <span className="text-sm font-bold text-blue-800 dark:text-blue-300">مجموع پورسانت پایه (خام):</span>
-                            <span className="font-mono font-black text-blue-900 dark:text-blue-200 text-xl">
-                                {rawCommission.toLocaleString('fa-IR')} <span className="text-sm font-sans font-normal">تومان</span>
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in pb-24" dir="rtl">
+            
+            {/* Header with Title, Top Performer Quick Badges & Currency Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                        <Trophy className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-black text-slate-800 dark:text-white">
+                                سیستم استاندارد کمیسیون و ارزیابی تیم فروش
+                            </h1>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                                شناسایی فروشندگان برتر و سودآور
                             </span>
                         </div>
-                    </section>
-
-                    {/* Step 2: Sales Volume Targets */}
-                    <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center text-xs">۲</span>
-                            ضریب عملکرد فروش (تارگت‌ها)
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                            <SalesTargetRow 
-                                label="فروش لیزینگی" 
-                                actual={leasingActual} 
-                                setActual={setLeasingActual} 
-                                target={leasingTarget} 
-                                setTarget={setLeasingTarget} 
-                            />
-                            <SalesTargetRow 
-                                label="ثبت نام کارخانه" 
-                                actual={factoryActual} 
-                                setActual={setFactoryActual} 
-                                target={factoryTarget} 
-                                setTarget={setFactoryTarget} 
-                            />
-                            <SalesTargetRow 
-                                label="فروش دست دوم" 
-                                actual={usedActual} 
-                                setActual={setUsedActual} 
-                                target={usedTarget} 
-                                setTarget={setUsedTarget} 
-                            />
-                            <SalesTargetRow 
-                                label="فروش حواله" 
-                                actual={havalehActual} 
-                                setActual={setHavalehActual} 
-                                target={havalehTarget} 
-                                setTarget={setHavalehTarget} 
-                            />
-                        </div>
-                        <div className="mt-4 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg flex justify-between items-center">
-                            <span className="text-sm font-medium text-cyan-800 dark:text-cyan-300">ضریب عملکرد (میانگین):</span>
-                            <span className="font-mono font-bold text-cyan-900 dark:text-cyan-200 text-lg">
-                                {salesPerformanceFactor.toFixed(2)}
-                            </span>
-                        </div>
-                    </section>
-
-                    {/* Step 3: Quality KPIs */}
-                    <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs">۳</span>
-                            ضریب کیفیت (شاخص‌های کیفی)
-                        </h3>
-                        <div className="space-y-4">
-                            {kpis.map(kpi => (
-                                <div key={kpi.id}>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                            {kpi.label} <span className="text-xs text-slate-400">(وزن: {kpi.weight}٪)</span>
-                                        </label>
-                                        <span className="font-mono font-bold text-sm text-purple-600 dark:text-purple-400">{kpi.score}</span>
-                                    </div>
-                                    <input 
-                                        type="range" 
-                                        min="0" 
-                                        max="100" 
-                                        value={kpi.score} 
-                                        onChange={e => handleKpiChange(kpi.id, Number(e.target.value))}
-                                        className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                        <div className="mt-6 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg flex justify-between items-center">
-                            <span className="text-sm font-medium text-purple-800 dark:text-purple-300">ضریب کیفیت:</span>
-                            <span className="font-mono font-bold text-purple-900 dark:text-purple-200 text-lg">
-                                {qualityFactor.toFixed(2)}
-                            </span>
-                        </div>
-                    </section>
-
-                    {/* Step 4: Attendance */}
-                    <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-xs">۴</span>
-                            ضریب انضباط (مدل ناحیه‌ای)
-                        </h3>
-                        
-                        <div className="flex flex-col sm:flex-row gap-6 items-start">
-                            <div className="w-full sm:w-1/2">
-                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">مجموع کسر کار/تاخیر ماهانه (دقیقه)</label>
-                                <input 
-                                    type="number" 
-                                    value={delayMinutes} 
-                                    onChange={e => setDelayMinutes(e.target.value === '' ? '' : Number(e.target.value))}
-                                    className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-slate-50 dark:bg-slate-700/50 focus:ring-2 focus:ring-teal-500 outline-none transition-all font-mono text-xl"
-                                    placeholder="0"
-                                />
-                            </div>
-                            
-                            <div className={`w-full sm:w-1/2 p-4 rounded-xl border transition-colors duration-300 ${currentZone.bgColor} ${currentZone.color.replace('text-', 'border-').replace('600', '200')}`}>
-                                <p className="text-xs font-bold opacity-80 mb-1">وضعیت:</p>
-                                <div className={`text-lg font-black mb-2 ${currentZone.color}`}>
-                                    {currentZone.label}
-                                </div>
-                                <div className="flex justify-between items-center text-sm font-bold bg-white/50 dark:bg-black/10 p-2 rounded-lg">
-                                    <span>ضریب اعمالی:</span>
-                                    <span className="font-mono text-lg">{currentZone.factor}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Zone Legend */}
-                        <div className="mt-6 flex flex-wrap gap-2">
-                            {ZONES.map(z => (
-                                <div key={z.name} className={`text-[10px] px-2 py-1 rounded border ${Number(delayMinutes) >= z.range[0] && Number(delayMinutes) <= z.range[1] ? 'opacity-100 ring-2 ring-offset-1 ring-teal-500 font-bold' : 'opacity-50 grayscale'}`}
-                                    style={{ backgroundColor: z.name === 'green' ? '#ecfdf5' : z.name === 'yellow1' ? '#fffbeb' : z.name === 'yellow2' ? '#fff7ed' : '#fff1f2', color: '#333' }}
-                                >
-                                    {z.label}: {z.factor}
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-
-                </div>
-
-                {/* Right Column: Result Sticky */}
-                <div className="lg:col-span-1">
-                    <div className="sticky top-6">
-                        <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-teal-500/20 rounded-full blur-2xl -ml-10 -mb-10 pointer-events-none"></div>
-                            
-                            <h3 className="text-lg font-bold mb-6 text-center border-b border-white/10 pb-4">نتیجه نهایی محاسبه</h3>
-                            
-                            <div className="space-y-4 mb-8 text-sm">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-400">پورسانت خام:</span>
-                                    <span className="font-mono">{rawCommission.toLocaleString('fa-IR')}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-400">× ضریب عملکرد فروش:</span>
-                                    <span className="font-mono text-cyan-300">{salesPerformanceFactor.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-400">× ضریب کیفیت:</span>
-                                    <span className="font-mono text-purple-300">{qualityFactor.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-400">× ضریب انضباط:</span>
-                                    <span className={`font-mono ${currentZone.name === 'green' ? 'text-emerald-300' : 'text-rose-300'}`}>{currentZone.factor}</span>
-                                </div>
-                            </div>
-
-                            <div className="bg-white/10 p-4 rounded-2xl text-center">
-                                <p className="text-xs text-slate-400 mb-1">مبلغ قابل پرداخت</p>
-                                <p className="text-3xl font-black font-mono tracking-tight text-teal-400">
-                                    {Math.round(finalCommission).toLocaleString('fa-IR')}
-                                    <span className="text-xs font-sans text-white/60 mr-2">تومان</span>
-                                </p>
-                            </div>
-
-                            <div className="mt-6 text-[10px] text-center text-slate-500">
-                                * محاسبه بر اساس مدل ۴ ضریبی (حجم، کیفیت، انضباط).
-                            </div>
-                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            ثبت سریع معاملات، محاسبه آنی سودآوری و پورسانت، رتبه‌بندی مشاوران و صدور فیش‌های مالی
+                        </p>
                     </div>
                 </div>
 
+                {/* Right controls: Top Highlights, Currency Switch, Quick Add Deal */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                    
+                    {/* Quick Add Deal Button */}
+                    <button
+                        onClick={() => {
+                            setEditingDeal(null);
+                            setIsDealModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black rounded-2xl shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" />
+                        ثبت معامله جدید کارمند
+                    </button>
+
+                    {/* Currency Unit Switch */}
+                    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl flex items-center border border-slate-200 dark:border-slate-700">
+                        <button
+                            onClick={() => setCurrencyUnit('RIAL')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                currencyUnit === 'RIAL'
+                                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                            }`}
+                        >
+                            ریال (اکسل)
+                        </button>
+                        <button
+                            onClick={() => setCurrencyUnit('TOMAN')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                currencyUnit === 'TOMAN'
+                                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                            }`}
+                        >
+                            تومان
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={handleResetDefaults}
+                        title="بازنشانی داده‌ها به فایل اکسل پیش‌فرض تیر و مرداد"
+                        className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-2xl border border-slate-200 dark:border-slate-700 transition-colors"
+                    >
+                        <RotateCcw className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
+
+            {/* Period Tabs & Navigation */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-2xl border border-slate-200 dark:border-slate-700">
+                {/* Period Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    <span className="text-xs font-bold text-slate-400 px-2 flex items-center gap-1 whitespace-nowrap">
+                        <Calendar className="w-3.5 h-3.5" />
+                        دوره مالی:
+                    </span>
+                    {periods.map(period => (
+                        <button
+                            key={period.id}
+                            onClick={() => setActivePeriodId(period.id)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                                activePeriodId === period.id
+                                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                            }`}
+                        >
+                            {period.title}
+                        </button>
+                    ))}
+                    <button
+                        onClick={() => setIsNewPeriodModalOpen(true)}
+                        className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors flex items-center gap-1 whitespace-nowrap"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        دوره جدید
+                    </button>
+                </div>
+
+                <div className="text-xs font-bold text-slate-500 dark:text-slate-400 px-3 flex items-center gap-3">
+                    <span>کل معاملات: <b className="font-mono text-emerald-600">{periodDeals.length}</b></span>
+                    {topPerformersHighlight.topProfit.name !== '-' && (
+                        <span className="text-amber-600 dark:text-amber-400">
+                            👑 سودآورترین: <b>{topPerformersHighlight.topProfit.name}</b>
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Organizational Role & Perspective Switcher Bar */}
+            <div className="bg-white dark:bg-slate-800 p-2 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                    <span className="text-xs font-black text-slate-400 px-3 flex items-center gap-1.5 whitespace-nowrap">
+                        <Briefcase className="w-4 h-4 text-indigo-500" />
+                        سمت سازمانی / فیلتر دسترسی:
+                    </span>
+
+                    {[
+                        { id: 'CEO', label: '👔 دیدگاه مدیر عامل', desc: 'سودآوری کل و مارجین شرکت' },
+                        { id: 'SALES_MANAGER', label: '📊 دیدگاه مدیر فروش', desc: 'تارگت، لیدربورد و پاداش' },
+                        { id: 'FINANCE_MANAGER', label: '💳 دیدگاه مدیر مالی', desc: 'تسویه، سند حسابداری و پایا' },
+                        { id: 'STAFF', label: '👤 کارنامه پرسنل فروش', desc: 'فیش انفرادی و ریز قراردادها' },
+                        { id: 'OPERATIONS', label: '📑 شیت‌ها و ثبت معاملات', desc: 'جداول ۵ گانه اکسل' },
+                    ].map(role => (
+                        <button
+                            key={role.id}
+                            onClick={() => setCurrentPerspective(role.id as MainPerspective)}
+                            className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all whitespace-nowrap flex items-center gap-2 ${
+                                currentPerspective === role.id
+                                    ? 'bg-gradient-to-r from-slate-900 to-indigo-950 text-white shadow-lg shadow-indigo-950/30 ring-2 ring-indigo-500/50'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                            }`}
+                        >
+                            {role.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Quick Print Official Reports Button */}
+                <div className="flex items-center gap-2 px-2">
+                    <button
+                        onClick={() => handleOpenPrintReport(currentPerspective === 'OPERATIONS' ? 'CEO' : (currentPerspective === 'FINANCE_MANAGER' ? 'FINANCE' : currentPerspective as ReportRoleType))}
+                        className="px-4 py-2 bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white text-xs font-bold rounded-2xl shadow-md flex items-center gap-2 transition-all"
+                    >
+                        <Printer className="w-4 h-4 text-emerald-400" />
+                        سیستم صدور گزارش رسمی سازمانی
+                    </button>
+                </div>
+            </div>
+
+            {/* Approval Workflow Stepper Bar */}
+            <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 mb-6 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                        فرآیند تأییدات سلسله‌مراتبی دوره ({activePeriod.title}):
+                    </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4">
+                    {/* 1. Sales Manager */}
+                    <div className="flex items-center gap-1.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${activePeriod.approvals?.salesApproved ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-300'}`} />
+                        <span className={`font-bold ${activePeriod.approvals?.salesApproved ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                            ۱. تأیید مدیر فروش {activePeriod.approvals?.salesApproved ? '✓' : '(در انتظار)'}
+                        </span>
+                    </div>
+
+                    {/* 2. Finance Manager */}
+                    <div className="flex items-center gap-1.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${activePeriod.approvals?.financeApproved ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-300'}`} />
+                        <span className={`font-bold ${activePeriod.approvals?.financeApproved ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                            ۲. تأیید مدیر مالی {activePeriod.approvals?.financeApproved ? '✓' : '(در انتظار)'}
+                        </span>
+                    </div>
+
+                    {/* 3. CEO */}
+                    <div className="flex items-center gap-1.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${activePeriod.approvals?.ceoApproved ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-300'}`} />
+                        <span className={`font-bold ${activePeriod.approvals?.ceoApproved ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                            ۳. ابلاغ مدیرعامل {activePeriod.approvals?.ceoApproved ? '✓' : '(در انتظار)'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* View Switching based on currentPerspective */}
+
+            {/* 1. CEO Strategic View */}
+            {currentPerspective === 'CEO' && (
+                <CommissionCeoView
+                    deals={periodDeals}
+                    activePeriod={activePeriod}
+                    currencyUnit={currencyUnit}
+                    onApproveCeo={() => handleApproveRole('CEO')}
+                    onOpenPrintReport={(t) => handleOpenPrintReport(t)}
+                />
+            )}
+
+            {/* 2. Sales Manager Operational View */}
+            {currentPerspective === 'SALES_MANAGER' && (
+                <CommissionSalesManagerView
+                    deals={periodDeals}
+                    activePeriod={activePeriod}
+                    currencyUnit={currencyUnit}
+                    onApproveSales={() => handleApproveRole('SALES_MANAGER')}
+                    onOpenNewDeal={() => {
+                        setEditingDeal(null);
+                        setIsDealModalOpen(true);
+                    }}
+                    onOpenPrintReport={(t) => handleOpenPrintReport(t)}
+                    onSaveAdjustments={handleSaveAdjustments}
+                />
+            )}
+
+            {/* 3. Finance Manager View */}
+            {currentPerspective === 'FINANCE_MANAGER' && (
+                <CommissionFinanceView
+                    deals={periodDeals}
+                    activePeriod={activePeriod}
+                    currencyUnit={currencyUnit}
+                    onApproveFinance={() => handleApproveRole('FINANCE_MANAGER')}
+                    onOpenPrintReport={(t) => handleOpenPrintReport(t)}
+                />
+            )}
+
+            {/* 4. Staff Personal Portal View */}
+            {currentPerspective === 'STAFF' && (
+                <CommissionStaffView
+                    deals={periodDeals}
+                    activePeriod={activePeriod}
+                    currencyUnit={currencyUnit}
+                    onOpenPrintReport={(t, staff) => handleOpenPrintReport(t, staff)}
+                />
+            )}
+
+            {/* 5. Operations & Excel Sheets Ledger View */}
+            {currentPerspective === 'OPERATIONS' && (
+                <div>
+                    {/* Standard Navigation Tabs */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-6 border-b border-slate-200 dark:border-slate-700">
+                        {[
+                            { id: 'analytics', label: '🏆 رتبه‌بندی و فروشندگان برتر (لیدربورد)', icon: <Trophy className="w-4 h-4 text-amber-500" /> },
+                            { id: 'summary', label: 'شیت تجمیعی نهایی و فیش پرسنل', icon: <Users className="w-4 h-4" /> },
+                            { id: 'ANBAR', label: 'فروش انبار (۰.۰۵٪)', icon: <Building2 className="w-4 h-4" /> },
+                            { id: 'AZAD', label: 'فروش آزاد (۱۰٪ کمیسیون)', icon: <Repeat className="w-4 h-4" /> },
+                            { id: 'HAVALEH', label: 'فروش حواله (۰.۰۵٪)', icon: <FileText className="w-4 h-4" /> },
+                            { id: 'LEASING', label: 'فروش لیزینگ (۰.۱٪)', icon: <CreditCard className="w-4 h-4" /> },
+                            { id: 'REGISTRATION', label: 'ثبت‌نام کارخانه', icon: <ClipboardList className="w-4 h-4" /> },
+                            { id: 'yard', label: 'کاردکس خودروهای ورودی/ترخیص', icon: <Car className="w-4 h-4" /> },
+                            { id: 'all', label: 'کل معاملات یکجا', icon: <Table className="w-4 h-4" /> },
+                            { id: 'calculator', label: 'ماشین‌حساب ضرایب KPI', icon: <Calculator className="w-4 h-4" /> },
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as ActiveSheetTab)}
+                                className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all whitespace-nowrap ${
+                                    activeTab === tab.id
+                                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
+                                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                                }`}
+                            >
+                                {tab.icon}
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* 1. If tab is Analytics & Leaderboard -> render CommissionSalesAnalytics */}
+                    {activeTab === 'analytics' && (
+                        <CommissionSalesAnalytics
+                            deals={periodDeals}
+                            currencyUnit={currencyUnit}
+                            activePeriodName={activePeriod.title}
+                        />
+                    )}
+
+                    {/* 2. If tab is Summary -> render CommissionPersonnelReport (Final Summary Sheet) */}
+                    {activeTab === 'summary' && (
+                        <CommissionPersonnelReport
+                            deals={periodDeals}
+                            currencyUnit={currencyUnit}
+                            activePeriodName={activePeriod.title}
+                            activePeriodId={activePeriodId}
+                            periodAdjustments={activePeriod.adjustments}
+                            onSaveAdjustments={handleSaveAdjustments}
+                        />
+                    )}
+
+                    {/* 3. If tab is Car Yard / Inventory Ledger */}
+                    {activeTab === 'yard' && (
+                        <CommissionCarYardLedger
+                            items={yardItems}
+                            onUpdateItems={handleUpdateYardItems}
+                            activePeriodId={activePeriodId}
+                            activePeriodName={activePeriod.title}
+                        />
+                    )}
+
+                    {/* 4. If tab is Multi-Factor Calculator */}
+                    {activeTab === 'calculator' && (
+                        <CommissionMultiFactorCalculator />
+                    )}
+                </div>
+            )}
+
+            {/* 5. If tab is a specific ledger (ANBAR, AZAD, HAVALEH, LEASING, REGISTRATION, ALL) */}
+            {activeTab !== 'analytics' && activeTab !== 'summary' && activeTab !== 'yard' && activeTab !== 'calculator' && (
+                <div className="space-y-6 animate-fade-in">
+                    
+                    {/* KPI Stat Cards for current sheet */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <span className="text-[11px] text-slate-400 font-bold block mb-1">
+                                {activeTab === 'LEASING' ? 'مجموع پیش‌پرداخت' : 'مجموع فروش'}
+                            </span>
+                            <div className="font-mono font-black text-slate-800 dark:text-white text-base truncate">
+                                {metrics.totalSales.toLocaleString('fa-IR')}
+                            </div>
+                            <span className="text-[10px] text-slate-400">{metrics.unitLabel} • {metrics.totalDealsCount} معامله</span>
+                        </div>
+
+                        {activeTab === 'AZAD' ? (
+                            <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                <span className="text-[11px] text-indigo-500 font-bold block mb-1">مجموع کمیسیون کل معاملات</span>
+                                <div className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-base truncate">
+                                    {metrics.totalGrossProfit.toLocaleString('fa-IR')}
+                                </div>
+                                <span className="text-[10px] text-slate-400">{metrics.unitLabel} (فروش - خرید)</span>
+                            </div>
+                        ) : (
+                            <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                <span className="text-[11px] text-slate-400 font-bold block mb-1">سود/زیان نسبت به روز</span>
+                                <div className={`font-mono font-black text-base truncate ${metrics.totalDailyProfitLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {metrics.totalDailyProfitLoss > 0 ? '+' : ''}{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}
+                                </div>
+                                <span className="text-[10px] text-slate-400">{metrics.unitLabel}</span>
+                            </div>
+                        )}
+
+                        <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 shadow-sm">
+                            <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold block mb-1">
+                                پورسانت کل تعلق‌گرفته
+                            </span>
+                            <div className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base truncate">
+                                {metrics.totalCommission.toLocaleString('fa-IR')}
+                            </div>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                {activeTab === 'AZAD' ? '۱۰٪ سود کمیسیون' : activeTab === 'LEASING' ? '۰.۱٪ پیش‌پرداخت' : '۰.۰۵٪ فروش'}
+                            </span>
+                        </div>
+
+                        <div className="p-4 bg-teal-50/60 dark:bg-teal-950/30 rounded-2xl border border-teal-200 dark:border-teal-800/50 shadow-sm">
+                            <span className="text-[11px] text-teal-800 dark:text-teal-300 font-bold block mb-1">واریز شده به مشاوران</span>
+                            <div className="font-mono font-black text-teal-700 dark:text-teal-300 text-base truncate">
+                                {metrics.totalPaidCommission.toLocaleString('fa-IR')}
+                            </div>
+                            <span className="text-[10px] text-teal-600 dark:text-teal-400">{metrics.payoutPercentage}٪ کل پورسانت</span>
+                        </div>
+                    </div>
+
+                    {/* Actions & Filters Bar */}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col lg:flex-row items-center justify-between gap-4">
+                        
+                        {/* Search & Select Filters */}
+                        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                            <div className="relative flex-1 min-w-[200px]">
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="جستجو در نام، پرسنل، مدل یا توضیحات..."
+                                    className="w-full pl-3 pr-9 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800 dark:text-white"
+                                />
+                                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                            </div>
+
+                            <select
+                                value={selectedPersonnel}
+                                onChange={e => setSelectedPersonnel(e.target.value)}
+                                className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
+                            >
+                                <option value="ALL">همه پرسنل فروش ({personnelList.length})</option>
+                                {personnelList.map(person => (
+                                    <option key={person} value={person}>{person}</option>
+                                ))}
+                            </select>
+
+                            <select
+                                value={selectedStatus}
+                                onChange={e => setSelectedStatus(e.target.value)}
+                                className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
+                            >
+                                <option value="ALL">همه وضعیت‌های واریز</option>
+                                <option value="PAID">واریز شد</option>
+                                <option value="PARTIAL">علی‌الحساب</option>
+                                <option value="PENDING">در انتظار تسویه</option>
+                            </select>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                            <button
+                                onClick={() => setIsImportModalOpen(true)}
+                                className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                            >
+                                <Upload className="w-4 h-4" />
+                                ورود اکسل / CSV
+                            </button>
+
+                            <button
+                                onClick={handleExportCSV}
+                                className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                            >
+                                <Download className="w-4 h-4" />
+                                خروجی اکسل
+                            </button>
+
+                            <button
+                                onClick={() => window.print()}
+                                className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                            >
+                                <Printer className="w-4 h-4" />
+                                چاپ
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setEditingDeal(null);
+                                    setIsDealModalOpen(true);
+                                }}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+                            >
+                                <Plus className="w-4 h-4" />
+                                ثبت معامله جدید
+                            </button>
+                        </div>
+
+                    </div>
+
+                    {/* Table for current Sheet */}
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-right border-collapse">
+                                <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                                    <tr>
+                                        <th className="py-3 px-3 text-center">ردیف</th>
+                                        <th className="py-3 px-3">تاریخ فروش</th>
+                                        <th className="py-3 px-3.5">نام پرسنل فروش</th>
+                                        
+                                        {activeTab === 'AZAD' ? (
+                                            <>
+                                                <th className="py-3 px-3">نام فروشنده</th>
+                                                <th className="py-3 px-3">نام خریدار</th>
+                                            </>
+                                        ) : (
+                                            <th className="py-3 px-3.5">نام مشتری</th>
+                                        )}
+
+                                        <th className="py-3 px-3">مدل خودرو</th>
+                                        
+                                        {activeTab === 'LEASING' || activeTab === 'REGISTRATION' ? (
+                                            <th className="py-3 px-3.5">پیش پرداخت ({metrics.unitLabel})</th>
+                                        ) : (
+                                            <>
+                                                <th className="py-3 px-3.5">قیمت روز ({metrics.unitLabel})</th>
+                                                <th className="py-3 px-3.5">نرخ خرید ({metrics.unitLabel})</th>
+                                                <th className="py-3 px-3.5">نرخ فروش ({metrics.unitLabel})</th>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'AZAD' && (
+                                            <th className="py-3 px-3.5">کمیسیون کل ({metrics.unitLabel})</th>
+                                        )}
+
+                                        {activeTab === 'HAVALEH' && (
+                                            <>
+                                                <th className="py-3 px-3.5">مبلغ سبد بعدی ({metrics.unitLabel})</th>
+                                                <th className="py-3 px-3">سود و زیان</th>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'ANBAR' && (
+                                            <th className="py-3 px-3">سود/زیان روز</th>
+                                        )}
+
+                                        <th className="py-3 px-3.5">پورسانت کل ({metrics.unitLabel})</th>
+                                        <th className="py-3 px-3">وضعیت واریز</th>
+                                        <th className="py-3 px-3">توضیحات واریز</th>
+                                        <th className="py-3 px-3 text-center">عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                    {filteredDeals.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={14} className="py-12 text-center text-slate-400">
+                                                هیچ معامله‌ای در این شیت مطابق با فیلترهای انتخابی یافت نشد.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredDeals.map((deal, index) => {
+                                            const div = metrics.divisor;
+                                            const isShared = (deal.sharedPersons && deal.sharedPersons.length > 1) || (deal.salesPerson || '').includes('/');
+
+                                            return (
+                                                <tr key={deal.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors">
+                                                    <td className="py-3 px-3 text-center font-mono text-slate-400">
+                                                        {index + 1}
+                                                    </td>
+                                                    <td className="py-3 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                                        {deal.saleDate || '-'}
+                                                    </td>
+                                                    <td className="py-3 px-3.5 whitespace-nowrap">
+                                                        <div className="font-bold text-slate-800 dark:text-white">
+                                                            {deal.salesPerson}
+                                                        </div>
+                                                        {isShared && (
+                                                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 flex items-center gap-0.5 mt-0.5 font-bold">
+                                                                <Share2 className="w-3 h-3" />
+                                                                تسهیم ۵۰٪
+                                                            </span>
+                                                        )}
+                                                    </td>
+
+                                                    {activeTab === 'AZAD' ? (
+                                                        <>
+                                                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                                                {deal.sellerName || '-'}
+                                                            </td>
+                                                            <td className="py-3 px-3 font-bold text-slate-800 dark:text-white whitespace-nowrap">
+                                                                {deal.buyerName || deal.customerName}
+                                                            </td>
+                                                        </>
+                                                    ) : (
+                                                        <td className="py-3 px-3.5 font-medium text-slate-800 dark:text-white whitespace-nowrap">
+                                                            {deal.customerName}
+                                                        </td>
+                                                    )}
+
+                                                    <td className="py-3 px-3 font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                                        {deal.carModel}
+                                                    </td>
+
+                                                    {activeTab === 'LEASING' || activeTab === 'REGISTRATION' ? (
+                                                        <td className="py-3 px-3.5 font-mono font-black text-slate-900 dark:text-white">
+                                                            {deal.downPayment ? Math.round(deal.downPayment / div).toLocaleString('fa-IR') : '-'}
+                                                        </td>
+                                                    ) : (
+                                                        <>
+                                                            <td className="py-3 px-3.5 font-mono text-slate-500">
+                                                                {deal.dailyPrice ? Math.round(deal.dailyPrice / div).toLocaleString('fa-IR') : '-'}
+                                                            </td>
+                                                            <td className="py-3 px-3.5 font-mono text-slate-500">
+                                                                {deal.purchasePrice ? Math.round(deal.purchasePrice / div).toLocaleString('fa-IR') : '-'}
+                                                            </td>
+                                                            <td className="py-3 px-3.5 font-mono font-black text-slate-900 dark:text-white">
+                                                                {deal.salePrice ? Math.round(deal.salePrice / div).toLocaleString('fa-IR') : '-'}
+                                                            </td>
+                                                        </>
+                                                    )}
+
+                                                    {activeTab === 'AZAD' && (
+                                                        <td className={`py-3 px-3.5 font-mono font-bold ${
+                                                            (deal.grossProfit || 0) >= 0 ? 'text-indigo-600' : 'text-rose-600'
+                                                        }`}>
+                                                            {deal.grossProfit !== undefined ? Math.round(deal.grossProfit / div).toLocaleString('fa-IR') : '-'}
+                                                        </td>
+                                                    )}
+
+                                                    {activeTab === 'HAVALEH' && (
+                                                        <>
+                                                            <td className="py-3 px-3.5 font-mono text-slate-500">
+                                                                {deal.nextBasketAmount ? Math.round(deal.nextBasketAmount / div).toLocaleString('fa-IR') : '-'}
+                                                            </td>
+                                                            <td className={`py-3 px-3 font-mono font-bold ${
+                                                                (deal.dailyProfitLoss || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                                            }`}>
+                                                                {deal.dailyProfitLoss !== undefined ? Math.round(deal.dailyProfitLoss / div).toLocaleString('fa-IR') : '-'}
+                                                            </td>
+                                                        </>
+                                                    )}
+
+                                                    {activeTab === 'ANBAR' && (
+                                                        <td className={`py-3 px-3 font-mono font-bold ${
+                                                            (deal.dailyProfitLoss || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                                        }`}>
+                                                            {deal.dailyProfitLoss !== undefined ? Math.round(deal.dailyProfitLoss / div).toLocaleString('fa-IR') : '-'}
+                                                        </td>
+                                                    )}
+
+                                                    {/* Commission Amount */}
+                                                    <td className="py-3 px-3.5 font-mono font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                                        {Math.round((deal.commissionAmount || 0) / div).toLocaleString('fa-IR')}
+                                                    </td>
+
+                                                    {/* Payment Status Toggle */}
+                                                    <td className="py-3 px-3 whitespace-nowrap">
+                                                        <button
+                                                            onClick={() => handleTogglePaymentStatus(deal.id)}
+                                                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all ${
+                                                                deal.paymentStatus === 'PAID'
+                                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                                    : deal.paymentStatus === 'PARTIAL'
+                                                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                                                            }`}
+                                                        >
+                                                            {deal.paymentStatus === 'PAID' ? 'واریز شد' : deal.paymentStatus === 'PARTIAL' ? 'علی‌الحساب' : 'در انتظار'}
+                                                        </button>
+                                                    </td>
+
+                                                    <td className="py-3 px-3 text-[11px] text-slate-500 max-w-[200px] truncate" title={deal.paymentNotes}>
+                                                        {deal.paymentNotes || '-'}
+                                                    </td>
+
+                                                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingDeal(deal);
+                                                                    setIsDealModalOpen(true);
+                                                                }}
+                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100"
+                                                                title="ویرایش"
+                                                            >
+                                                                <Edit className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteDeal(deal.id)}
+                                                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                                                                title="حذف"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+
+                                {/* Totals Footer Row */}
+                                <tfoot className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white font-black border-t-2 border-slate-300 dark:border-slate-600 text-xs">
+                                    <tr>
+                                        <td colSpan={activeTab === 'AZAD' ? 5 : 4} className="py-3 px-4 text-left">
+                                            جمع کل شیت ({activePeriod.title}):
+                                        </td>
+                                        
+                                        {activeTab === 'LEASING' || activeTab === 'REGISTRATION' ? (
+                                            <td className="py-3 px-3.5 font-mono">
+                                                {metrics.totalSales.toLocaleString('fa-IR')}
+                                            </td>
+                                        ) : (
+                                            <>
+                                                <td className="py-3 px-3.5 font-mono">{metrics.totalDailyPrice.toLocaleString('fa-IR')}</td>
+                                                <td className="py-3 px-3.5 font-mono">{metrics.totalPurchase.toLocaleString('fa-IR')}</td>
+                                                <td className="py-3 px-3.5 font-mono font-black">{metrics.totalSales.toLocaleString('fa-IR')}</td>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'AZAD' && (
+                                            <td className="py-3 px-3.5 font-mono text-indigo-600">
+                                                {metrics.totalGrossProfit.toLocaleString('fa-IR')}
+                                            </td>
+                                        )}
+
+                                        {activeTab === 'HAVALEH' && (
+                                            <>
+                                                <td className="py-3 px-3.5 font-mono">-</td>
+                                                <td className="py-3 px-3 font-mono">{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}</td>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'ANBAR' && (
+                                            <td className="py-3 px-3 font-mono">{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}</td>
+                                        )}
+
+                                        <td className="py-3 px-3.5 font-mono text-emerald-600 font-black">
+                                            {metrics.totalCommission.toLocaleString('fa-IR')}
+                                        </td>
+                                        
+                                        <td colSpan={3} className="py-3 px-3 text-[11px] text-slate-500">
+                                            {metrics.totalDealsCount} ردیف معامله
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            )}
+
+            {/* Modals */}
+            <CommissionDealModal
+                isOpen={isDealModalOpen}
+                onClose={() => {
+                    setIsDealModalOpen(false);
+                    setEditingDeal(null);
+                }}
+                onSave={handleSaveDeal}
+                initialDeal={editingDeal}
+                activePeriodId={activePeriodId}
+                activePeriodName={activePeriod.title}
+                crmUsers={crmUsers}
+            />
+
+            <CommissionExcelImportModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onImport={handleImportDeals}
+                activePeriodId={activePeriodId}
+                activePeriodName={activePeriod.title}
+            />
+
+            {/* Standardized Role Reports & Printing Modal */}
+            <CommissionRoleReportsModal
+                isOpen={isReportModalOpen}
+                onClose={() => setIsReportModalOpen(false)}
+                reportType={activeReportRole}
+                activePeriod={activePeriod}
+                deals={periodDeals}
+                currencyUnit={currencyUnit}
+                targetStaffName={reportTargetStaff}
+            />
+
+            {/* Create New Period Modal */}
+            {isNewPeriodModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6">
+                        <h3 className="text-base font-black text-slate-800 dark:text-white mb-2">
+                            تعریف دوره مالی جدید
+                        </h3>
+                        <p className="text-xs text-slate-500 mb-4">
+                            عنوان ماه جدید را وارد کنید (مثلاً شهریور ۱۴۰۵)
+                        </p>
+                        <form onSubmit={handleCreatePeriod} className="space-y-4">
+                            <input
+                                type="text"
+                                value={newPeriodTitle}
+                                onChange={e => setNewPeriodTitle(e.target.value)}
+                                placeholder="مثلاً: شهریور ۱۴۰۵"
+                                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800 dark:text-white font-bold"
+                                autoFocus
+                                required
+                            />
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsNewPeriodModalOpen(false)}
+                                    className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-xl"
+                                >
+                                    انصراف
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all"
+                                >
+                                    ایجاد دوره
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };

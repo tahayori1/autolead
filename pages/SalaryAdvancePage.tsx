@@ -361,10 +361,10 @@ const SalaryAdvancePage: React.FC = () => {
             if (searchQuery.trim() !== '') {
                 const q = searchQuery.toLowerCase();
                 return (
-                    req.requesterName.toLowerCase().includes(q) ||
-                    req.reason.toLowerCase().includes(q) ||
-                    (req.notes && req.notes.toLowerCase().includes(q)) ||
-                    req.amount.toString().includes(q)
+                    (req?.requesterName?.toLowerCase() || '').includes(q) ||
+                    (req?.reason?.toLowerCase() || '').includes(q) ||
+                    (req?.notes && req.notes.toLowerCase().includes(q)) ||
+                    (req?.amount ? req.amount.toString().includes(q) : false)
                 );
             }
 

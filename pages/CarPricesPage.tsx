@@ -664,10 +664,10 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
         if (statsSearchQuery.trim()) {
             const q = statsSearchQuery.trim().toLowerCase();
             result = result.filter(card => {
-                const matchBase = card.baseModelName.toLowerCase().includes(q);
-                const matchVariant = card.variants.some(v => 
-                    v.rawModelName.toLowerCase().includes(q) || 
-                    (v.year && v.year.includes(q))
+                const matchBase = (card?.baseModelName || '').toLowerCase().includes(q);
+                const matchVariant = (card?.variants || []).some(v => 
+                    (v?.rawModelName || '').toLowerCase().includes(q) || 
+                    (v?.year && v.year.includes(q))
                 );
                 return matchBase || matchVariant;
             });

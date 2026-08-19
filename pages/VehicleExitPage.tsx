@@ -148,15 +148,15 @@ const VehicleExitPage: React.FC = () => {
             return;
         }
 
-        const normalizedQuery = query.toLowerCase();
+        const normalizedQuery = (query || '').toLowerCase();
         const results: typeof searchResults = [];
 
         // 1. Search in orders
         const filteredOrders = orders.filter(o => 
-            (o.buyerName && o.buyerName.toLowerCase().includes(normalizedQuery)) ||
-            (o.buyerPhone && o.buyerPhone.includes(query)) ||
-            (o.carName && o.carName.toLowerCase().includes(normalizedQuery)) ||
-            (o.trackingCode && o.trackingCode.toLowerCase().includes(normalizedQuery))
+            (o?.buyerName && o.buyerName.toLowerCase().includes(normalizedQuery)) ||
+            (o?.buyerPhone && o.buyerPhone.includes(query)) ||
+            (o?.carName && o.carName.toLowerCase().includes(normalizedQuery)) ||
+            (o?.trackingCode && o.trackingCode.toLowerCase().includes(normalizedQuery))
         );
 
         filteredOrders.slice(0, 10).forEach(o => {
@@ -171,9 +171,9 @@ const VehicleExitPage: React.FC = () => {
 
         // 2. Search in CRM
         const filteredCrm = crmUsers.filter(u => 
-            (u.FullName && u.FullName.toLowerCase().includes(normalizedQuery)) ||
-            (u.Number && u.Number.includes(query)) ||
-            (u.CarModel && u.CarModel.toLowerCase().includes(normalizedQuery))
+            (u?.FullName && u.FullName.toLowerCase().includes(normalizedQuery)) ||
+            (u?.Number && u.Number.includes(query)) ||
+            (u?.CarModel && u.CarModel.toLowerCase().includes(normalizedQuery))
         );
 
         filteredCrm.slice(0, 10).forEach(u => {
@@ -236,11 +236,12 @@ const VehicleExitPage: React.FC = () => {
         }
         // Match by name
         if (formData.customerName && formData.customerName.length >= 3) {
-            const matchedOrder = orders.find(o => o.buyerName && o.buyerName.toLowerCase().includes(formData.customerName.toLowerCase()));
+            const nameSearch = (formData.customerName || '').toLowerCase();
+            const matchedOrder = orders.find(o => o?.buyerName && o.buyerName.toLowerCase().includes(nameSearch));
             if (matchedOrder && (formData.phone !== matchedOrder.buyerPhone || formData.model !== matchedOrder.carName)) {
                 return { type: 'ORDER', data: matchedOrder, label: `سفارش جدید: ${matchedOrder.buyerName} (${matchedOrder.carName})` };
             }
-            const matchedCrm = crmUsers.find(u => u.FullName && u.FullName.toLowerCase().includes(formData.customerName.toLowerCase()));
+            const matchedCrm = crmUsers.find(u => u?.FullName && u.FullName.toLowerCase().includes(nameSearch));
             if (matchedCrm && formData.phone !== matchedCrm.Number) {
                 return { type: 'CRM', data: matchedCrm, label: `مشتری CRM: ${matchedCrm.FullName}` };
             }

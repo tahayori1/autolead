@@ -550,9 +550,10 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
     };
 
     const searchAndPaginateTemplates = (templates: TemplateItem[]) => {
-        const filtered = templates.filter(t => 
-            t.text.toLowerCase().includes(templatesSearch.toLowerCase()) || 
-            String(t.id).includes(templatesSearch)
+        const term = (templatesSearch || '').toLowerCase();
+        const filtered = (templates || []).filter(t => 
+            (t?.text || '').toLowerCase().includes(term) || 
+            String(t?.id || '').includes(templatesSearch || '')
         );
         const startIndex = (templatePage - 1) * itemsPerPage;
         const paginated = filtered.slice(startIndex, startIndex + itemsPerPage);
@@ -695,11 +696,12 @@ export const AdvertisingPage: React.FC<AdvertisingPageProps> = ({ loggedInUser, 
 
     // Filter Campaigns list
     const filteredCampaigns = useMemo(() => {
-        return campaigns.filter(c => {
-            const matchesSearch = c.title.toLowerCase().includes(campaignSearch.toLowerCase()) || 
-                                (c.notes && c.notes.toLowerCase().includes(campaignSearch.toLowerCase()));
-            const matchesPlatform = campaignPlatformFilter === 'ALL' || c.platform === campaignPlatformFilter;
-            const matchesStatus = campaignStatusFilter === 'ALL' || c.status === campaignStatusFilter;
+        const search = (campaignSearch || '').toLowerCase();
+        return (campaigns || []).filter(c => {
+            const matchesSearch = (c?.title || '').toLowerCase().includes(search) || 
+                                ((c?.notes || '').toLowerCase().includes(search));
+            const matchesPlatform = campaignPlatformFilter === 'ALL' || c?.platform === campaignPlatformFilter;
+            const matchesStatus = campaignStatusFilter === 'ALL' || c?.status === campaignStatusFilter;
             return matchesSearch && matchesPlatform && matchesStatus;
         });
     }, [campaigns, campaignSearch, campaignPlatformFilter, campaignStatusFilter]);

@@ -316,8 +316,8 @@ const CarPriceCopySettingsModal: React.FC<CarPriceCopySettingsModalProps> = ({
     const filteredGroups = sortedGroups.filter(g => {
         if (!searchFilter.trim()) return true;
         const q = searchFilter.trim().toLowerCase();
-        return g.baseModelName.toLowerCase().includes(q) || 
-               g.variants.some(v => v.rawModelName.toLowerCase().includes(q) || (v.year && v.year.includes(q)));
+        return (g?.baseModelName || '').toLowerCase().includes(q) || 
+               (g?.variants || []).some(v => (v?.rawModelName || '').toLowerCase().includes(q) || (v?.year && v.year.includes(q)));
     });
 
     return (
