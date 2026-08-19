@@ -647,6 +647,54 @@ export function saveCarYardItems(items: CarYardItem[]): void {
     }
 }
 
+export function deleteCommissionPeriod(periodId: string, deleteDeals: boolean = true): {
+    periods: CommissionPeriod[];
+    deals: CommissionDeal[];
+} {
+    const currentPeriods = getCommissionPeriods();
+    const currentDeals = getCommissionDeals();
+
+    const updatedPeriods = currentPeriods.filter(p => p.id !== periodId);
+    const updatedDeals = deleteDeals ? currentDeals.filter(d => d.periodId !== periodId) : currentDeals;
+
+    saveCommissionPeriods(updatedPeriods);
+    if (deleteDeals) {
+        saveCommissionDeals(updatedDeals);
+    }
+
+    return { periods: updatedPeriods, deals: updatedDeals };
+}
+
+export function clearPeriodDeals(periodId: string): CommissionDeal[] {
+    const currentDeals = getCommissionDeals();
+    const updatedDeals = currentDeals.filter(d => d.periodId !== periodId);
+    saveCommissionDeals(updatedDeals);
+    return updatedDeals;
+}
+
+export function clearAllCommissionData(): {
+    periods: CommissionPeriod[];
+    deals: CommissionDeal[];
+    yard: CarYardItem[];
+} {
+    const emptyPeriods: CommissionPeriod[] = [
+        {
+            id: '1405-05',
+            title: 'مرداد ۱۴۰۵',
+            startDate: '1405/05/01',
+            endDate: '1405/05/31'
+        }
+    ];
+    const emptyDeals: CommissionDeal[] = [];
+    const emptyYard: CarYardItem[] = [];
+
+    saveCommissionPeriods(emptyPeriods);
+    saveCommissionDeals(emptyDeals);
+    saveCarYardItems(emptyYard);
+
+    return { periods: emptyPeriods, deals: emptyDeals, yard: emptyYard };
+}
+
 export function resetCommissionDataToDefaults(): {
     deals: CommissionDeal[];
     periods: CommissionPeriod[];

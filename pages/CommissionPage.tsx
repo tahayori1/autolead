@@ -15,6 +15,9 @@ import {
     saveCommissionDeals,
     getCarYardItems,
     saveCarYardItems,
+    deleteCommissionPeriod,
+    clearPeriodDeals,
+    clearAllCommissionData,
     resetCommissionDataToDefaults,
     parseSalesPersons
 } from '../services/commissionService';
@@ -70,7 +73,11 @@ import {
     Landmark,
     Briefcase,
     UserCheck,
-    FileCheck2
+    FileCheck2,
+    SlidersHorizontal,
+    AlertOctagon,
+    Sparkles,
+    X
 } from 'lucide-react';
 
 type MainPerspective = 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER' | 'STAFF' | 'OPERATIONS';
@@ -108,6 +115,9 @@ const CommissionPage: React.FC = () => {
     // New Period Modal
     const [isNewPeriodModalOpen, setIsNewPeriodModalOpen] = useState(false);
     const [newPeriodTitle, setNewPeriodTitle] = useState('');
+
+    // Period Manager & Cleanup Modal
+    const [isPeriodManagerOpen, setIsPeriodManagerOpen] = useState(false);
 
     // Load initial data
     useEffect(() => {
@@ -387,10 +397,64 @@ const CommissionPage: React.FC = () => {
         handleUpdateDeals(updated);
     };
 
-    // Handle Excel Import
-    const handleImportDeals = (importedDeals: CommissionDeal[]) => {
-        const updated = [...importedDeals, ...deals];
+    // Handle Excel Import (Supports multi-sheet XLSX, precise target period, append or replace)
+    const handleImportDeals = (importedDeals: CommissionDeal[], targetPeriodId: string, replaceExisting?: boolean) => {
+        let updated: CommissionDeal[];
+        if (replaceExisting) {
+            const otherPeriodDeals = deals.filter(d => d.periodId !== targetPeriodId);
+            updated = [...importedDeals, ...otherPeriodDeals];
+        } else {
+            updated = [...importedDeals, ...deals];
+        }
         handleUpdateDeals(updated);
+        setActivePeriodId(targetPeriodId);
+    };
+
+    // Helper for inline period creation inside modals
+    const handleAddNewPeriodInline = (title: string): string => {
+        const newId = `1405-${periods.length + 1 < 10 ? '0' : ''}${periods.length + 1}`;
+        const newPeriod: CommissionPeriod = {
+            id: newId,
+            title: title.trim()
+        };
+        const updated = [newPeriod, ...periods];
+        setPeriods(updated);
+        saveCommissionPeriods(updated);
+        setActivePeriodId(newId);
+        return newId;
+    };
+
+    // Delete single period
+    const handleDeletePeriod = (periodIdToDelete: string, deleteDeals: boolean = true) => {
+        if (periods.length <= 1) {
+            alert('حداقل یک دوره مالی باید در سامانه باقی بماند.');
+            return;
+        }
+        const res = deleteCommissionPeriod(periodIdToDelete, deleteDeals);
+        setPeriods(res.periods);
+        if (deleteDeals) {
+            setDeals(res.deals);
+        }
+        if (activePeriodId === periodIdToDelete) {
+            setActivePeriodId(res.periods[0].id);
+        }
+    };
+
+    // Clear all deals of a period
+    const handleClearPeriodDeals = (periodIdToClear: string) => {
+        const updated = clearPeriodDeals(periodIdToClear);
+        setDeals(updated);
+    };
+
+    // Purge/Clear everything
+    const handlePurgeAll = () => {
+        if (!confirm('آیا از پاکسازی کامل تمام دوره‌ها و معاملات اطمینان دارید؟ تمام داده‌ها حذف خواهند شد.')) return;
+        const res = clearAllCommissionData();
+        setPeriods(res.periods);
+        setDeals(res.deals);
+        setYardItems(res.yard);
+        setActivePeriodId(res.periods[0].id);
+        setIsPeriodManagerOpen(false);
     };
 
     // Handle Export to CSV (Excel format)
@@ -504,9 +568,19 @@ const CommissionPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Right controls: Top Highlights, Currency Switch, Quick Add Deal */}
+                {/* Right controls: Top Highlights, Currency Switch, Quick Add Deal, XLSX Upload */}
                 <div className="flex flex-wrap items-center gap-2.5">
                     
+                    {/* Upload XLSX Button */}
+                    <button
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="px-4 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center gap-2"
+                        title="آپلود و خواندن فایل اکسل (xlsx.) با پشتیبانی از چندین شیت و جدول"
+                    >
+                        <Upload className="w-4 h-4 text-emerald-600" />
+                        آپلود فایل اکسل (XLSX / چند شیت)
+                    </button>
+
                     {/* Quick Add Deal Button */}
                     <button
                         onClick={() => {
@@ -577,9 +651,18 @@ const CommissionPage: React.FC = () => {
                     <button
                         onClick={() => setIsNewPeriodModalOpen(true)}
                         className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors flex items-center gap-1 whitespace-nowrap"
+                        title="ایجاد دوره مالی جدید"
                     >
                         <Plus className="w-3.5 h-3.5" />
                         دوره جدید
+                    </button>
+                    <button
+                        onClick={() => setIsPeriodManagerOpen(true)}
+                        className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                        title="مدیریت، پاکسازی و حذف دوره‌ها"
+                    >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        مدیریت و پاکسازی دوره‌ها
                     </button>
                 </div>
 
@@ -1196,20 +1279,171 @@ const CommissionPage: React.FC = () => {
                 isOpen={isImportModalOpen}
                 onClose={() => setIsImportModalOpen(false)}
                 onImport={handleImportDeals}
+                periods={periods}
                 activePeriodId={activePeriodId}
-                activePeriodName={activePeriod.title}
+                onAddNewPeriod={handleAddNewPeriodInline}
             />
 
-            {/* Standardized Role Reports & Printing Modal */}
+            {/* Standardized Role Reports & Printing Modal (Supports Multi-Period Selection) */}
             <CommissionRoleReportsModal
                 isOpen={isReportModalOpen}
                 onClose={() => setIsReportModalOpen(false)}
                 reportType={activeReportRole}
                 activePeriod={activePeriod}
+                allPeriods={periods}
                 deals={periodDeals}
+                allDeals={deals}
                 currencyUnit={currencyUnit}
                 targetStaffName={reportTargetStaff}
             />
+
+            {/* Period Manager & Cleanup Modal */}
+            {isPeriodManagerOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in" dir="rtl">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-l from-rose-500/10 via-slate-500/5 to-transparent">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 rounded-2xl">
+                                    <SlidersHorizontal className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-slate-800 dark:text-white">
+                                        مدیریت و پاکسازی دوره‌های مالی
+                                    </h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        حذف دوره‌ها، پاکسازی معاملات یا بازنشانی کامل داده‌ها
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsPeriodManagerOpen(false)}
+                                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Body: List of periods with counts and actions */}
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <h4 className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                لیست دوره‌های مالی ثبت‌شده ({periods.length} دوره):
+                            </h4>
+
+                            <div className="space-y-2.5">
+                                {periods.map(p => {
+                                    const pDealsCount = deals.filter(d => d.periodId === p.id).length;
+                                    const isCurrent = p.id === activePeriodId;
+
+                                    return (
+                                        <div
+                                            key={p.id}
+                                            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                                isCurrent 
+                                                    ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800' 
+                                                    : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-300">
+                                                    <Calendar className="w-4 h-4 text-emerald-600" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-black text-slate-800 dark:text-white">
+                                                            {p.title}
+                                                        </span>
+                                                        {isCurrent && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                                                دوره فعال فعلی
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-xs text-slate-500 font-mono">
+                                                        {pDealsCount} معامله ثبت‌شده
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Action Buttons per Period */}
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (confirm(`آیا مطمئنید که می‌خواهید فقط معاملات دوره «${p.title}» را پاکسازی کنید؟`)) {
+                                                            handleClearPeriodDeals(p.id);
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 bg-white dark:bg-slate-800 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-colors"
+                                                    title="پاکسازی تمام معاملات این دوره بدون حذف خود دوره"
+                                                >
+                                                    پاکسازی معاملات
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (confirm(`آیا از حذف کامل دوره مالی «${p.title}» و تمام معاملات آن اطمینان دارید؟`)) {
+                                                            handleDeletePeriod(p.id, true);
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                                                    title="حذف دوره به همراه معاملات"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    حذف دوره
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Danger Zone: Purge All or Reset Defaults */}
+                            <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                                <h4 className="text-xs font-black text-rose-600 flex items-center gap-1.5">
+                                    <AlertOctagon className="w-4 h-4" />
+                                    عملیات پیشرفته پاکسازی و بازنشانی:
+                                </h4>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handlePurgeAll}
+                                        className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 rounded-2xl border border-rose-200 dark:border-rose-800 text-right text-xs transition-colors"
+                                    >
+                                        <div className="font-black mb-0.5">⚠️ پاکسازی کامل همه دوره‌ها و معاملات</div>
+                                        <div className="text-[11px] text-rose-500">حذف تمام داده‌ها و ایجاد جدول خالی اولیه</div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            handleResetDefaults();
+                                            setIsPeriodManagerOpen(false);
+                                        }}
+                                        className="p-3 bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-2xl border border-slate-200 dark:border-slate-700 text-right text-xs transition-colors"
+                                    >
+                                        <div className="font-black mb-0.5">🔄 بازنشانی به داده‌های اکسل تیر و مرداد</div>
+                                        <div className="text-[11px] text-slate-500">بارگذاری مجدد ۵ شیت استاندارد پیش‌فرض</div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-3.5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setIsPeriodManagerOpen(false)}
+                                className="px-5 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Create New Period Modal */}
             {isNewPeriodModalOpen && (
