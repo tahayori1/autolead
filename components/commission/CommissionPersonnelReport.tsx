@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { CommissionDeal, CommissionPeriod, CommissionCategory } from '../../types';
 import { parseSalesPersons } from '../../services/commissionService';
 import { 
@@ -18,7 +19,8 @@ import {
     Eye,
     X,
     FileText,
-    Building
+    Building,
+    Download
 } from 'lucide-react';
 
 interface CommissionPersonnelReportProps {
@@ -327,13 +329,65 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
                         </div>
                     </div>
 
-                    <button
-                        onClick={() => window.print()}
-                        className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors self-end sm:self-auto"
-                    >
-                        <Printer className="w-4 h-4" />
-                        چاپ فیش تجمیعی
-                    </button>
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                            onClick={() => {
+                                if (personnelData.length === 0) {
+                                    alert('هیچ اطلاعاتی برای خروجی اکسل وجود ندارد.');
+                                    return;
+                                }
+                                const wb = XLSX.utils.book_new();
+                                const headers = [
+                                    'ردیف', 'نام کارشناس فروش', 'تعداد معامله', 'حجم فروش کل',
+                                    `پورسانت فروش انبار (${unitLabel})`, `پورسانت فروش آزاد (${unitLabel})`,
+                                    `پورسانت فروش حواله (${unitLabel})`, `پورسانت لیزینگ (${unitLabel})`,
+                                    `پورسانت ثبت‌نام (${unitLabel})`, `جمع ناخالص پورسانت (${unitLabel})`,
+                                    `پاداش (+) (${unitLabel})`, `کسورات (-) (${unitLabel})`,
+                                    `خالص پرداختی (${unitLabel})`, `واریز شده (${unitLabel})`, `مانده (${unitLabel})`, 'وضعیت تسویه'
+                                ];
+                                const rows = personnelData.map((p, idx) => [
+                                    idx + 1,
+                                    p.name,
+                                    p.totalDealsCount,
+                                    Math.round(p.totalSalesVolume / divisor),
+                                    Math.round(p.anbarCommission / divisor),
+                                    Math.round(p.azadCommission / divisor),
+                                    Math.round(p.havalehCommission / divisor),
+                                    Math.round(p.leasingCommission / divisor),
+                                    Math.round(p.registrationCommission / divisor),
+                                    Math.round(p.grossCommission / divisor),
+                                    Math.round(p.bonus / divisor),
+                                    Math.round(p.deductions / divisor),
+                                    Math.round(p.netPayable / divisor),
+                                    Math.round(p.paidAmount / divisor),
+                                    Math.round(p.remainingAmount / divisor),
+                                    p.remainingAmount <= 0 ? 'تسویه کامل' : (p.paidAmount > 0 ? 'علی‌الحساب' : 'پرداخت‌نشده')
+                                ]);
+
+                                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                                ws['!cols'] = [
+                                    { wch: 6 }, { wch: 22 }, { wch: 14 }, { wch: 18 },
+                                    { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+                                    { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 16 }
+                                ];
+                                XLSX.utils.book_append_sheet(wb, ws, 'کارنامه تجمیعی پورسانت');
+                                XLSX.writeFile(wb, `کارنامه_پورسانت_${activePeriodName.replace(/\s+/g, '_')}.xlsx`);
+                            }}
+                            className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                            title="دانلود فایل اکسل کارنامه پرسنل (.xlsx)"
+                        >
+                            <Download className="w-4 h-4 text-emerald-600" />
+                            خروجی اکسل (XLSX)
+                        </button>
+
+                        <button
+                            onClick={() => window.print()}
+                            className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                        >
+                            <Printer className="w-4 h-4" />
+                            چاپ فیش تجمیعی
+                        </button>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">

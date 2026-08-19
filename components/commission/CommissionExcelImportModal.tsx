@@ -283,8 +283,13 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                 const grossProfit = cleanNumber(getVal(['سود ناخالص', 'کمیسیون کل', 'کمیسیون آزاد', 'مارجین'], 10)) || 
                     (salePrice > 0 && purchasePrice > 0 ? (salePrice - purchasePrice) : 0);
 
-                // Commission Rate
+                // Commission Rate & Amount
                 let commissionRate = category === 'ANBAR' ? 0.05 : (category === 'AZAD' ? 10 : (category === 'LEASING' ? 0.1 : 0.05));
+                if (dailyProfitLoss < 0) {
+                    // در صورت منفی بودن سود و زیان روز، ضریب ۰.۲۵٪ نرخ فروش است
+                    commissionRate = 0.25;
+                }
+
                 const rateFromCell = getVal(['درصد پورسانت', 'درصد کمیسیون', 'درصد'], 10);
                 if (rateFromCell) {
                     const parsedRate = cleanNumber(rateFromCell);
@@ -296,7 +301,10 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                 // Commission Amount
                 let commissionAmount = cleanNumber(getVal(['پورسانت', 'کمیسیون', 'مبلغ پورسانت'], 11));
                 if (commissionAmount === 0) {
-                    if (category === 'AZAD') {
+                    if (dailyProfitLoss < 0) {
+                        // فرمول زیان روز: ۰.۲۵ درصد نرخ فروش
+                        commissionAmount = Math.round(salePrice * 0.0025);
+                    } else if (category === 'AZAD') {
                         commissionAmount = Math.round(grossProfit * (commissionRate / 100));
                     } else {
                         commissionAmount = Math.round(salePrice * (commissionRate / 100));

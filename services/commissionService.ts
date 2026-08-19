@@ -138,11 +138,11 @@ export const SAMPLE_COMMISSION_DEALS: CommissionDeal[] = [
         salePrice: 23350000000,
         dailyProfitLoss: -650000000,
         grossProfit: 7971850000,
-        commissionRate: 0.05,
-        commissionAmount: 11675000,
-        paidCommissionShare: 5837500, // سهم پرداختی ۵۰٪
+        commissionRate: 0.25,
+        commissionAmount: 58375000,
+        paidCommissionShare: 29187500, // سهم پرداختی ۵۰٪
         paymentStatus: 'PARTIAL',
-        paymentNotes: 'سهم پرداختی 5,837,500 ریال'
+        paymentNotes: 'زیان روز: محاسبه بر مبنای ۰.۲۵٪ نرخ فروش'
     },
     {
         id: 'deal-anbar-6',
@@ -159,10 +159,11 @@ export const SAMPLE_COMMISSION_DEALS: CommissionDeal[] = [
         salePrice: 23350000000,
         dailyProfitLoss: -650000000,
         grossProfit: 7971850000,
-        commissionRate: 0.05,
-        commissionAmount: 11675000,
-        paidCommissionShare: 11675000,
-        paymentStatus: 'PAID'
+        commissionRate: 0.25,
+        commissionAmount: 58375000,
+        paidCommissionShare: 58375000,
+        paymentStatus: 'PAID',
+        paymentNotes: 'زیان روز: محاسبه بر مبنای ۰.۲۵٪ نرخ فروش'
     },
     {
         id: 'deal-anbar-7',
@@ -179,10 +180,11 @@ export const SAMPLE_COMMISSION_DEALS: CommissionDeal[] = [
         salePrice: 24000000000,
         dailyProfitLoss: -250000000,
         grossProfit: 3000000000,
-        commissionRate: 0.05,
-        commissionAmount: 12000000,
-        paidCommissionShare: 12000000,
-        paymentStatus: 'PAID'
+        commissionRate: 0.25,
+        commissionAmount: 60000000,
+        paidCommissionShare: 60000000,
+        paymentStatus: 'PAID',
+        paymentNotes: 'زیان روز: محاسبه بر مبنای ۰.۲۵٪ نرخ فروش'
     },
 
     // ----------------------------------------------------
@@ -381,9 +383,11 @@ export const SAMPLE_COMMISSION_DEALS: CommissionDeal[] = [
         salePrice: 24000000000,
         nextBasketAmount: 26500000000,
         dailyProfitLoss: -2500000000,
-        commissionAmount: 12000000, // 0.05% از نرخ فروش
-        paidCommissionShare: 12000000,
-        paymentStatus: 'PAID'
+        commissionRate: 0.25,
+        commissionAmount: 60000000, // 0.25% از نرخ فروش در زیان روز
+        paidCommissionShare: 60000000,
+        paymentStatus: 'PAID',
+        paymentNotes: 'زیان روز: محاسبه بر مبنای ۰.۲۵٪ نرخ فروش'
     },
     {
         id: 'deal-havaleh-2',
@@ -400,9 +404,11 @@ export const SAMPLE_COMMISSION_DEALS: CommissionDeal[] = [
         salePrice: 23500000000,
         nextBasketAmount: 26500000000,
         dailyProfitLoss: -3000000000,
-        commissionAmount: 11750000, // 0.05% از نرخ فروش
-        paidCommissionShare: 11750000,
-        paymentStatus: 'PAID'
+        commissionRate: 0.25,
+        commissionAmount: 58750000, // 0.25% از نرخ فروش در زیان روز
+        paidCommissionShare: 58750000,
+        paymentStatus: 'PAID',
+        paymentNotes: 'زیان روز: محاسبه بر مبنای ۰.۲۵٪ نرخ فروش'
     },
 
     // ----------------------------------------------------
@@ -522,14 +528,22 @@ export function calculateCommissionForCategory(
         case 'ANBAR': {
             dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
-            commissionAmount = Math.round(salePrice * 0.0005); // 0.05%
+            if (dailyProfitLoss < 0) {
+                // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه ۰.۲۵ درصد نرخ فروش
+                commissionAmount = Math.round(salePrice * 0.0025);
+            } else {
+                commissionAmount = Math.round(salePrice * 0.0005); // 0.05%
+            }
             break;
         }
 
         case 'AZAD': {
             grossProfit = salePrice - purchasePrice; // کمیسیون کل معامله
             dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
-            if (grossProfit > 0) {
+            if (dailyProfitLoss < 0) {
+                // در صورت زیان روز: فرمول ۰.۲۵ درصد نرخ فروش
+                commissionAmount = Math.round(salePrice * 0.0025);
+            } else if (grossProfit > 0) {
                 commissionAmount = Math.round(grossProfit * 0.10); // ۱۰٪ سود کمیسیون
             } else {
                 commissionAmount = Math.round(salePrice * 0.0005); // ۰.۰۵٪ کل نرخ فروش
@@ -540,7 +554,12 @@ export function calculateCommissionForCategory(
         case 'HAVALEH': {
             dailyProfitLoss = nextBasketAmount > 0 ? (salePrice - nextBasketAmount) : (salePrice - dailyPrice);
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
-            commissionAmount = Math.round(salePrice * 0.0005); // 0.05%
+            if (dailyProfitLoss < 0) {
+                // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه ۰.۲۵ درصد نرخ فروش
+                commissionAmount = Math.round(salePrice * 0.0025);
+            } else {
+                commissionAmount = Math.round(salePrice * 0.0005); // 0.05%
+            }
             break;
         }
 
@@ -559,9 +578,13 @@ export function calculateCommissionForCategory(
         }
 
         default: {
-            dailyProfitLoss = 0;
-            grossProfit = 0;
-            commissionAmount = Math.round(salePrice * 0.0005);
+            dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
+            grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
+            if (dailyProfitLoss < 0) {
+                commissionAmount = Math.round(salePrice * 0.0025);
+            } else {
+                commissionAmount = Math.round(salePrice * 0.0005);
+            }
         }
     }
 

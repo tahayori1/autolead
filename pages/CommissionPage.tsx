@@ -22,6 +22,10 @@ import {
     loadSampleCommissionData,
     parseSalesPersons
 } from '../services/commissionService';
+import { 
+    exportFullCommissionWorkbook, 
+    exportSingleCategoryXLSX 
+} from '../services/commissionExcelExport';
 import { getUsers } from '../services/api';
 import { CommissionDealModal } from '../components/commission/CommissionDealModal';
 import { CommissionExcelImportModal } from '../components/commission/CommissionExcelImportModal';
@@ -454,6 +458,35 @@ const CommissionPage: React.FC = () => {
         setIsPeriodManagerOpen(false);
     };
 
+    // Handle Comprehensive Multi-Sheet XLSX Export
+    const handleExportFullXLSX = () => {
+        if (deals.length === 0) {
+            alert('هیچ معامله‌ای در سیستم برای خروجی اکسل وجود ندارد.');
+            return;
+        }
+
+        exportFullCommissionWorkbook({
+            deals,
+            periods,
+            activePeriodId: activePeriodId || undefined,
+            yardItems
+        });
+    };
+
+    // Handle Current Sheet XLSX Export
+    const handleExportCurrentSheetXLSX = () => {
+        if (filteredDeals.length === 0) {
+            alert('هیچ معامله‌ای در این بخش برای خروجی اکسل وجود ندارد.');
+            return;
+        }
+
+        exportSingleCategoryXLSX(
+            filteredDeals,
+            activeTab,
+            activePeriod.title || 'دوره_مالی'
+        );
+    };
+
     // Handle Export to CSV (Excel format)
     const handleExportCSV = () => {
         if (filteredDeals.length === 0) {
@@ -581,11 +614,21 @@ const CommissionPage: React.FC = () => {
                     {/* Upload XLSX Button */}
                     <button
                         onClick={() => setIsImportModalOpen(true)}
-                        className="px-4 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center gap-2"
+                        className="px-3.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center gap-2"
                         title="آپلود و خواندن فایل اکسل (xlsx.) با پشتیبانی از چندین شیت و جدول"
                     >
                         <Upload className="w-4 h-4 text-emerald-600" />
-                        آپلود فایل اکسل (XLSX / چند شیت)
+                        ورود اکسل (XLSX)
+                    </button>
+
+                    {/* Full XLSX Export Button in Top Header */}
+                    <button
+                        onClick={handleExportFullXLSX}
+                        className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center gap-2"
+                        title="دانلود خروجی کامل کلیه شیت‌ها، معاملات و کارنامه پرسنل در یک فایل اکسل جامع (.xlsx)"
+                    >
+                        <Download className="w-4 h-4 text-emerald-600" />
+                        خروجی کامل اکسل (XLSX)
                     </button>
 
                     {/* Quick Add Deal Button */}
@@ -1038,22 +1081,42 @@ const CommissionPage: React.FC = () => {
                             <button
                                 onClick={() => setIsImportModalOpen(true)}
                                 className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                                title="ورود اطلاعات از فایل اکسل یا CSV"
                             >
-                                <Upload className="w-4 h-4" />
-                                ورود اکسل / CSV
+                                <Upload className="w-4 h-4 text-emerald-600" />
+                                ورود اکسل
+                            </button>
+
+                            <button
+                                onClick={handleExportFullXLSX}
+                                className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                                title="خروجی کامل کلیه شیت‌های معاملاتی، کارنامه پرسنل و خلاصه مدیریتی در یک فایل اکسل جامع (.xlsx)"
+                            >
+                                <Download className="w-4 h-4 text-emerald-600" />
+                                خروجی جامع اکسل (XLSX)
+                            </button>
+
+                            <button
+                                onClick={handleExportCurrentSheetXLSX}
+                                className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                                title="دانلود فایل اکسل شیت و جدول فعلی (.xlsx)"
+                            >
+                                <FileSpreadsheet className="w-4 h-4 text-indigo-500" />
+                                خروجی این شیت (XLSX)
                             </button>
 
                             <button
                                 onClick={handleExportCSV}
-                                className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 text-xs font-medium rounded-xl flex items-center gap-1 transition-colors"
+                                title="خروجی سریع در قالب فایل متنی CSV"
                             >
-                                <Download className="w-4 h-4" />
-                                خروجی اکسل
+                                CSV
                             </button>
 
                             <button
                                 onClick={() => window.print()}
                                 className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                                title="چاپ جدول و گزارش"
                             >
                                 <Printer className="w-4 h-4" />
                                 چاپ

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { CommissionDeal, CommissionPeriod } from '../../../types';
 import { parseSalesPersons } from '../../../services/commissionService';
 import { 
@@ -157,6 +158,39 @@ export const CommissionFinanceView: React.FC<CommissionFinanceViewProps> = ({
 
     const isFinanceApproved = Boolean(activePeriod.approvals?.financeApproved);
 
+    // Export Bank Payment File (Paya XLSX)
+    const handleExportBankXLSX = () => {
+        const payableList = financeData.list.filter(i => i.netPayable > 0);
+        if (payableList.length === 0) {
+            alert('هیچ مبلغی برای صدور دستور پرداخت بانکی وجود ندارد.');
+            return;
+        }
+
+        const wb = XLSX.utils.book_new();
+        const headers = ['ردیف', 'نام و نام خانوادگی ذینفع', 'شماره شبا (IBAN)', 'نام بانک', `مبلغ ناخالص (${unitLabel})`, `پاداش (${unitLabel})`, `کسورات (${unitLabel})`, `مبلغ خالص پرداختی (${unitLabel})`, 'وضعیت تسویه', 'شناسه واریز / بابت'];
+        const rows = payableList.map((item, idx) => [
+            idx + 1,
+            item.name,
+            item.iban,
+            item.bank,
+            item.grossCommission,
+            item.bonus,
+            item.deductions,
+            item.netPayable,
+            item.paymentStatus === 'PAID' ? 'واریز شد' : (item.paymentStatus === 'PARTIAL' ? 'علی‌الحساب' : 'در انتظار واریز'),
+            `تسویه پورسانت دوره ${activePeriod.title}`
+        ]);
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        ws['!cols'] = [
+            { wch: 6 }, { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 },
+            { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 30 }
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, 'دستور پرداخت بانکی');
+        XLSX.writeFile(wb, `دستور_پرداخت_بانکی_پایا_${activePeriod.id}.xlsx`);
+    };
+
     // Export Bank Payment File (Paya CSV)
     const handleExportBankCSV = () => {
         const payableList = financeData.list.filter(i => i.netPayable > 0);
@@ -213,11 +247,20 @@ export const CommissionFinanceView: React.FC<CommissionFinanceViewProps> = ({
 
                     <div className="flex flex-wrap items-center gap-2">
                         <button
-                            onClick={handleExportBankCSV}
-                            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-2xl backdrop-blur-sm border border-white/20 transition-all flex items-center gap-2"
+                            onClick={handleExportBankXLSX}
+                            className="px-4 py-2.5 bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold rounded-2xl backdrop-blur-sm border border-emerald-400/40 shadow-sm transition-all flex items-center gap-2"
+                            title="دانلود فایل اکسل دستور پرداخت بانکی و شماره شبا (.xlsx)"
                         >
-                            <Download className="w-4 h-4" />
-                            خروجی فایل پایا / شبا
+                            <Download className="w-4 h-4 text-emerald-200" />
+                            خروجی اکسل پایا (XLSX)
+                        </button>
+
+                        <button
+                            onClick={handleExportBankCSV}
+                            className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-2xl backdrop-blur-sm border border-white/20 transition-all flex items-center gap-1.5"
+                            title="دانلود فایل متنی CSV پایا"
+                        >
+                            CSV
                         </button>
 
                         <button

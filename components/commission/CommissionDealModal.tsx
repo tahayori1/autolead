@@ -576,13 +576,25 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                 }`}>
                                     {(category === 'AZAD' ? calculatedResult.grossProfit : calculatedResult.dailyProfitLoss).toLocaleString('fa-IR')} ریال
                                 </span>
+                                {calculatedResult.dailyProfitLoss < 0 && (
+                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold block mt-0.5">
+                                        ⚠️ زیان روز (فرمول ۰.۲۵٪ نرخ فروش)
+                                    </span>
+                                )}
                             </div>
 
                             <div>
                                 <span className="text-slate-500 block text-[11px]">پورسانت محاسبه‌شده سیستم:</span>
-                                <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                                    {calculatedResult.commissionAmount.toLocaleString('fa-IR')} ریال
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                                        {calculatedResult.commissionAmount.toLocaleString('fa-IR')} ریال
+                                    </span>
+                                    {calculatedResult.dailyProfitLoss < 0 && (
+                                        <span className="px-1.5 py-0.5 bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 rounded text-[10px] font-bold">
+                                            ضریب ۰.۲۵٪
+                                        </span>
+                                    )}
+                                </div>
                             </div>
 
                             {sharedStaff.length > 1 && (

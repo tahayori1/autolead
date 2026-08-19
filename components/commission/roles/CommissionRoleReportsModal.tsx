@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CommissionDeal, CommissionPeriod } from '../../../types';
 import { parseSalesPersons } from '../../../services/commissionService';
+import { exportFullCommissionWorkbook } from '../../../services/commissionExcelExport';
 import { 
     X, 
     Printer, 
@@ -14,7 +15,8 @@ import {
     Users,
     Layers,
     CheckSquare,
-    Square
+    Square,
+    Download
 } from 'lucide-react';
 
 export type ReportRoleType = 'CEO' | 'SALES_MANAGER' | 'FINANCE' | 'STAFF';
@@ -216,6 +218,20 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
                     </div>
 
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                exportFullCommissionWorkbook({
+                                    deals: allDeals,
+                                    periods: allPeriods,
+                                    activePeriodId: selectedPeriodIds.length === 1 ? selectedPeriodIds[0] : undefined
+                                });
+                            }}
+                            className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
+                            title="دانلود فایل اکسل چند شیته جامع (.xlsx)"
+                        >
+                            <Download className="w-4 h-4 text-emerald-600" />
+                            خروجی اکسل (XLSX)
+                        </button>
                         <button
                             onClick={() => window.print()}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition-all"
