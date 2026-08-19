@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { CommissionDeal, CommissionCategory, CommissionPaymentStatus, CommissionPeriod } from '../../types';
 import { 
@@ -53,9 +53,17 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
     onAddNewPeriod
 }) => {
     // Target Period selection state
-    const [selectedTargetPeriodId, setSelectedTargetPeriodId] = useState<string>(activePeriodId || (periods[0]?.id ?? '1405-05'));
-    const [isCreatingInlinePeriod, setIsCreatingInlinePeriod] = useState(false);
+    const [selectedTargetPeriodId, setSelectedTargetPeriodId] = useState<string>(activePeriodId || (periods[0]?.id ?? ''));
+    const [isCreatingInlinePeriod, setIsCreatingInlinePeriod] = useState(periods.length === 0);
     const [inlinePeriodTitle, setInlinePeriodTitle] = useState('');
+
+    useEffect(() => {
+        if (activePeriodId) {
+            setSelectedTargetPeriodId(activePeriodId);
+        } else if (periods.length > 0 && !selectedTargetPeriodId) {
+            setSelectedTargetPeriodId(periods[0].id);
+        }
+    }, [activePeriodId, periods, selectedTargetPeriodId]);
 
     // File & Parse States
     const [fileName, setFileName] = useState<string>('');
@@ -460,14 +468,27 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
 
     // Final Confirmation
     const handleConfirmFinalImport = () => {
+        let finalPeriodId = selectedTargetPeriodId;
+        let finalPeriodTitle = targetPeriod.title;
+
+        if (!finalPeriodId || periods.length === 0) {
+            if (onAddNewPeriod) {
+                finalPeriodId = onAddNewPeriod('دوره مالی ۱');
+                finalPeriodTitle = 'دوره مالی ۱';
+            } else {
+                alert('لطفاً ابتدا یک دوره مالی برای ثبت معاملات انتخاب یا ایجاد فرمایید.');
+                return;
+            }
+        }
+
         const selectedDeals: CommissionDeal[] = [];
         detectedSheets.forEach(sheet => {
             if (sheet.selected) {
                 // Ensure all deals have the selected target periodId & periodName
                 const updatedPeriodDeals = sheet.deals.map(d => ({
                     ...d,
-                    periodId: selectedTargetPeriodId,
-                    periodName: targetPeriod.title
+                    periodId: finalPeriodId,
+                    periodName: finalPeriodTitle
                 }));
                 selectedDeals.push(...updatedPeriodDeals);
             }
@@ -478,7 +499,7 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
             return;
         }
 
-        onImport(selectedDeals, selectedTargetPeriodId, importMode === 'replace');
+        onImport(selectedDeals, finalPeriodId, importMode === 'replace');
         onClose();
     };
 
@@ -543,11 +564,15 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                             onChange={(e) => setSelectedTargetPeriodId(e.target.value)}
                             className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm cursor-pointer"
                         >
-                            {periods.map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {p.title} ({p.id})
-                                </option>
-                            ))}
+                            {periods.length === 0 ? (
+                                <option value="">(ابتدا دوره ایجاد کنید)</option>
+                            ) : (
+                                periods.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.title} ({p.id})
+                                    </option>
+                                ))
+                            )}
                         </select>
 
                         {/* Inline Period Creation Button */}

@@ -1,6 +1,10 @@
 import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem } from '../types';
 
-export const INITIAL_COMMISSION_PERIODS: CommissionPeriod[] = [
+export const INITIAL_COMMISSION_PERIODS: CommissionPeriod[] = [];
+export const INITIAL_COMMISSION_DEALS: CommissionDeal[] = [];
+export const INITIAL_CAR_YARD_ITEMS: CarYardItem[] = [];
+
+export const SAMPLE_COMMISSION_PERIODS: CommissionPeriod[] = [
     {
         id: '1405-05',
         title: 'مرداد ۱۴۰۵',
@@ -29,7 +33,7 @@ export const INITIAL_COMMISSION_PERIODS: CommissionPeriod[] = [
     }
 ];
 
-export const INITIAL_COMMISSION_DEALS: CommissionDeal[] = [
+export const SAMPLE_COMMISSION_DEALS: CommissionDeal[] = [
     // ----------------------------------------------------
     // 1. فروش انبار (مرداد ۱۴۰۵) - 7 Deals from Excel
     // ----------------------------------------------------
@@ -438,7 +442,7 @@ export const INITIAL_COMMISSION_DEALS: CommissionDeal[] = [
     }
 ];
 
-export const INITIAL_CAR_YARD_ITEMS: CarYardItem[] = [
+export const SAMPLE_CAR_YARD_ITEMS: CarYardItem[] = [
     {
         id: 'yard-1',
         rowNumber: 1,
@@ -583,14 +587,14 @@ export function getCommissionDeals(): CommissionDeal[] {
         const stored = localStorage.getItem(STORAGE_KEY_DEALS);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
                 return parsed;
             }
         }
     } catch (e) {
         console.error('Failed to load commission deals', e);
     }
-    return INITIAL_COMMISSION_DEALS;
+    return [];
 }
 
 export function saveCommissionDeals(deals: CommissionDeal[]): void {
@@ -606,14 +610,14 @@ export function getCommissionPeriods(): CommissionPeriod[] {
         const stored = localStorage.getItem(STORAGE_KEY_PERIODS);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
                 return parsed;
             }
         }
     } catch (e) {
         console.error('Failed to load commission periods', e);
     }
-    return INITIAL_COMMISSION_PERIODS;
+    return [];
 }
 
 export function saveCommissionPeriods(periods: CommissionPeriod[]): void {
@@ -629,14 +633,14 @@ export function getCarYardItems(): CarYardItem[] {
         const stored = localStorage.getItem(STORAGE_KEY_YARD);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
                 return parsed;
             }
         }
     } catch (e) {
         console.error('Failed to load car yard items', e);
     }
-    return INITIAL_CAR_YARD_ITEMS;
+    return [];
 }
 
 export function saveCarYardItems(items: CarYardItem[]): void {
@@ -677,14 +681,7 @@ export function clearAllCommissionData(): {
     deals: CommissionDeal[];
     yard: CarYardItem[];
 } {
-    const emptyPeriods: CommissionPeriod[] = [
-        {
-            id: '1405-05',
-            title: 'مرداد ۱۴۰۵',
-            startDate: '1405/05/01',
-            endDate: '1405/05/31'
-        }
-    ];
+    const emptyPeriods: CommissionPeriod[] = [];
     const emptyDeals: CommissionDeal[] = [];
     const emptyYard: CarYardItem[] = [];
 
@@ -700,16 +697,20 @@ export function resetCommissionDataToDefaults(): {
     periods: CommissionPeriod[];
     yard: CarYardItem[];
 } {
-    try {
-        localStorage.removeItem(STORAGE_KEY_DEALS);
-        localStorage.removeItem(STORAGE_KEY_PERIODS);
-        localStorage.removeItem(STORAGE_KEY_YARD);
-    } catch (e) {
-        // ignore
-    }
+    return clearAllCommissionData();
+}
+
+export function loadSampleCommissionData(): {
+    deals: CommissionDeal[];
+    periods: CommissionPeriod[];
+    yard: CarYardItem[];
+} {
+    saveCommissionPeriods(SAMPLE_COMMISSION_PERIODS);
+    saveCommissionDeals(SAMPLE_COMMISSION_DEALS);
+    saveCarYardItems(SAMPLE_CAR_YARD_ITEMS);
     return {
-        deals: INITIAL_COMMISSION_DEALS,
-        periods: INITIAL_COMMISSION_PERIODS,
-        yard: INITIAL_CAR_YARD_ITEMS
+        deals: SAMPLE_COMMISSION_DEALS,
+        periods: SAMPLE_COMMISSION_PERIODS,
+        yard: SAMPLE_CAR_YARD_ITEMS
     };
 }

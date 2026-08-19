@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CommissionDeal, CommissionPeriod } from '../../../types';
 import { parseSalesPersons } from '../../../services/commissionService';
 import { 
@@ -43,7 +43,17 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
     targetStaffName = 'درسا محمدی'
 }) => {
     // Multi-period state
-    const [selectedPeriodIds, setSelectedPeriodIds] = useState<string[]>([activePeriod.id]);
+    const [selectedPeriodIds, setSelectedPeriodIds] = useState<string[]>(activePeriod.id ? [activePeriod.id] : (allPeriods.length > 0 ? [allPeriods[0].id] : []));
+
+    useEffect(() => {
+        if (activePeriod.id) {
+            setSelectedPeriodIds([activePeriod.id]);
+        } else if (allPeriods.length > 0) {
+            setSelectedPeriodIds([allPeriods[0].id]);
+        } else {
+            setSelectedPeriodIds([]);
+        }
+    }, [activePeriod.id, allPeriods]);
 
     if (!isOpen) return null;
 

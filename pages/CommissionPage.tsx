@@ -19,6 +19,7 @@ import {
     clearPeriodDeals,
     clearAllCommissionData,
     resetCommissionDataToDefaults,
+    loadSampleCommissionData,
     parseSalesPersons
 } from '../services/commissionService';
 import { getUsers } from '../services/api';
@@ -155,7 +156,7 @@ const CommissionPage: React.FC = () => {
 
     // Current active period object
     const activePeriod = useMemo(() => {
-        return periods.find(p => p.id === activePeriodId) || { id: activePeriodId, title: activePeriodId };
+        return periods.find(p => p.id === activePeriodId) || (periods.length > 0 ? periods[0] : { id: '', title: 'بدون دوره مالی' });
     }, [periods, activePeriodId]);
 
     // Save adjustments to current period
@@ -426,17 +427,13 @@ const CommissionPage: React.FC = () => {
 
     // Delete single period
     const handleDeletePeriod = (periodIdToDelete: string, deleteDeals: boolean = true) => {
-        if (periods.length <= 1) {
-            alert('حداقل یک دوره مالی باید در سامانه باقی بماند.');
-            return;
-        }
         const res = deleteCommissionPeriod(periodIdToDelete, deleteDeals);
         setPeriods(res.periods);
         if (deleteDeals) {
             setDeals(res.deals);
         }
         if (activePeriodId === periodIdToDelete) {
-            setActivePeriodId(res.periods[0].id);
+            setActivePeriodId(res.periods.length > 0 ? res.periods[0].id : '');
         }
     };
 
@@ -453,7 +450,7 @@ const CommissionPage: React.FC = () => {
         setPeriods(res.periods);
         setDeals(res.deals);
         setYardItems(res.yard);
-        setActivePeriodId(res.periods[0].id);
+        setActivePeriodId('');
         setIsPeriodManagerOpen(false);
     };
 
@@ -509,16 +506,26 @@ const CommissionPage: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `commission_${activeTab}_${activePeriod.title.replace(/\s+/g, '_')}.csv`);
+        link.setAttribute('download', `commission_${activeTab}_${(activePeriod.title || 'export').replace(/\s+/g, '_')}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
-    // Reset to defaults
+    // Reset to empty default
     const handleResetDefaults = () => {
-        if (!confirm('آیا مایلید داده‌ها به ۵ شیت کامل فایل اکسل تیر و مرداد ماه بازنشانی شوند؟')) return;
+        if (!confirm('آیا از پاکسازی تمام دوره‌ها و اطلاعات اطمینان دارید؟ تمام داده‌ها حذف شده و سیستم به حالت خالی برمی‌گردد.')) return;
         const res = resetCommissionDataToDefaults();
+        setPeriods(res.periods);
+        setDeals(res.deals);
+        setYardItems(res.yard);
+        setActivePeriodId('');
+    };
+
+    // Load sample demo data on demand
+    const handleLoadSampleData = () => {
+        if (!confirm('آیا مایلید فایل‌های نمونه اکسل تیر و مرداد ماه به عنوان داده‌های آزمایشی بارگذاری شوند؟')) return;
+        const res = loadSampleCommissionData();
         setPeriods(res.periods);
         setDeals(res.deals);
         setYardItems(res.yard);
@@ -635,35 +642,56 @@ const CommissionPage: React.FC = () => {
                         <Calendar className="w-3.5 h-3.5" />
                         دوره مالی:
                     </span>
-                    {periods.map(period => (
-                        <button
-                            key={period.id}
-                            onClick={() => setActivePeriodId(period.id)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                                activePeriodId === period.id
-                                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
-                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-                            }`}
-                        >
-                            {period.title}
-                        </button>
-                    ))}
-                    <button
-                        onClick={() => setIsNewPeriodModalOpen(true)}
-                        className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors flex items-center gap-1 whitespace-nowrap"
-                        title="ایجاد دوره مالی جدید"
-                    >
-                        <Plus className="w-3.5 h-3.5" />
-                        دوره جدید
-                    </button>
-                    <button
-                        onClick={() => setIsPeriodManagerOpen(true)}
-                        className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 transition-colors flex items-center gap-1.5 whitespace-nowrap"
-                        title="مدیریت، پاکسازی و حذف دوره‌ها"
-                    >
-                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                        مدیریت و پاکسازی دوره‌ها
-                    </button>
+                    {periods.length === 0 ? (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 whitespace-nowrap">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                هیچ دوره‌ای تعریف نشده است
+                            </span>
+                            <button
+                                onClick={() => setIsNewPeriodModalOpen(true)}
+                                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all flex items-center gap-1 whitespace-nowrap"
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                                ایجاد اولین دوره
+                            </button>
+                        </div>
+                    ) : (
+                        periods.map(period => (
+                            <button
+                                key={period.id}
+                                onClick={() => setActivePeriodId(period.id)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                                    activePeriodId === period.id
+                                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
+                                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                                }`}
+                            >
+                                {period.title}
+                            </button>
+                        ))
+                    )}
+                    
+                    {periods.length > 0 && (
+                        <>
+                            <button
+                                onClick={() => setIsNewPeriodModalOpen(true)}
+                                className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors flex items-center gap-1 whitespace-nowrap"
+                                title="ایجاد دوره مالی جدید"
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                                دوره جدید
+                            </button>
+                            <button
+                                onClick={() => setIsPeriodManagerOpen(true)}
+                                className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                                title="مدیریت، پاکسازی و حذف دوره‌ها"
+                            >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                مدیریت و پاکسازی دوره‌ها
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 <div className="text-xs font-bold text-slate-500 dark:text-slate-400 px-3 flex items-center gap-3">
@@ -754,17 +782,55 @@ const CommissionPage: React.FC = () => {
             </div>
 
             {/* View Switching based on currentPerspective */}
+            {periods.length === 0 ? (
+                <div className="bg-white dark:bg-slate-800 rounded-3xl p-10 sm:p-14 border border-slate-200 dark:border-slate-700 shadow-sm text-center max-w-3xl mx-auto my-8 animate-fade-in">
+                    <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-3xl mx-auto flex items-center justify-center mb-5 shadow-inner border border-emerald-100 dark:border-emerald-800">
+                        <Calendar className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2.5">
+                        سامانه پورسانت و کمیسیون آماده فعالیت است
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 max-w-lg mx-auto mb-8 leading-relaxed">
+                        به صورت پیش‌فرض هیچ دوره مالی در سامانه وجود ندارد. برای شروع می‌توانید اولین دوره مالی خود را بسازید یا مستقیماً فایل اکسل پورسانت را بارگذاری نمایید.
+                    </p>
 
-            {/* 1. CEO Strategic View */}
-            {currentPerspective === 'CEO' && (
-                <CommissionCeoView
-                    deals={periodDeals}
-                    activePeriod={activePeriod}
-                    currencyUnit={currencyUnit}
-                    onApproveCeo={() => handleApproveRole('CEO')}
-                    onOpenPrintReport={(t) => handleOpenPrintReport(t)}
-                />
-            )}
+                    <div className="flex flex-wrap items-center justify-center gap-3.5">
+                        <button
+                            onClick={() => setIsNewPeriodModalOpen(true)}
+                            className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-2xl shadow-lg shadow-emerald-600/25 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+                        >
+                            <Plus className="w-4 h-4" />
+                            ➕ ایجاد اولین دوره مالی
+                        </button>
+                        <button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-2xl shadow-lg shadow-indigo-600/25 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+                        >
+                            <Upload className="w-4 h-4" />
+                            📥 درون‌ریزی فایل اکسل (.xlsx)
+                        </button>
+                        <button
+                            onClick={handleLoadSampleData}
+                            className="px-4 py-3 bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-2xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 transition-all"
+                            title="بارگذاری ۵ شیت نمونه تیر و مرداد ماه جهت مشاهده ساختار"
+                        >
+                            <Sparkles className="w-4 h-4 text-amber-500" />
+                            بارگذاری داده‌های آزمایشی
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    {/* 1. CEO Strategic View */}
+                    {currentPerspective === 'CEO' && (
+                        <CommissionCeoView
+                            deals={periodDeals}
+                            activePeriod={activePeriod}
+                            currencyUnit={currencyUnit}
+                            onApproveCeo={() => handleApproveRole('CEO')}
+                            onOpenPrintReport={(t) => handleOpenPrintReport(t)}
+                        />
+                    )}
 
             {/* 2. Sales Manager Operational View */}
             {currentPerspective === 'SALES_MANAGER' && (
@@ -1259,6 +1325,8 @@ const CommissionPage: React.FC = () => {
                     </div>
 
                 </div>
+            )}
+            </>
             )}
 
             {/* Modals */}
