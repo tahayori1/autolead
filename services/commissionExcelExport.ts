@@ -151,12 +151,12 @@ export function exportFullCommissionWorkbook({
             formatNumber(d.salePrice),
             formatNumber(d.dailyProfitLoss),
             formatNumber(d.grossProfit),
-            d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : `${(d.commissionRate ? d.commissionRate * (d.commissionRate < 1 ? 100 : 1) : 0.05)}%`,
+            d.isManualCommission ? 'دستی' : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : `${(d.commissionRate ? d.commissionRate * (d.commissionRate < 1 ? 100 : 1) : 0.05)}%`),
             formatNumber(d.commissionAmount),
             formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
             getPaymentStatusPersian(d.paymentStatus),
             d.paymentDate || '',
-            d.paymentNotes || (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : '')
+            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : ''))
         ]);
 
         const anbarWs = XLSX.utils.aoa_to_sheet([anbarHeaders, ...anbarRows]);
@@ -194,11 +194,11 @@ export function exportFullCommissionWorkbook({
             formatNumber(d.salePrice),
             formatNumber(d.grossProfit),
             formatNumber(d.dailyProfitLoss),
-            d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : (d.grossProfit && d.grossProfit > 0 ? '10%' : '0.05%'),
+            d.isManualCommission ? 'دستی' : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : (d.grossProfit && d.grossProfit > 0 ? '10%' : '0.05%')),
             formatNumber(d.commissionAmount),
             formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
             getPaymentStatusPersian(d.paymentStatus),
-            d.paymentNotes || ''
+            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : '')
         ]);
 
         const azadWs = XLSX.utils.aoa_to_sheet([azadHeaders, ...azadRows]);
@@ -217,7 +217,7 @@ export function exportFullCommissionWorkbook({
     const havalehDeals = activeDeals.filter(d => d.category === 'HAVALEH');
     if (havalehDeals.length > 0 || true) {
         const havalehHeaders = [
-            'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'نام خریدار',
+            'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'نام خریدار',
             'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'مبلغ سبد بعدی (ریال)', 'نرخ فروش (ریال)',
             'سود یا زیان حواله / روز (ریال)', 'سود ناخالص (ریال)', 'درصد پورسانت', 'پورسانت کل (ریال)',
             'سهم پرداختی (ریال)', 'وضعیت واریز', 'توضیحات واریز'
@@ -227,6 +227,7 @@ export function exportFullCommissionWorkbook({
             d.purchaseDate || '',
             d.saleDate || '',
             d.salesPerson || '',
+            d.contractWriter || '',
             d.customerName || d.buyerName || '',
             d.carModel || '',
             formatNumber(d.purchasePrice),
@@ -235,16 +236,16 @@ export function exportFullCommissionWorkbook({
             formatNumber(d.salePrice),
             formatNumber(d.dailyProfitLoss),
             formatNumber(d.grossProfit),
-            d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : '0.05%',
+            d.isManualCommission ? 'دستی' : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : '0.05%'),
             formatNumber(d.commissionAmount),
             formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
             getPaymentStatusPersian(d.paymentStatus),
-            d.paymentNotes || (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : '')
+            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : ''))
         ]);
 
         const havalehWs = XLSX.utils.aoa_to_sheet([havalehHeaders, ...havalehRows]);
         havalehWs['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 22 },
+            { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
             { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
             { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
             { wch: 16 }, { wch: 18 }, { wch: 30 }
@@ -292,7 +293,7 @@ export function exportFullCommissionWorkbook({
     const regDeals = activeDeals.filter(d => d.category === 'REGISTRATION');
     if (regDeals.length > 0 || true) {
         const regHeaders = [
-            'ردیف', 'تاریخ ثبت‌نام', 'شماره قرارداد', 'پرسنل فروش', 'نام متقاضی',
+            'ردیف', 'تاریخ ثبت‌نام', 'شماره قرارداد', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'نام متقاضی',
             'مدل خودرو', 'پیش‌پرداخت / واریزی (ریال)', 'پورسانت (ریال)',
             'سهم پرداختی (ریال)', 'وضعیت واریز', 'تاریخ تحویل', 'توضیحات'
         ];
@@ -301,6 +302,7 @@ export function exportFullCommissionWorkbook({
             d.saleDate || '',
             d.contractNumber || '',
             d.salesPerson || '',
+            d.contractWriter || '',
             d.customerName || '',
             d.carModel || '',
             formatNumber(d.downPayment),
@@ -308,7 +310,7 @@ export function exportFullCommissionWorkbook({
             formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
             getPaymentStatusPersian(d.paymentStatus),
             d.deliveryDate || '',
-            d.paymentNotes || ''
+            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : '')
         ]);
 
         const regWs = XLSX.utils.aoa_to_sheet([regHeaders, ...regRows]);
@@ -457,7 +459,7 @@ export function exportSingleCategoryXLSX(
     const catDeals = deals.filter(d => d.category === category);
 
     const headers = [
-        'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'خریدار / مشتری',
+        'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'خریدار / مشتری',
         'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'نرخ فروش / پیش پرداخت (ریال)',
         'سود/زیان روز (ریال)', 'سود ناخالص (ریال)', 'پورسانت کل (ریال)', 'وضعیت واریز', 'توضیحات'
     ];
@@ -467,6 +469,7 @@ export function exportSingleCategoryXLSX(
         d.purchaseDate || '',
         d.saleDate || '',
         d.salesPerson || '',
+        d.contractWriter || '',
         d.customerName || d.buyerName || '',
         d.carModel || '',
         formatNumber(d.purchasePrice),
@@ -476,12 +479,12 @@ export function exportSingleCategoryXLSX(
         formatNumber(d.grossProfit),
         formatNumber(d.commissionAmount),
         getPaymentStatusPersian(d.paymentStatus),
-        d.paymentNotes || (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : '')
+        d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : ''))
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws['!cols'] = [
-        { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 22 },
+        { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
         { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 },
         { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 30 }
     ];

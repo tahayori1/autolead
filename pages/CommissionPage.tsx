@@ -6,6 +6,7 @@ import {
     CommissionPaymentStatus, 
     CarYardItem,
     CommissionUserRole,
+    CommissionSettings,
     User 
 } from '../types';
 import { 
@@ -20,7 +21,9 @@ import {
     clearAllCommissionData,
     resetCommissionDataToDefaults,
     loadSampleCommissionData,
-    parseSalesPersons
+    parseSalesPersons,
+    getCommissionSettings,
+    saveCommissionSettings
 } from '../services/commissionService';
 import { 
     exportFullCommissionWorkbook, 
@@ -29,6 +32,7 @@ import {
 import { getUsers } from '../services/api';
 import { CommissionDealModal } from '../components/commission/CommissionDealModal';
 import { CommissionExcelImportModal } from '../components/commission/CommissionExcelImportModal';
+import { CommissionSettingsModal } from '../components/commission/CommissionSettingsModal';
 import { CommissionPersonnelReport } from '../components/commission/CommissionPersonnelReport';
 import { CommissionMultiFactorCalculator } from '../components/commission/CommissionMultiFactorCalculator';
 import { CommissionCarYardLedger } from '../components/commission/CommissionCarYardLedger';
@@ -111,6 +115,10 @@ const CommissionPage: React.FC = () => {
     const [isDealModalOpen, setIsDealModalOpen] = useState(false);
     const [editingDeal, setEditingDeal] = useState<CommissionDeal | null>(null);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+    // Commission Rates Settings
+    const [commissionSettings, setCommissionSettings] = useState<CommissionSettings>(() => getCommissionSettings());
 
     // Role Reports Modal
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -156,6 +164,12 @@ const CommissionPage: React.FC = () => {
     const handleUpdateYardItems = (newYard: CarYardItem[]) => {
         setYardItems(newYard);
         saveCarYardItems(newYard);
+    };
+
+    // Save commission settings
+    const handleSaveSettings = (newSettings: CommissionSettings) => {
+        setCommissionSettings(newSettings);
+        saveCommissionSettings(newSettings);
     };
 
     // Current active period object
@@ -629,6 +643,16 @@ const CommissionPage: React.FC = () => {
                     >
                         <Download className="w-4 h-4 text-emerald-600" />
                         خروجی کامل اکسل (XLSX)
+                    </button>
+
+                    {/* Commission Rates Settings Button */}
+                    <button
+                        onClick={() => setIsSettingsModalOpen(true)}
+                        className="px-3.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center gap-2"
+                        title="تنظیمات درصدهای پورسانت برای شیت‌ها و دسته‌بندی‌های مختلف معامله"
+                    >
+                        <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
+                        تنظیمات درصدها
                     </button>
 
                     {/* Quick Add Deal Button */}
@@ -1215,8 +1239,13 @@ const CommissionPage: React.FC = () => {
                                                         {isShared && (
                                                             <span className="text-[10px] text-indigo-600 dark:text-indigo-400 flex items-center gap-0.5 mt-0.5 font-bold">
                                                                 <Share2 className="w-3 h-3" />
-                                                                تسهیم ۵۰٪
+                                                                تسهیم ۵۰٪ (۲ همکار)
                                                             </span>
+                                                        )}
+                                                        {deal.contractWriter && (
+                                                            <div className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-1.5 py-0.5 rounded font-bold mt-1 inline-block">
+                                                                نویسنده: {deal.contractWriter}
+                                                            </div>
                                                         )}
                                                     </td>
 
@@ -1288,7 +1317,17 @@ const CommissionPage: React.FC = () => {
 
                                                     {/* Commission Amount */}
                                                     <td className="py-3 px-3.5 font-mono font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                                                        {Math.round((deal.commissionAmount || 0) / div).toLocaleString('fa-IR')}
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span>{Math.round((deal.commissionAmount || 0) / div).toLocaleString('fa-IR')}</span>
+                                                            {deal.isManualCommission && (
+                                                                <span 
+                                                                    className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[9px] font-black border border-amber-300 dark:border-amber-800 cursor-help"
+                                                                    title={deal.manualCommissionReason ? `تغییر دستی: ${deal.manualCommissionReason}` : 'پورسانت دستی'}
+                                                                >
+                                                                    دستی
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
 
                                                     {/* Payment Status Toggle */}
@@ -1404,6 +1443,14 @@ const CommissionPage: React.FC = () => {
                 activePeriodId={activePeriodId}
                 activePeriodName={activePeriod.title}
                 crmUsers={crmUsers}
+                commissionSettings={commissionSettings}
+            />
+
+            <CommissionSettingsModal
+                isOpen={isSettingsModalOpen}
+                onClose={() => setIsSettingsModalOpen(false)}
+                currentSettings={commissionSettings}
+                onSaveSettings={handleSaveSettings}
             />
 
             <CommissionExcelImportModal

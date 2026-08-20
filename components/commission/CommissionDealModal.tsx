@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CommissionDeal, CommissionCategory, CommissionPaymentStatus, User } from '../../types';
-import { calculateCommissionForCategory, parseSalesPersons } from '../../services/commissionService';
+import { CommissionDeal, CommissionCategory, CommissionPaymentStatus, User, CommissionSettings } from '../../types';
+import { calculateCommissionForCategory, parseSalesPersons, getCommissionSettings } from '../../services/commissionService';
 import { 
     X, 
     Calculator, 
     Calendar, 
     User as UserIcon, 
+    Users,
+    PenTool,
     Car, 
     DollarSign, 
     FileText, 
@@ -14,7 +16,11 @@ import {
     AlertCircle,
     Building,
     Layers,
-    Share2
+    Share2,
+    Sliders,
+    Edit3,
+    Sparkles,
+    RotateCcw
 } from 'lucide-react';
 
 interface CommissionDealModalProps {
@@ -25,6 +31,7 @@ interface CommissionDealModalProps {
     activePeriodId: string;
     activePeriodName: string;
     crmUsers?: User[];
+    commissionSettings?: CommissionSettings;
 }
 
 export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
@@ -34,16 +41,23 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
     initialDeal,
     activePeriodId,
     activePeriodName,
-    crmUsers = []
+    crmUsers = [],
+    commissionSettings
 }) => {
     const isEdit = Boolean(initialDeal);
+    const settings = commissionSettings || getCommissionSettings();
 
     // Form state
     const [category, setCategory] = useState<CommissionCategory>('ANBAR');
     const [saleDate, setSaleDate] = useState('');
     const [purchaseDate, setPurchaseDate] = useState('');
-    const [salesPerson, setSalesPerson] = useState('');
-    const [contractWriter, setContractWriter] = useState('');
+    
+    // Collaborator / Sales staff states (1 or 2 partners)
+    const [partnerCount, setPartnerCount] = useState<1 | 2>(1);
+    const [salesPerson1, setSalesPerson1] = useState('');
+    const [salesPerson2, setSalesPerson2] = useState('');
+    const [contractWriter, setContractWriter] = useState(''); // Separate writer field
+
     const [customerName, setCustomerName] = useState('');
     const [sellerName, setSellerName] = useState('');
     const [buyerName, setBuyerName] = useState('');
@@ -59,8 +73,11 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
     const [deliveryDate, setDeliveryDate] = useState('');
 
     const [commissionRate, setCommissionRate] = useState<number>(0.05);
-    const [customCommissionAmount, setCustomCommissionAmount] = useState<number | ''>('');
-    const [isCustomCommission, setIsCustomCommission] = useState(false);
+    
+    // Manual Commission Override State
+    const [isManualCommission, setIsManualCommission] = useState(false);
+    const [manualCommissionAmount, setManualCommissionAmount] = useState<number | ''>('');
+    const [manualCommissionReason, setManualCommissionReason] = useState('');
 
     const [paidCommissionShare, setPaidCommissionShare] = useState<number | ''>('');
     const [paymentStatus, setPaymentStatus] = useState<CommissionPaymentStatus>('PAID');
@@ -75,7 +92,23 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             setCategory(initialDeal.category || 'ANBAR');
             setSaleDate(initialDeal.saleDate || '');
             setPurchaseDate(initialDeal.purchaseDate || '');
-            setSalesPerson(initialDeal.salesPerson || '');
+            
+            // Check if deal had 2 partners or a split name
+            const parsedPartners = initialDeal.sharedPersons || parseSalesPersons(initialDeal.salesPerson);
+            if (initialDeal.secondSalesPerson) {
+                setPartnerCount(2);
+                setSalesPerson1(initialDeal.salesPerson || '');
+                setSalesPerson2(initialDeal.secondSalesPerson || '');
+            } else if (parsedPartners.length >= 2) {
+                setPartnerCount(2);
+                setSalesPerson1(parsedPartners[0] || '');
+                setSalesPerson2(parsedPartners[1] || '');
+            } else {
+                setPartnerCount(1);
+                setSalesPerson1(initialDeal.salesPerson || '');
+                setSalesPerson2('');
+            }
+
             setContractWriter(initialDeal.contractWriter || '');
             setCustomerName(initialDeal.customerName || initialDeal.buyerName || '');
             setSellerName(initialDeal.sellerName || '');
@@ -92,19 +125,31 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             setDeliveryDate(initialDeal.deliveryDate || '');
 
             setCommissionRate(initialDeal.commissionRate || 0.05);
-            setCustomCommissionAmount(initialDeal.commissionAmount ?? '');
+
+            // Manual commission override state
+            if (initialDeal.isManualCommission) {
+                setIsManualCommission(true);
+                setManualCommissionAmount(initialDeal.commissionAmount ?? '');
+                setManualCommissionReason(initialDeal.manualCommissionReason || '');
+            } else {
+                setIsManualCommission(false);
+                setManualCommissionAmount('');
+                setManualCommissionReason('');
+            }
+
             setPaidCommissionShare(initialDeal.paidCommissionShare ?? '');
             setPaymentStatus(initialDeal.paymentStatus || 'PAID');
             setPaymentDate(initialDeal.paymentDate || '');
             setPaymentNotes(initialDeal.paymentNotes || '');
-            setIsCustomCommission(false);
         } else {
             // Default new deal in current active period
             setCategory('ANBAR');
             const defaultDate = `1405/${activePeriodId.slice(5)}/01`;
             setSaleDate(defaultDate);
             setPurchaseDate('');
-            setSalesPerson('');
+            setPartnerCount(1);
+            setSalesPerson1('');
+            setSalesPerson2('');
             setContractWriter('');
             setCustomerName('');
             setSellerName('');
@@ -119,16 +164,19 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             setContractNumber('');
             setDeliveryDate('');
             setCommissionRate(0.05);
-            setCustomCommissionAmount('');
+            
+            setIsManualCommission(false);
+            setManualCommissionAmount('');
+            setManualCommissionReason('');
+
             setPaidCommissionShare('');
             setPaymentStatus('PAID');
             setPaymentDate('');
             setPaymentNotes('');
-            setIsCustomCommission(false);
         }
     }, [isOpen, initialDeal, activePeriodId]);
 
-    // Live Calculation based on selected category & business rules
+    // Live Calculation based on selected category & configured rates
     const calculatedResult = useMemo(() => {
         return calculateCommissionForCategory(category, {
             salePrice: Number(salePrice) || 0,
@@ -137,17 +185,28 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             nextBasketAmount: Number(nextBasketAmount) || 0,
             downPayment: Number(downPayment) || 0,
             commissionRate
-        });
-    }, [category, salePrice, purchasePrice, dailyPrice, nextBasketAmount, downPayment, commissionRate]);
+        }, settings);
+    }, [category, salePrice, purchasePrice, dailyPrice, nextBasketAmount, downPayment, commissionRate, settings]);
 
-    const finalCommissionAmount = isCustomCommission && customCommissionAmount !== '' 
-        ? Number(customCommissionAmount) 
+    // Effective final commission amount
+    const effectiveCommissionAmount = isManualCommission && manualCommissionAmount !== '' 
+        ? Number(manualCommissionAmount) 
         : calculatedResult.commissionAmount;
 
-    // Shared personnel parsing
-    const sharedStaff = useMemo(() => {
-        return parseSalesPersons(salesPerson);
-    }, [salesPerson]);
+    // Derived Sales Staff names & list
+    const combinedSalesPerson = useMemo(() => {
+        if (partnerCount === 2 && salesPerson2.trim()) {
+            return `${salesPerson1.trim()} / ${salesPerson2.trim()}`;
+        }
+        return salesPerson1.trim();
+    }, [partnerCount, salesPerson1, salesPerson2]);
+
+    const activeSharedPersons = useMemo(() => {
+        if (partnerCount === 2 && salesPerson1.trim() && salesPerson2.trim()) {
+            return [salesPerson1.trim(), salesPerson2.trim()];
+        }
+        return undefined;
+    }, [partnerCount, salesPerson1, salesPerson2]);
 
     // Fast suggestion list for customer name
     const [nameQuery, setNameQuery] = useState('');
@@ -158,6 +217,17 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             .filter(u => u.name && u.name.toLowerCase().includes(q))
             .slice(0, 5);
     }, [nameQuery, crmUsers]);
+
+    // Staff names for quick pick
+    const staffOptions = useMemo(() => {
+        const unique = new Set<string>();
+        crmUsers.forEach(u => {
+            if (u.name) unique.add(u.name);
+        });
+        // Default well-known personnel
+        ['درسا محمدی', 'ندا قاسمی', 'عرشیا عسکری', 'شبنم کشاورز', 'طرلان منوچهری', 'امیرحسین رضایی', 'نازنین شیرازی', 'کوروش بهرامی'].forEach(n => unique.add(n));
+        return Array.from(unique);
+    }, [crmUsers]);
 
     if (!isOpen) return null;
 
@@ -173,13 +243,18 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             return;
         }
 
-        if (!salesPerson.trim()) {
-            alert('لطفاً نام پرسنل فروش را مشخص کنید.');
+        if (!salesPerson1.trim()) {
+            alert('لطفاً نام کارشناس فروش (یا همکار اول) را مشخص کنید.');
             return;
         }
 
-        const effectiveShared = sharedStaff.length > 1 ? sharedStaff : undefined;
-        const autoShare = effectiveShared ? Math.round(finalCommissionAmount / effectiveShared.length) : finalCommissionAmount;
+        if (partnerCount === 2 && !salesPerson2.trim()) {
+            alert('لطفاً نام همکار دوم را مشخص کنید یا تعداد همکاران را روی ۱ نفر تنظیم کنید.');
+            return;
+        }
+
+        const countOfPartners = activeSharedPersons ? activeSharedPersons.length : 1;
+        const autoShare = Math.round(effectiveCommissionAmount / countOfPartners);
 
         const newDeal: CommissionDeal = {
             id: initialDeal?.id || `deal-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -188,7 +263,8 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             category,
             saleDate: saleDate.trim(),
             purchaseDate: purchaseDate.trim() || undefined,
-            salesPerson: salesPerson.trim(),
+            salesPerson: combinedSalesPerson,
+            secondSalesPerson: partnerCount === 2 ? salesPerson2.trim() : undefined,
             contractWriter: contractWriter.trim() || undefined,
             customerName: name.trim(),
             sellerName: sellerName.trim() || undefined,
@@ -206,10 +282,13 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
 
             dailyProfitLoss: calculatedResult.dailyProfitLoss,
             grossProfit: calculatedResult.grossProfit,
-            commissionRate,
-            commissionAmount: finalCommissionAmount,
+            commissionRate: calculatedResult.effectiveRate,
+            commissionAmount: effectiveCommissionAmount,
             paidCommissionShare: paidCommissionShare !== '' ? Number(paidCommissionShare) : autoShare,
-            sharedPersons: effectiveShared,
+            sharedPersons: activeSharedPersons,
+            
+            isManualCommission,
+            manualCommissionReason: isManualCommission ? manualCommissionReason.trim() : undefined,
 
             paymentStatus,
             paymentDate: paymentDate.trim() || undefined,
@@ -259,11 +338,11 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                         </label>
                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                             {[
-                                { id: 'ANBAR', label: 'فروش انبار', desc: '۰.۰۵٪ نرخ فروش' },
-                                { id: 'AZAD', label: 'فروش آزاد', desc: '۱۰٪ سود کمیسیون' },
-                                { id: 'HAVALEH', label: 'فروش حواله', desc: '۰.۰۵٪ نرخ فروش' },
-                                { id: 'LEASING', label: 'لیزینگ و اقساط', desc: '۰.۱٪ پیش‌پرداخت' },
-                                { id: 'REGISTRATION', label: 'ثبت‌نام کارخانه', desc: 'پیش‌پرداخت/قرارداد' },
+                                { id: 'ANBAR', label: 'فروش انبار', desc: `${settings.anbarRate}٪ نرخ فروش` },
+                                { id: 'AZAD', label: 'فروش آزاد', desc: `${settings.azadRate}٪ سود کمیسیون` },
+                                { id: 'HAVALEH', label: 'فروش حواله', desc: `${settings.havalehRate}٪ نرخ فروش` },
+                                { id: 'LEASING', label: 'لیزینگ و اقساط', desc: `${settings.leasingRate}٪ پیش‌پرداخت` },
+                                { id: 'REGISTRATION', label: 'ثبت‌نام کارخانه', desc: `${settings.registrationRate}٪ پیش‌پرداخت` },
                             ].map(tab => (
                                 <button
                                     key={tab.id}
@@ -282,60 +361,170 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                         </div>
                     </div>
 
-                    {/* 2. Personnel and Dates */}
+                    {/* 2. Personnel, Partners & Contract Writer */}
                     <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                <Users className="w-4 h-4 text-emerald-600" />
+                                کارشناسان فروش معامله و قولنامه‌نویس
+                            </h4>
+
+                            {/* Partner Count Toggle (1 or 2 partners) */}
+                            <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl gap-1 text-xs">
+                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 px-2">تعداد همکار فروش:</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setPartnerCount(1)}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        partnerCount === 1 
+                                            ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-sm' 
+                                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    ۱ نفر (تک‌نفره)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPartnerCount(2)}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        partnerCount === 2 
+                                            ? 'bg-indigo-600 text-white shadow-sm' 
+                                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    ۲ نفر همکار (۵۰٪ / ۵۰٪)
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Partner inputs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    نام کارشناس فروش <span className="text-rose-500">*</span>
+                                    {partnerCount === 2 ? 'همکار اول فروش' : 'نام کارشناس فروش'} <span className="text-rose-500">*</span>
                                 </label>
-                                <input
-                                    type="text"
-                                    value={salesPerson}
-                                    onChange={e => setSalesPerson(e.target.value)}
-                                    placeholder="مثلاً: درسا محمدی یا عرشیا عسکری / شبنم کشاورز"
-                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                                    required
-                                />
-                                {sharedStaff.length > 1 && (
-                                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 mt-1 flex items-center gap-1 font-bold">
-                                        <Share2 className="w-3 h-3" />
-                                        فروش مشترک: تقسیم ۵۰٪ بین {sharedStaff.join(' و ')}
-                                    </span>
-                                )}
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        list="staff-options-1"
+                                        value={salesPerson1}
+                                        onChange={e => setSalesPerson1(e.target.value)}
+                                        placeholder="مثلاً: درسا محمدی"
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                                        required
+                                    />
+                                    <datalist id="staff-options-1">
+                                        {staffOptions.map(name => (
+                                            <option key={`p1-${name}`} value={name} />
+                                        ))}
+                                    </datalist>
+                                </div>
                             </div>
 
+                            {partnerCount === 2 ? (
+                                <div className="animate-fade-in">
+                                    <label className="block text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-1">
+                                        همکار دوم فروش (سهم ۵۰٪) <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            list="staff-options-2"
+                                            value={salesPerson2}
+                                            onChange={e => setSalesPerson2(e.target.value)}
+                                            placeholder="مثلاً: ندا قاسمی"
+                                            className="w-full px-3 py-2 bg-indigo-50/50 dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-900 dark:text-indigo-200"
+                                            required
+                                        />
+                                        <datalist id="staff-options-2">
+                                            {staffOptions.filter(n => n !== salesPerson1).map(name => (
+                                                <option key={`p2-${name}`} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                        تاریخ فروش معامله <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={saleDate}
+                                        onChange={e => setSaleDate(e.target.value)}
+                                        placeholder="۱۴۰۵/۰۵/۱۰"
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-center focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                                        required
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* If 2 partners selected, place date & writer on next row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    قولنامه‌نویس / همکار هماهنگ‌کننده
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                                    <span className="flex items-center gap-1">
+                                        <PenTool className="w-3.5 h-3.5 text-amber-600" />
+                                        نویسنده قولنامه (فیلد مجزا)
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-normal">قولنامه‌نویس مستقل</span>
                                 </label>
                                 <input
                                     type="text"
+                                    list="writer-options"
                                     value={contractWriter}
                                     onChange={e => setContractWriter(e.target.value)}
                                     placeholder="مثلاً: طرلان منوچهری"
-                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 outline-none"
                                 />
+                                <datalist id="writer-options">
+                                    {staffOptions.map(name => (
+                                        <option key={`writer-${name}`} value={name} />
+                                    ))}
+                                </datalist>
+                                <span className="text-[10px] text-slate-400 mt-1 block">
+                                    فیلد مجزا برای ثبت نام نویسنده قرارداد؛ تاثیری در تسهیم پورسانت فروش ندارد.
+                                </span>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    تاریخ فروش <span className="text-rose-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={saleDate}
-                                    onChange={e => setSaleDate(e.target.value)}
-                                    placeholder="۱۴۰۵/۰۵/۱۰"
-                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-center focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                                    required
-                                />
-                            </div>
+                            {partnerCount === 2 && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                        تاریخ فروش معامله <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={saleDate}
+                                        onChange={e => setSaleDate(e.target.value)}
+                                        placeholder="۱۴۰۵/۰۵/۱۰"
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-center focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                                        required
+                                    />
+                                </div>
+                            )}
                         </div>
+
+                        {partnerCount === 2 && salesPerson1 && salesPerson2 && (
+                            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between text-xs text-indigo-900 dark:text-indigo-200">
+                                <span className="flex items-center gap-1.5 font-bold">
+                                    <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                                    تسهیم پورسانت مشترک: ۵۰٪ به {salesPerson1} و ۵۰٪ به {salesPerson2}
+                                </span>
+                                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                                    هر همکار: {Math.round(effectiveCommissionAmount / 2).toLocaleString('fa-IR')} ریال
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {/* 3. Customer & Vehicle Information */}
                     <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                        <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <Car className="w-4 h-4 text-emerald-600" />
+                            مشخصات مشتری، طرفین و خودرو
+                        </h4>
+
                         {category === 'AZAD' ? (
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div>
@@ -350,6 +539,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
                                     />
                                 </div>
+
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                                         نام خریدار <span className="text-rose-500">*</span>
@@ -357,15 +547,13 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                     <input
                                         type="text"
                                         value={buyerName}
-                                        onChange={e => {
-                                            setBuyerName(e.target.value);
-                                            setCustomerName(e.target.value);
-                                        }}
-                                        placeholder="مثلاً: کیانا نگهداری"
+                                        onChange={e => setBuyerName(e.target.value)}
+                                        placeholder="مثلاً: دکتر نوید حقیقت"
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                                         required
                                     />
                                 </div>
+
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                                         مدل خودرو <span className="text-rose-500">*</span>
@@ -374,7 +562,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                         type="text"
                                         value={carModel}
                                         onChange={e => setCarModel(e.target.value)}
-                                        placeholder="مثلاً: (1404) x3"
+                                        placeholder="مثلاً: لاماری ایما یا تیگو ۸ پرو"
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-emerald-700 dark:text-emerald-400"
                                         required
                                     />
@@ -393,10 +581,11 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                             setCustomerName(e.target.value);
                                             setNameQuery(e.target.value);
                                         }}
-                                        placeholder="مثلاً: هدیه توکلی ریشهری"
+                                        placeholder="مثلاً: علیرضا قربانی"
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                                         required
                                     />
+                                    {/* Auto-suggest */}
                                     {customerSuggestions.length > 0 && (
                                         <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden text-xs">
                                             {customerSuggestions.map(u => (
@@ -565,46 +754,139 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                             </div>
                         )}
 
-                        {/* Calculated Results Summary Box */}
-                        <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/30 rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 flex flex-wrap items-center justify-between gap-3 text-xs">
-                            <div>
-                                <span className="text-slate-500 block text-[11px]">
-                                    {category === 'AZAD' ? 'کمیسیون کل معامله:' : 'سود/زیان روز:'}
-                                </span>
-                                <span className={`font-mono font-bold ${
-                                    (category === 'AZAD' ? calculatedResult.grossProfit : calculatedResult.dailyProfitLoss) >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600'
-                                }`}>
-                                    {(category === 'AZAD' ? calculatedResult.grossProfit : calculatedResult.dailyProfitLoss).toLocaleString('fa-IR')} ریال
-                                </span>
-                                {calculatedResult.dailyProfitLoss < 0 && (
-                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold block mt-0.5">
-                                        ⚠️ زیان روز (فرمول ۰.۲۵٪ نرخ فروش)
+                        {/* Calculated Summary Box with Manual Override Option */}
+                        <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/40 space-y-3">
+                            
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                                <div>
+                                    <span className="text-slate-500 block text-[11px]">
+                                        {category === 'AZAD' ? 'کمیسیون کل معامله:' : 'سود/زیان روز:'}
                                     </span>
-                                )}
-                            </div>
-
-                            <div>
-                                <span className="text-slate-500 block text-[11px]">پورسانت محاسبه‌شده سیستم:</span>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                                        {calculatedResult.commissionAmount.toLocaleString('fa-IR')} ریال
+                                    <span className={`font-mono font-bold ${
+                                        (category === 'AZAD' ? calculatedResult.grossProfit : calculatedResult.dailyProfitLoss) >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600'
+                                    }`}>
+                                        {(category === 'AZAD' ? calculatedResult.grossProfit : calculatedResult.dailyProfitLoss).toLocaleString('fa-IR')} ریال
                                     </span>
-                                    {calculatedResult.dailyProfitLoss < 0 && (
-                                        <span className="px-1.5 py-0.5 bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 rounded text-[10px] font-bold">
-                                            ضریب ۰.۲۵٪
+                                    {calculatedResult.isLossPenalty && (
+                                        <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold block mt-0.5">
+                                            ⚠️ زیان روز (فرمول {settings.lossPenaltyRate}٪ نرخ فروش)
                                         </span>
                                     )}
                                 </div>
+
+                                <div>
+                                    <span className="text-slate-500 block text-[11px]">پورسانت محاسبه‌شده فرمول:</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                                            {calculatedResult.commissionAmount.toLocaleString('fa-IR')} ریال
+                                        </span>
+                                        <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 rounded text-[10px] font-bold">
+                                            ضریب {calculatedResult.effectiveRate}٪
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Manual Override Toggle */}
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isManualCommission) {
+                                                setIsManualCommission(true);
+                                                setManualCommissionAmount(calculatedResult.commissionAmount);
+                                            } else {
+                                                setIsManualCommission(false);
+                                                setManualCommissionAmount('');
+                                                setManualCommissionReason('');
+                                            }
+                                        }}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                            isManualCommission
+                                                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                                                : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                                        }`}
+                                    >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        {isManualCommission ? 'تغییر دستی فعال است' : 'تغییر دستی پورسانت'}
+                                    </button>
+                                </div>
                             </div>
 
-                            {sharedStaff.length > 1 && (
-                                <div>
-                                    <span className="text-indigo-600 block text-[11px]">سهم هر کارشناس (۵۰٪):</span>
-                                    <span className="font-mono font-black text-indigo-700 dark:text-indigo-300">
-                                        {Math.round(calculatedResult.commissionAmount / sharedStaff.length).toLocaleString('fa-IR')} ریال
-                                    </span>
+                            {/* Manual Override Fields (Conditional) */}
+                            {isManualCommission && (
+                                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60 space-y-2 animate-fade-in">
+                                    <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
+                                        <span className="flex items-center gap-1">
+                                            <AlertCircle className="w-4 h-4 text-amber-600" />
+                                            تعیین دستی مبلغ نهایی پورسانت برای این معامله:
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsManualCommission(false);
+                                                setManualCommissionAmount('');
+                                                setManualCommissionReason('');
+                                            }}
+                                            className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1"
+                                        >
+                                            <RotateCcw className="w-3 h-3" />
+                                            بازگشت به محاسبه سیستمی ({calculatedResult.commissionAmount.toLocaleString('fa-IR')})
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                مبلغ پورسانت اختصاصی دستی (ریال) <span className="text-rose-500">*</span>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={manualCommissionAmount}
+                                                onChange={e => setManualCommissionAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                                placeholder="مبلغ مورد نظر به ریال"
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-mono font-black text-amber-800 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 outline-none"
+                                                required
+                                            />
+                                            {manualCommissionAmount !== '' && (
+                                                <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold block mt-1">
+                                                    {Number(manualCommissionAmount).toLocaleString('fa-IR')} ریال
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                علت تغییر دستی پورسانت (اختیاری)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={manualCommissionReason}
+                                                onChange={e => setManualCommissionReason(e.target.value)}
+                                                placeholder="مثلاً: توافق مدیرعامل / پورسانت توافقی مشتری"
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             )}
+
+                            {/* Effective Split Summary */}
+                            <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 flex items-center justify-between text-xs">
+                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    پورسانت نهایی ثبت شونده:
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    {isManualCommission && (
+                                        <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 rounded-full text-[10px] font-black">
+                                            ویرایش دستی
+                                        </span>
+                                    )}
+                                    <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base">
+                                        {effectiveCommissionAmount.toLocaleString('fa-IR')} ریال
+                                    </span>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 
@@ -634,7 +916,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                     type="number"
                                     value={paidCommissionShare}
                                     onChange={e => setPaidCommissionShare(e.target.value === '' ? '' : Number(e.target.value))}
-                                    placeholder={String(finalCommissionAmount)}
+                                    placeholder={String(effectiveCommissionAmount)}
                                     className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
                                 />
                             </div>

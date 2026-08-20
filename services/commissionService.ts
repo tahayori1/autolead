@@ -1,4 +1,14 @@
-import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem } from '../types';
+import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem, CommissionSettings } from '../types';
+
+export const DEFAULT_COMMISSION_SETTINGS: CommissionSettings = {
+    anbarRate: 0.05, // 0.05% از نرخ فروش
+    azadRate: 10, // 10% از سود کمیسیون
+    azadFlatRate: 0.05, // 0.05% از نرخ فروش در صورت عدم سود
+    havalehRate: 0.05, // 0.05% از نرخ فروش
+    leasingRate: 0.1, // 0.1% از پیش‌پرداخت
+    registrationRate: 0.1, // 0.1% از پیش‌پرداخت
+    lossPenaltyRate: 0.25 // 0.25% از نرخ فروش در صورت منفی شدن سود/زیان روز
+};
 
 export const INITIAL_COMMISSION_PERIODS: CommissionPeriod[] = [];
 export const INITIAL_COMMISSION_DEALS: CommissionDeal[] = [];
@@ -508,12 +518,16 @@ export function calculateCommissionForCategory(
         nextBasketAmount?: number;
         downPayment?: number;
         commissionRate?: number;
-    }
+    },
+    customSettings?: CommissionSettings
 ): {
     dailyProfitLoss: number;
     grossProfit: number;
     commissionAmount: number;
+    effectiveRate: number;
+    isLossPenalty: boolean;
 } {
+    const settings = customSettings || getCommissionSettings();
     const salePrice = params.salePrice || 0;
     const purchasePrice = params.purchasePrice || 0;
     const dailyPrice = params.dailyPrice || 0;
@@ -523,16 +537,21 @@ export function calculateCommissionForCategory(
     let dailyProfitLoss = 0;
     let grossProfit = 0;
     let commissionAmount = 0;
+    let effectiveRate = 0;
+    let isLossPenalty = false;
 
     switch (category) {
         case 'ANBAR': {
             dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
             if (dailyProfitLoss < 0) {
-                // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه ۰.۲۵ درصد نرخ فروش
-                commissionAmount = Math.round(salePrice * 0.0025);
+                // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه درصد جریمه زیان روز (پیش‌فرض ۰.۲۵٪)
+                isLossPenalty = true;
+                effectiveRate = settings.lossPenaltyRate;
+                commissionAmount = Math.round(salePrice * (settings.lossPenaltyRate / 100));
             } else {
-                commissionAmount = Math.round(salePrice * 0.0005); // 0.05%
+                effectiveRate = settings.anbarRate;
+                commissionAmount = Math.round(salePrice * (settings.anbarRate / 100));
             }
             break;
         }
@@ -541,12 +560,16 @@ export function calculateCommissionForCategory(
             grossProfit = salePrice - purchasePrice; // کمیسیون کل معامله
             dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
             if (dailyProfitLoss < 0) {
-                // در صورت زیان روز: فرمول ۰.۲۵ درصد نرخ فروش
-                commissionAmount = Math.round(salePrice * 0.0025);
+                // در صورت زیان روز: فرمول درصد جریمه زیان روز
+                isLossPenalty = true;
+                effectiveRate = settings.lossPenaltyRate;
+                commissionAmount = Math.round(salePrice * (settings.lossPenaltyRate / 100));
             } else if (grossProfit > 0) {
-                commissionAmount = Math.round(grossProfit * 0.10); // ۱۰٪ سود کمیسیون
+                effectiveRate = settings.azadRate;
+                commissionAmount = Math.round(grossProfit * (settings.azadRate / 100));
             } else {
-                commissionAmount = Math.round(salePrice * 0.0005); // ۰.۰۵٪ کل نرخ فروش
+                effectiveRate = settings.azadFlatRate;
+                commissionAmount = Math.round(salePrice * (settings.azadFlatRate / 100));
             }
             break;
         }
@@ -555,10 +578,13 @@ export function calculateCommissionForCategory(
             dailyProfitLoss = nextBasketAmount > 0 ? (salePrice - nextBasketAmount) : (salePrice - dailyPrice);
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
             if (dailyProfitLoss < 0) {
-                // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه ۰.۲۵ درصد نرخ فروش
-                commissionAmount = Math.round(salePrice * 0.0025);
+                // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه درصد زیان روز
+                isLossPenalty = true;
+                effectiveRate = settings.lossPenaltyRate;
+                commissionAmount = Math.round(salePrice * (settings.lossPenaltyRate / 100));
             } else {
-                commissionAmount = Math.round(salePrice * 0.0005); // 0.05%
+                effectiveRate = settings.havalehRate;
+                commissionAmount = Math.round(salePrice * (settings.havalehRate / 100));
             }
             break;
         }
@@ -566,14 +592,18 @@ export function calculateCommissionForCategory(
         case 'LEASING': {
             grossProfit = 0;
             dailyProfitLoss = 0;
-            commissionAmount = Math.round(downPayment * 0.001); // 0.1% پیش پرداخت
+            effectiveRate = settings.leasingRate;
+            commissionAmount = Math.round(downPayment * (settings.leasingRate / 100));
             break;
         }
 
         case 'REGISTRATION': {
             grossProfit = 0;
             dailyProfitLoss = 0;
-            commissionAmount = downPayment > 0 ? Math.round(downPayment * 0.001) : 4510000;
+            effectiveRate = settings.registrationRate;
+            commissionAmount = downPayment > 0 
+                ? Math.round(downPayment * (settings.registrationRate / 100)) 
+                : 4510000;
             break;
         }
 
@@ -581,14 +611,17 @@ export function calculateCommissionForCategory(
             dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
             if (dailyProfitLoss < 0) {
-                commissionAmount = Math.round(salePrice * 0.0025);
+                isLossPenalty = true;
+                effectiveRate = settings.lossPenaltyRate;
+                commissionAmount = Math.round(salePrice * (settings.lossPenaltyRate / 100));
             } else {
-                commissionAmount = Math.round(salePrice * 0.0005);
+                effectiveRate = settings.anbarRate;
+                commissionAmount = Math.round(salePrice * (settings.anbarRate / 100));
             }
         }
     }
 
-    return { dailyProfitLoss, grossProfit, commissionAmount };
+    return { dailyProfitLoss, grossProfit, commissionAmount, effectiveRate, isLossPenalty };
 }
 
 // Split shared persons (e.g. "درسا محمدی / ندا قاسمی")
@@ -604,6 +637,33 @@ export function parseSalesPersons(salesPersonStr?: string): string[] {
 const STORAGE_KEY_DEALS = 'autolead_commission_deals_v2';
 const STORAGE_KEY_PERIODS = 'autolead_commission_periods_v2';
 const STORAGE_KEY_YARD = 'autolead_car_yard_v2';
+const STORAGE_KEY_SETTINGS = 'autolead_commission_settings_v1';
+
+export function getCommissionSettings(): CommissionSettings {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            return { ...DEFAULT_COMMISSION_SETTINGS, ...parsed };
+        }
+    } catch (e) {
+        console.error('Failed to load commission settings', e);
+    }
+    return { ...DEFAULT_COMMISSION_SETTINGS };
+}
+
+export function saveCommissionSettings(settings: CommissionSettings): void {
+    try {
+        localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+    } catch (e) {
+        console.error('Failed to save commission settings', e);
+    }
+}
+
+export function resetCommissionSettings(): CommissionSettings {
+    saveCommissionSettings(DEFAULT_COMMISSION_SETTINGS);
+    return { ...DEFAULT_COMMISSION_SETTINGS };
+}
 
 export function getCommissionDeals(): CommissionDeal[] {
     try {

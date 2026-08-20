@@ -660,8 +660,9 @@ export interface CommissionDeal {
     
     purchaseDate?: string; // تاریخ خرید
     saleDate: string; // تاریخ فروش
-    salesPerson: string; // نام پرسنل فروش (یا اشتراکی مثل درسا محمدی / ندا قاسمی)
-    contractWriter?: string; // قولنامه‌نویس
+    salesPerson: string; // نام پرسنل فروش (یا همکار اول)
+    secondSalesPerson?: string; // همکار دوم در فروش (در صورت معامله ۲ نفره)
+    contractWriter?: string; // نویسنده قولنامه (قولنامه‌نویس - فیلد مجزا)
     customerName: string; // نام مشتری / خریدار
     sellerName?: string; // نام فروشنده (برای فروش آزاد)
     buyerName?: string; // نام خریدار
@@ -682,12 +683,24 @@ export interface CommissionDeal {
     commissionAmount: number; // مبلغ پورسانت کل
     paidCommissionShare?: number; // سهم پورسانت پرداختی / تسهیم شده
     sharedPersons?: string[]; // تفکیک اسامی برای تسهیم ۵۰/۵۰
+    isManualCommission?: boolean; // آیا پورسانت به صورت دستی تغییر کرده است؟
+    manualCommissionReason?: string; // علت / توضیح تغییر دستی پورسانت
     
     paymentStatus: CommissionPaymentStatus; // وضعیت واریز
     paymentDate?: string; // تاریخ واریز
     paymentNotes?: string; // یادداشت و جزئیات واریز
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface CommissionSettings {
+    anbarRate: number; // e.g. 0.05 (%)
+    azadRate: number; // e.g. 10 (% of gross profit)
+    azadFlatRate: number; // e.g. 0.05 (% of sale price when gross profit <= 0)
+    havalehRate: number; // e.g. 0.05 (%)
+    leasingRate: number; // e.g. 0.1 (% of down payment)
+    registrationRate: number; // e.g. 0.1 (% of down payment)
+    lossPenaltyRate: number; // e.g. 0.25 (% of sale price when daily profit/loss < 0)
 }
 
 export interface PersonnelCommissionAdjustment {
