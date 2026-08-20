@@ -170,7 +170,7 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
                             }`}
                         >
                             <ShieldCheck className="w-4 h-4" />
-                            {isSalesApproved ? 'تأیید فنی شده توسط مدیر فروش' : 'تأیید صحت فنی و ارسال به مالی'}
+                            {isSalesApproved ? 'تأیید فنی شده توسط مدیر فروش' : 'تأیید صحت فنی و ارسال برای ابلاغ مدیرعامل'}
                         </button>
                     </div>
                 </div>

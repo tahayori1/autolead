@@ -19,7 +19,7 @@ import {
     Download
 } from 'lucide-react';
 
-export type ReportRoleType = 'CEO' | 'SALES_MANAGER' | 'FINANCE' | 'STAFF';
+export type ReportRoleType = 'CEO' | 'SALES_MANAGER' | 'STAFF';
 
 interface CommissionRoleReportsModalProps {
     isOpen: boolean;
@@ -211,7 +211,6 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
                             پیش‌نمایش سند رسمی چاپی • {
                                 reportType === 'CEO' ? 'گزارش راهبردی مدیرعامل' :
                                 reportType === 'SALES_MANAGER' ? 'گزارش ارزیابی عملکرد مدیر فروش' :
-                                reportType === 'FINANCE' ? 'دستور پرداخت و سند حسابداری مالی' :
                                 `فیش حقوقی و پورسانت (${targetStaffName})`
                             }
                         </h2>
@@ -582,8 +581,8 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
                         </div>
                     )}
 
-                    {/* Official Signatures Quad-Box */}
-                    <div className="pt-8 border-t-2 border-slate-900 grid grid-cols-4 gap-4 text-center text-xs">
+                    {/* Official Signatures Box */}
+                    <div className="pt-8 border-t-2 border-slate-900 grid grid-cols-3 gap-6 text-center text-xs">
                         <div className="space-y-12">
                             <span className="font-bold text-slate-700 block">کارشناس فروش (ذینفع)</span>
                             <div className="text-[10px] text-slate-400 border-t border-slate-300 pt-1">امضا و تاریخ</div>
@@ -592,11 +591,6 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
                         <div className="space-y-12">
                             <span className="font-bold text-slate-700 block">مدیر فروش</span>
                             <div className="text-[10px] text-slate-400 border-t border-slate-300 pt-1">امضا و مهر تأیید فنی</div>
-                        </div>
-
-                        <div className="space-y-12">
-                            <span className="font-bold text-slate-700 block">مدیر مالی و حسابداری</span>
-                            <div className="text-[10px] text-slate-400 border-t border-slate-300 pt-1">امضا و تأیید سند تسویه</div>
                         </div>
 
                         <div className="space-y-12">

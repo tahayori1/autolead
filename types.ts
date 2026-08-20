@@ -711,12 +711,34 @@ export interface PersonnelCommissionAdjustment {
     notes?: string;
 }
 
+export interface CommissionTargetGoal {
+    id: string;
+    title: string; // e.g. "دو ثبت نام لیزینگ", "فروش سه دستگاه خودروهای موجود انبار (مدل ۱۴۰۴ و ۱۴۰۵)", "فروش سه دستگاه حواله ایگل"
+    category?: CommissionCategory | 'ANY'; // 'LEASING' | 'ANBAR' | 'HAVALEH' | 'AZAD' | 'REGISTRATION' | 'ANY'
+    targetCount: number; // e.g. 2, 3
+    modelKeyword?: string; // keywords to match carModel e.g. "1404,1405,۱۴۰۴,۱۴۰۵" or "eagle,ایگل" or "j4,جی۴"
+    rewardText?: string;
+    achievedCount?: number;
+    isCompleted?: boolean;
+}
+
+export interface MonthlyCommissionTarget {
+    title: string; // e.g. "تارگت فروش مرداد ماه"
+    goals: CommissionTargetGoal[];
+    specialNotes?: string; // e.g. "در ضمن کمیسیون دو دستگاه جی۴ مشکی ۱۴۰۴ و یک دستگاه ایگل مشکی ۱۴۰۴ آنی واریز خواهد شد."
+    instantPayoutModels?: string[]; // e.g. ["جی۴ مشکی ۱۴۰۴", "ایگل مشکی ۱۴۰۴"]
+    generalRewardBonus?: number;
+    announcedDate?: string;
+    status?: 'ACTIVE' | 'ACHIEVED' | 'MISSED';
+}
+
 export interface CommissionPeriod {
     id: string; // e.g. '1405-05'
     title: string; // e.g. 'مرداد ۱۴۰۵'
     startDate?: string;
     endDate?: string;
     isLocked?: boolean;
+    target?: MonthlyCommissionTarget;
     adjustments?: Record<string, { bonus: number; deductions: number; notes?: string }>;
     approvals?: {
         salesApproved?: boolean;
@@ -732,7 +754,7 @@ export interface CommissionPeriod {
     };
 }
 
-export type CommissionUserRole = 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER' | 'SALES_REP';
+export type CommissionUserRole = 'CEO' | 'SALES_MANAGER' | 'SALES_REP';
 
 
 export interface CarYardItem {

@@ -43,9 +43,12 @@ import { CommissionSalesAnalytics } from '../components/commission/CommissionSal
 // Role-based views & Reports Modal
 import { CommissionCeoView } from '../components/commission/roles/CommissionCeoView';
 import { CommissionSalesManagerView } from '../components/commission/roles/CommissionSalesManagerView';
-import { CommissionFinanceView } from '../components/commission/roles/CommissionFinanceView';
 import { CommissionStaffView } from '../components/commission/roles/CommissionStaffView';
 import { CommissionRoleReportsModal, ReportRoleType } from '../components/commission/roles/CommissionRoleReportsModal';
+import { CommissionMonthlyTargetCard } from '../components/commission/CommissionMonthlyTargetCard';
+import { CommissionTargetModal } from '../components/commission/CommissionTargetModal';
+import { savePeriodTarget, checkIfDealIsInstantPayout } from '../services/commissionService';
+import { MonthlyCommissionTarget } from '../types';
 
 import { 
     Calculator, 
@@ -88,10 +91,12 @@ import {
     SlidersHorizontal,
     AlertOctagon,
     Sparkles,
+    Target,
+    Zap,
     X
 } from 'lucide-react';
 
-type MainPerspective = 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER' | 'STAFF' | 'OPERATIONS';
+type MainPerspective = 'CEO' | 'SALES_MANAGER' | 'STAFF' | 'OPERATIONS';
 type ActiveSheetTab = 'analytics' | 'summary' | 'ANBAR' | 'AZAD' | 'HAVALEH' | 'LEASING' | 'REGISTRATION' | 'yard' | 'all' | 'calculator';
 
 const CommissionPage: React.FC = () => {
@@ -134,6 +139,9 @@ const CommissionPage: React.FC = () => {
 
     // Period Manager & Cleanup Modal
     const [isPeriodManagerOpen, setIsPeriodManagerOpen] = useState(false);
+
+    // Monthly Target Modal
+    const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
 
     // Load initial data
     useEffect(() => {
@@ -192,8 +200,15 @@ const CommissionPage: React.FC = () => {
         saveCommissionPeriods(updated);
     };
 
-    // Handle Role Approvals Workflow
-    const handleApproveRole = (role: 'CEO' | 'SALES_MANAGER' | 'FINANCE_MANAGER') => {
+    // Save monthly target to current period
+    const handleSavePeriodTarget = (target: MonthlyCommissionTarget) => {
+        if (!activePeriodId) return;
+        const updated = savePeriodTarget(activePeriodId, target);
+        setPeriods(updated);
+    };
+
+    // Handle Role Approvals Workflow (Sales Manager -> CEO)
+    const handleApproveRole = (role: 'CEO' | 'SALES_MANAGER') => {
         const updated = periods.map(p => {
             if (p.id === activePeriodId) {
                 const currentApp = { ...(p.approvals || {}) };
@@ -206,13 +221,6 @@ const CommissionPage: React.FC = () => {
                     currentApp.salesApproved = !currentApp.salesApproved;
                     currentApp.salesApprovedAt = currentApp.salesApproved ? now : undefined;
                     currentApp.salesApprovedBy = currentApp.salesApproved ? 'مدیر فروش' : undefined;
-                } else if (role === 'FINANCE_MANAGER') {
-                    currentApp.financeApproved = !currentApp.financeApproved;
-                    currentApp.financeApprovedAt = currentApp.financeApproved ? now : undefined;
-                    currentApp.financeApprovedBy = currentApp.financeApproved ? 'مدیر مالی' : undefined;
-                    if (currentApp.financeApproved && !currentApp.voucherNumber) {
-                        currentApp.voucherNumber = `VCH-${p.id.replace('-', '')}-01`;
-                    }
                 }
                 return { ...p, approvals: currentApp };
             }
@@ -835,7 +843,6 @@ const CommissionPage: React.FC = () => {
                     {[
                         { id: 'CEO', label: '👔 دیدگاه مدیر عامل', desc: 'سودآوری کل و مارجین شرکت' },
                         { id: 'SALES_MANAGER', label: '📊 دیدگاه مدیر فروش', desc: 'تارگت، لیدربورد و پاداش' },
-                        { id: 'FINANCE_MANAGER', label: '💳 دیدگاه مدیر مالی', desc: 'تسویه، سند حسابداری و پایا' },
                         { id: 'STAFF', label: '👤 کارنامه پرسنل فروش', desc: 'فیش انفرادی و ریز قراردادها' },
                         { id: 'OPERATIONS', label: '📑 شیت‌ها و ثبت معاملات', desc: 'جداول ۵ گانه اکسل' },
                     ].map(role => (
@@ -856,7 +863,7 @@ const CommissionPage: React.FC = () => {
                 {/* Quick Print Official Reports Button */}
                 <div className="flex items-center gap-2 px-2">
                     <button
-                        onClick={() => handleOpenPrintReport(currentPerspective === 'OPERATIONS' ? 'CEO' : (currentPerspective === 'FINANCE_MANAGER' ? 'FINANCE' : currentPerspective as ReportRoleType))}
+                        onClick={() => handleOpenPrintReport(currentPerspective === 'OPERATIONS' ? 'CEO' : currentPerspective as ReportRoleType)}
                         className="px-4 py-2 bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white text-xs font-bold rounded-2xl shadow-md flex items-center gap-2 transition-all"
                     >
                         <Printer className="w-4 h-4 text-emerald-400" />
@@ -879,27 +886,28 @@ const CommissionPage: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${activePeriod.approvals?.salesApproved ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-300'}`} />
                         <span className={`font-bold ${activePeriod.approvals?.salesApproved ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
-                            ۱. تأیید مدیر فروش {activePeriod.approvals?.salesApproved ? '✓' : '(در انتظار)'}
+                            ۱. تأیید فنی مدیر فروش {activePeriod.approvals?.salesApproved ? '✓' : '(در انتظار)'}
                         </span>
                     </div>
 
-                    {/* 2. Finance Manager */}
-                    <div className="flex items-center gap-1.5">
-                        <span className={`w-2.5 h-2.5 rounded-full ${activePeriod.approvals?.financeApproved ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-300'}`} />
-                        <span className={`font-bold ${activePeriod.approvals?.financeApproved ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
-                            ۲. تأیید مدیر مالی {activePeriod.approvals?.financeApproved ? '✓' : '(در انتظار)'}
-                        </span>
-                    </div>
-
-                    {/* 3. CEO */}
+                    {/* 2. CEO */}
                     <div className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${activePeriod.approvals?.ceoApproved ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-300'}`} />
                         <span className={`font-bold ${activePeriod.approvals?.ceoApproved ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
-                            ۳. ابلاغ مدیرعامل {activePeriod.approvals?.ceoApproved ? '✓' : '(در انتظار)'}
+                            ۲. ابلاغ و صدور نهایی مدیرعامل {activePeriod.approvals?.ceoApproved ? '✓' : '(در انتظار)'}
                         </span>
                     </div>
                 </div>
             </div>
+
+            {/* Monthly Target Card for Active Period */}
+            {periods.length > 0 && activePeriod.id && (
+                <CommissionMonthlyTargetCard
+                    period={activePeriod}
+                    deals={periodDeals}
+                    onEditTarget={() => setIsTargetModalOpen(true)}
+                />
+            )}
 
             {/* View Switching based on currentPerspective */}
             {periods.length === 0 ? (
@@ -968,18 +976,7 @@ const CommissionPage: React.FC = () => {
                 />
             )}
 
-            {/* 3. Finance Manager View */}
-            {currentPerspective === 'FINANCE_MANAGER' && (
-                <CommissionFinanceView
-                    deals={periodDeals}
-                    activePeriod={activePeriod}
-                    currencyUnit={currencyUnit}
-                    onApproveFinance={() => handleApproveRole('FINANCE_MANAGER')}
-                    onOpenPrintReport={(t) => handleOpenPrintReport(t)}
-                />
-            )}
-
-            {/* 4. Staff Personal Portal View */}
+            {/* 3. Staff Personal Portal View */}
             {currentPerspective === 'STAFF' && (
                 <CommissionStaffView
                     deals={periodDeals}
@@ -1389,18 +1386,26 @@ const CommissionPage: React.FC = () => {
 
                                                     {/* Payment Status Toggle */}
                                                     <td className="py-3 px-3 whitespace-nowrap">
-                                                        <button
-                                                            onClick={() => handleTogglePaymentStatus(deal.id)}
-                                                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all ${
-                                                                deal.paymentStatus === 'PAID'
-                                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                                                    : deal.paymentStatus === 'PARTIAL'
-                                                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                                                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                                                            }`}
-                                                        >
-                                                            {deal.paymentStatus === 'PAID' ? 'واریز شد' : deal.paymentStatus === 'PARTIAL' ? 'علی‌الحساب' : 'در انتظار'}
-                                                        </button>
+                                                        <div className="flex flex-col gap-1 items-start">
+                                                            <button
+                                                                onClick={() => handleTogglePaymentStatus(deal.id)}
+                                                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all ${
+                                                                    deal.paymentStatus === 'PAID'
+                                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                                        : deal.paymentStatus === 'PARTIAL'
+                                                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                                                        : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                                                                }`}
+                                                            >
+                                                                {deal.paymentStatus === 'PAID' ? 'واریز شد' : deal.paymentStatus === 'PARTIAL' ? 'علی‌الحساب' : 'در انتظار'}
+                                                            </button>
+                                                            {activePeriod?.target && checkIfDealIsInstantPayout(deal, activePeriod.target) && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-slate-950 flex items-center gap-0.5 shadow-sm">
+                                                                    <Zap className="w-2.5 h-2.5 fill-current text-slate-950" />
+                                                                    واریز آنی
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
 
                                                     <td className="py-3 px-3 text-[11px] text-slate-500 max-w-[200px] truncate" title={deal.paymentNotes}>
@@ -1537,6 +1542,14 @@ const CommissionPage: React.FC = () => {
                 allDeals={deals}
                 currencyUnit={currencyUnit}
                 targetStaffName={reportTargetStaff}
+            />
+
+            {/* Monthly Target Definition & Edit Modal */}
+            <CommissionTargetModal
+                isOpen={isTargetModalOpen}
+                onClose={() => setIsTargetModalOpen(false)}
+                period={activePeriod}
+                onSaveTarget={handleSavePeriodTarget}
             />
 
             {/* Period Manager & Cleanup Modal */}

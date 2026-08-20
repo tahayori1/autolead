@@ -1,4 +1,4 @@
-import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem, CommissionSettings } from '../types';
+import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem, CommissionSettings, MonthlyCommissionTarget, CommissionTargetGoal } from '../types';
 
 export const DEFAULT_COMMISSION_SETTINGS: CommissionSettings = {
     anbarRate: 0.05, // 0.05% از نرخ فروش
@@ -14,12 +14,47 @@ export const INITIAL_COMMISSION_PERIODS: CommissionPeriod[] = [];
 export const INITIAL_COMMISSION_DEALS: CommissionDeal[] = [];
 export const INITIAL_CAR_YARD_ITEMS: CarYardItem[] = [];
 
+export const DEFAULT_SAMPLE_MONTHLY_TARGET: MonthlyCommissionTarget = {
+    title: 'تارگت فروش مرداد ماه',
+    goals: [
+        {
+            id: 'goal-1',
+            title: '۱. دو ثبت نام لیزینگ',
+            category: 'LEASING',
+            targetCount: 2,
+            modelKeyword: '',
+            rewardText: 'واریز پورسانت با ضریب طلایی'
+        },
+        {
+            id: 'goal-2',
+            title: '۲. فروش سه دستگاه خودروهای موجود انبار (مدل ۱۴۰۴ و ۱۴۰۵)',
+            category: 'ANBAR',
+            targetCount: 3,
+            modelKeyword: '1404,1405,۱۴۰۴,۱۴۰۵',
+            rewardText: 'پاداش ویژه تسریع در فروش انبار'
+        },
+        {
+            id: 'goal-3',
+            title: '۳. فروش سه دستگاه حواله ایگل',
+            category: 'HAVALEH',
+            targetCount: 3,
+            modelKeyword: 'eagle,ایگل',
+            rewardText: 'پاداش فروش حواله ایگل'
+        }
+    ],
+    specialNotes: 'در ضمن کمیسیون دو دستگاه جی۴ مشکی ۱۴۰۴ و یک دستگاه ایگل مشکی ۱۴۰۴ آنی واریز خواهد شد.',
+    instantPayoutModels: ['جی۴ مشکی ۱۴۰۴', 'ایگل مشکی ۱۴۰۴', 'j4', 'eagle'],
+    announcedDate: '1405/05/01',
+    status: 'ACTIVE'
+};
+
 export const SAMPLE_COMMISSION_PERIODS: CommissionPeriod[] = [
     {
         id: '1405-05',
         title: 'مرداد ۱۴۰۵',
         startDate: '1405/05/01',
         endDate: '1405/05/31',
+        target: DEFAULT_SAMPLE_MONTHLY_TARGET,
         adjustments: {
             'ندا قاسمی': { bonus: 0, deductions: 0, notes: 'سهم پورسانت انبار ۵,۸۳۷,۵۰۰ ریال پرداخت شده' },
             'درسا محمدی': { bonus: 0, deductions: 0, notes: '' },
@@ -937,3 +972,89 @@ export function importCommissionJSONData(
         };
     }
 }
+
+// ----------------------------------------------------
+// Target Management Helpers
+// ----------------------------------------------------
+
+export function savePeriodTarget(periodId: string, target: MonthlyCommissionTarget): CommissionPeriod[] {
+    const periods = getCommissionPeriods();
+    const updated = periods.map(p => {
+        if (p.id === periodId) {
+            return {
+                ...p,
+                target
+            };
+        }
+        return p;
+    });
+    saveCommissionPeriods(updated);
+    return updated;
+}
+
+export function calculateGoalProgress(goal: CommissionTargetGoal, periodDeals: CommissionDeal[]): {
+    count: number;
+    percentage: number;
+    isCompleted: boolean;
+    matchingDeals: CommissionDeal[];
+} {
+    const categoryMatches = (deal: CommissionDeal) => {
+        if (!goal.category || goal.category === 'ANY') return true;
+        return deal.category === goal.category;
+    };
+
+    const modelMatches = (deal: CommissionDeal) => {
+        if (!goal.modelKeyword || !goal.modelKeyword.trim()) return true;
+        const keywords = goal.modelKeyword.split(/[,،\s]+/).filter(Boolean);
+        if (keywords.length === 0) return true;
+
+        const carModelLower = (deal.carModel || '').toLowerCase();
+        return keywords.some(k => carModelLower.includes(k.toLowerCase()));
+    };
+
+    const matchingDeals = periodDeals.filter(d => categoryMatches(d) && modelMatches(d));
+    const count = matchingDeals.length;
+    const target = goal.targetCount > 0 ? goal.targetCount : 1;
+    const percentage = Math.min(100, Math.round((count / target) * 100));
+    const isCompleted = count >= goal.targetCount;
+
+    return {
+        count,
+        percentage,
+        isCompleted,
+        matchingDeals
+    };
+}
+
+export function checkIfDealIsInstantPayout(deal: CommissionDeal, target?: MonthlyCommissionTarget): {
+    isInstant: boolean;
+    matchedReason?: string;
+} {
+    if (!target) return { isInstant: false };
+
+    const carModel = (deal.carModel || '').toLowerCase();
+    const notes = (deal.paymentNotes || '').toLowerCase();
+
+    // Check if target has instant payout models
+    if (target.instantPayoutModels && target.instantPayoutModels.length > 0) {
+        for (const item of target.instantPayoutModels) {
+            const cleanItem = item.toLowerCase().trim();
+            if (cleanItem && carModel.includes(cleanItem)) {
+                return { isInstant: true, matchedReason: `تسویه آنی طبق تارگت ماهانه (${item})` };
+            }
+        }
+    }
+
+    // Keyword heuristics for specific vehicles like j4 1404 or eagle 1404
+    if (
+        (carModel.includes('j4') && (carModel.includes('1404') || carModel.includes('۱۴۰۴'))) ||
+        (carModel.includes('eagle') || carModel.includes('ایگل')) ||
+        notes.includes('واریز شد') ||
+        notes.includes('آنی')
+    ) {
+        return { isInstant: true, matchedReason: 'کمیسیون واریز آنی' };
+    }
+
+    return { isInstant: false };
+}
+
