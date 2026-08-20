@@ -52,10 +52,11 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
     const [saleDate, setSaleDate] = useState('');
     const [purchaseDate, setPurchaseDate] = useState('');
     
-    // Collaborator / Sales staff states (1 or 2 partners)
-    const [partnerCount, setPartnerCount] = useState<1 | 2>(1);
+    // Collaborator / Sales staff states (1, 2, or 3 partners)
+    const [partnerCount, setPartnerCount] = useState<1 | 2 | 3>(1);
     const [salesPerson1, setSalesPerson1] = useState('');
     const [salesPerson2, setSalesPerson2] = useState('');
+    const [salesPerson3, setSalesPerson3] = useState('');
     const [contractWriter, setContractWriter] = useState(''); // Separate writer field
 
     const [customerName, setCustomerName] = useState('');
@@ -93,20 +94,23 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             setSaleDate(initialDeal.saleDate || '');
             setPurchaseDate(initialDeal.purchaseDate || '');
             
-            // Check if deal had 2 partners or a split name
+            // Check if deal had 1, 2, or 3 partners or a split name
             const parsedPartners = initialDeal.sharedPersons || parseSalesPersons(initialDeal.salesPerson);
-            if (initialDeal.secondSalesPerson) {
+            if (initialDeal.thirdSalesPerson || parsedPartners.length >= 3) {
+                setPartnerCount(3);
+                setSalesPerson1(parsedPartners[0] || initialDeal.salesPerson || '');
+                setSalesPerson2(parsedPartners[1] || initialDeal.secondSalesPerson || '');
+                setSalesPerson3(parsedPartners[2] || initialDeal.thirdSalesPerson || '');
+            } else if (initialDeal.secondSalesPerson || parsedPartners.length === 2) {
                 setPartnerCount(2);
-                setSalesPerson1(initialDeal.salesPerson || '');
-                setSalesPerson2(initialDeal.secondSalesPerson || '');
-            } else if (parsedPartners.length >= 2) {
-                setPartnerCount(2);
-                setSalesPerson1(parsedPartners[0] || '');
-                setSalesPerson2(parsedPartners[1] || '');
+                setSalesPerson1(parsedPartners[0] || initialDeal.salesPerson || '');
+                setSalesPerson2(parsedPartners[1] || initialDeal.secondSalesPerson || '');
+                setSalesPerson3('');
             } else {
                 setPartnerCount(1);
                 setSalesPerson1(initialDeal.salesPerson || '');
                 setSalesPerson2('');
+                setSalesPerson3('');
             }
 
             setContractWriter(initialDeal.contractWriter || '');
@@ -150,6 +154,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             setPartnerCount(1);
             setSalesPerson1('');
             setSalesPerson2('');
+            setSalesPerson3('');
             setContractWriter('');
             setCustomerName('');
             setSellerName('');
@@ -195,18 +200,24 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
 
     // Derived Sales Staff names & list
     const combinedSalesPerson = useMemo(() => {
-        if (partnerCount === 2 && salesPerson2.trim()) {
+        if (partnerCount === 3 && salesPerson2.trim() && salesPerson3.trim()) {
+            return `${salesPerson1.trim()} / ${salesPerson2.trim()} / ${salesPerson3.trim()}`;
+        }
+        if (partnerCount >= 2 && salesPerson2.trim()) {
             return `${salesPerson1.trim()} / ${salesPerson2.trim()}`;
         }
         return salesPerson1.trim();
-    }, [partnerCount, salesPerson1, salesPerson2]);
+    }, [partnerCount, salesPerson1, salesPerson2, salesPerson3]);
 
     const activeSharedPersons = useMemo(() => {
+        if (partnerCount === 3 && salesPerson1.trim() && salesPerson2.trim() && salesPerson3.trim()) {
+            return [salesPerson1.trim(), salesPerson2.trim(), salesPerson3.trim()];
+        }
         if (partnerCount === 2 && salesPerson1.trim() && salesPerson2.trim()) {
             return [salesPerson1.trim(), salesPerson2.trim()];
         }
         return undefined;
-    }, [partnerCount, salesPerson1, salesPerson2]);
+    }, [partnerCount, salesPerson1, salesPerson2, salesPerson3]);
 
     // Fast suggestion list for customer name
     const [nameQuery, setNameQuery] = useState('');
@@ -253,6 +264,11 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             return;
         }
 
+        if (partnerCount === 3 && (!salesPerson2.trim() || !salesPerson3.trim())) {
+            alert('لطفاً نام هر سه همکار فروش را مشخص کنید یا تعداد همکاران را کاهش دهید.');
+            return;
+        }
+
         const countOfPartners = activeSharedPersons ? activeSharedPersons.length : 1;
         const autoShare = Math.round(effectiveCommissionAmount / countOfPartners);
 
@@ -264,7 +280,8 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             saleDate: saleDate.trim(),
             purchaseDate: purchaseDate.trim() || undefined,
             salesPerson: combinedSalesPerson,
-            secondSalesPerson: partnerCount === 2 ? salesPerson2.trim() : undefined,
+            secondSalesPerson: partnerCount >= 2 ? salesPerson2.trim() : undefined,
+            thirdSalesPerson: partnerCount === 3 ? salesPerson3.trim() : undefined,
             contractWriter: contractWriter.trim() || undefined,
             customerName: name.trim(),
             sellerName: sellerName.trim() || undefined,
@@ -369,7 +386,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                 کارشناسان فروش معامله و قولنامه‌نویس
                             </h4>
 
-                            {/* Partner Count Toggle (1 or 2 partners) */}
+                            {/* Partner Count Toggle (1, 2, or 3 partners) */}
                             <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl gap-1 text-xs">
                                 <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 px-2">تعداد همکار فروش:</span>
                                 <button
@@ -392,37 +409,86 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                             : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                                     }`}
                                 >
-                                    ۲ نفر همکار (۵۰٪ / ۵۰٪)
+                                    ۲ همکار (۵۰٪)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPartnerCount(3)}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        partnerCount === 3 
+                                            ? 'bg-purple-600 text-white shadow-sm' 
+                                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    ۳ همکار (۳۳.۳٪)
                                 </button>
                             </div>
                         </div>
 
                         {/* Partner inputs */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    {partnerCount === 2 ? 'همکار اول فروش' : 'نام کارشناس فروش'} <span className="text-rose-500">*</span>
-                                </label>
-                                <div className="relative">
+                        {partnerCount === 1 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                        نام کارشناس فروش <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            list="staff-options-1"
+                                            value={salesPerson1}
+                                            onChange={e => setSalesPerson1(e.target.value)}
+                                            placeholder="مثلاً: درسا محمدی"
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                                            required
+                                        />
+                                        <datalist id="staff-options-1">
+                                            {staffOptions.map(name => (
+                                                <option key={`p1-${name}`} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                        تاریخ فروش معامله <span className="text-rose-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
-                                        list="staff-options-1"
-                                        value={salesPerson1}
-                                        onChange={e => setSalesPerson1(e.target.value)}
-                                        placeholder="مثلاً: درسا محمدی"
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                                        value={saleDate}
+                                        onChange={e => setSaleDate(e.target.value)}
+                                        placeholder="۱۴۰۵/۰۵/۱۰"
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-center focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                                         required
                                     />
-                                    <datalist id="staff-options-1">
-                                        {staffOptions.map(name => (
-                                            <option key={`p1-${name}`} value={name} />
-                                        ))}
-                                    </datalist>
                                 </div>
                             </div>
+                        )}
 
-                            {partnerCount === 2 ? (
-                                <div className="animate-fade-in">
+                        {partnerCount === 2 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
+                                <div>
+                                    <label className="block text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-1">
+                                        همکار اول فروش (سهم ۵۰٪) <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            list="staff-options-1"
+                                            value={salesPerson1}
+                                            onChange={e => setSalesPerson1(e.target.value)}
+                                            placeholder="مثلاً: درسا محمدی"
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                                            required
+                                        />
+                                        <datalist id="staff-options-1">
+                                            {staffOptions.map(name => (
+                                                <option key={`p1-${name}`} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div>
                                     <label className="block text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-1">
                                         همکار دوم فروش (سهم ۵۰٪) <span className="text-rose-500">*</span>
                                     </label>
@@ -443,24 +509,78 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                         </datalist>
                                     </div>
                                 </div>
-                            ) : (
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                        تاریخ فروش معامله <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={saleDate}
-                                        onChange={e => setSaleDate(e.target.value)}
-                                        placeholder="۱۴۰۵/۰۵/۱۰"
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-center focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                                        required
-                                    />
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
-                        {/* If 2 partners selected, place date & writer on next row */}
+                        {partnerCount === 3 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in">
+                                <div>
+                                    <label className="block text-xs font-bold text-purple-700 dark:text-purple-300 mb-1">
+                                        همکار اول (۳۳.۳٪) <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            list="staff-options-1"
+                                            value={salesPerson1}
+                                            onChange={e => setSalesPerson1(e.target.value)}
+                                            placeholder="مثلاً: درسا محمدی"
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 outline-none font-bold"
+                                            required
+                                        />
+                                        <datalist id="staff-options-1">
+                                            {staffOptions.map(name => (
+                                                <option key={`p1-${name}`} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-purple-700 dark:text-purple-300 mb-1">
+                                        همکار دوم (۳۳.۳٪) <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            list="staff-options-2"
+                                            value={salesPerson2}
+                                            onChange={e => setSalesPerson2(e.target.value)}
+                                            placeholder="مثلاً: ندا قاسمی"
+                                            className="w-full px-3 py-2 bg-purple-50/50 dark:bg-slate-800 border border-purple-200 dark:border-purple-800 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 outline-none font-bold text-purple-900 dark:text-purple-200"
+                                            required
+                                        />
+                                        <datalist id="staff-options-2">
+                                            {staffOptions.filter(n => n !== salesPerson1).map(name => (
+                                                <option key={`p2-${name}`} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-purple-700 dark:text-purple-300 mb-1">
+                                        همکار سوم (۳۳.۳٪) <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            list="staff-options-3"
+                                            value={salesPerson3}
+                                            onChange={e => setSalesPerson3(e.target.value)}
+                                            placeholder="مثلاً: عرشیا عسکری"
+                                            className="w-full px-3 py-2 bg-purple-50/50 dark:bg-slate-800 border border-purple-200 dark:border-purple-800 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 outline-none font-bold text-purple-900 dark:text-purple-200"
+                                            required
+                                        />
+                                        <datalist id="staff-options-3">
+                                            {staffOptions.filter(n => n !== salesPerson1 && n !== salesPerson2).map(name => (
+                                                <option key={`p3-${name}`} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Contract writer & Sale date row for 2/3 partners */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
@@ -488,7 +608,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                 </span>
                             </div>
 
-                            {partnerCount === 2 && (
+                            {partnerCount >= 2 && (
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                                         تاریخ فروش معامله <span className="text-rose-500">*</span>
@@ -505,14 +625,27 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                             )}
                         </div>
 
+                        {/* Live Sharing Information Banner */}
                         {partnerCount === 2 && salesPerson1 && salesPerson2 && (
                             <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between text-xs text-indigo-900 dark:text-indigo-200">
                                 <span className="flex items-center gap-1.5 font-bold">
                                     <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                                    تسهیم پورسانت مشترک: ۵۰٪ به {salesPerson1} و ۵۰٪ به {salesPerson2}
+                                    تسهیم پورسانت مشترک بین ۲ همکار: ۵۰٪ به {salesPerson1} و ۵۰٪ به {salesPerson2}
                                 </span>
                                 <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
                                     هر همکار: {Math.round(effectiveCommissionAmount / 2).toLocaleString('fa-IR')} ریال
+                                </span>
+                            </div>
+                        )}
+
+                        {partnerCount === 3 && salesPerson1 && salesPerson2 && salesPerson3 && (
+                            <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800/50 flex items-center justify-between text-xs text-purple-900 dark:text-purple-200">
+                                <span className="flex items-center gap-1.5 font-bold">
+                                    <Share2 className="w-4 h-4 text-purple-600 shrink-0" />
+                                    تسهیم پورسانت مشترک بین ۳ همکار: ۳۳.۳٪ به {salesPerson1}، {salesPerson2} و {salesPerson3}
+                                </span>
+                                <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
+                                    هر همکار: {Math.round(effectiveCommissionAmount / 3).toLocaleString('fa-IR')} ریال
                                 </span>
                             </div>
                         )}

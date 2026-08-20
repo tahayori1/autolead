@@ -624,11 +624,11 @@ export function calculateCommissionForCategory(
     return { dailyProfitLoss, grossProfit, commissionAmount, effectiveRate, isLossPenalty };
 }
 
-// Split shared persons (e.g. "درسا محمدی / ندا قاسمی")
+// Split shared persons (e.g. "درسا محمدی / ندا قاسمی / عرشیا عسکری" or "درسا محمدی و ندا قاسمی")
 export function parseSalesPersons(salesPersonStr?: string): string[] {
     if (!salesPersonStr) return [];
     return salesPersonStr
-        .split(/[/،+&]/)
+        .split(/[/،+&]|\s+و\s+/)
         .map(s => s.trim())
         .filter(s => s.length > 0);
 }
@@ -796,4 +796,144 @@ export function loadSampleCommissionData(): {
         periods: SAMPLE_COMMISSION_PERIODS,
         yard: SAMPLE_CAR_YARD_ITEMS
     };
+}
+
+// ----------------------------------------------------
+// JSON Export & Import Functions
+// ----------------------------------------------------
+
+export function exportCommissionJSONData(activePeriodId?: string): void {
+    const backup: {
+        version: string;
+        exportedAt: string;
+        system: string;
+        activePeriodId?: string;
+        settings: CommissionSettings;
+        periods: CommissionPeriod[];
+        deals: CommissionDeal[];
+        yardItems: CarYardItem[];
+    } = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        system: 'AutoLead CRM - Commission & Deal Management',
+        activePeriodId: activePeriodId || undefined,
+        settings: getCommissionSettings(),
+        periods: getCommissionPeriods(),
+        deals: getCommissionDeals(),
+        yardItems: getCarYardItems()
+    };
+
+    const jsonString = JSON.stringify(backup, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    link.href = url;
+    link.download = `commission_backup_${dateStr}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+export function importCommissionJSONData(
+    jsonData: any,
+    mode: 'REPLACE_ALL' | 'APPEND' = 'REPLACE_ALL'
+): {
+    success: boolean;
+    error?: string;
+    periods: CommissionPeriod[];
+    deals: CommissionDeal[];
+    yard: CarYardItem[];
+    settings?: CommissionSettings;
+    activePeriodId?: string;
+} {
+    try {
+        let parsed = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+
+        // Support direct array of deals or standard backup format
+        let importedPeriods: CommissionPeriod[] = [];
+        let importedDeals: CommissionDeal[] = [];
+        let importedYard: CarYardItem[] = [];
+        let importedSettings: CommissionSettings | undefined = undefined;
+        let activePeriodId: string | undefined = undefined;
+
+        if (Array.isArray(parsed)) {
+            // It's a raw array of deals
+            importedDeals = parsed;
+            // auto-create periods from deal periods
+            const pIds = Array.from(new Set(importedDeals.map(d => d.periodId).filter(Boolean)));
+            importedPeriods = pIds.map(id => ({
+                id,
+                title: id
+            }));
+        } else if (parsed && typeof parsed === 'object') {
+            importedPeriods = Array.isArray(parsed.periods) ? parsed.periods : [];
+            importedDeals = Array.isArray(parsed.deals) ? parsed.deals : [];
+            importedYard = Array.isArray(parsed.yardItems) ? parsed.yardItems : [];
+            importedSettings = parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : undefined;
+            activePeriodId = parsed.activePeriodId;
+        } else {
+            return {
+                success: false,
+                error: 'ساختار فایل JSON معتبر نیست.',
+                periods: getCommissionPeriods(),
+                deals: getCommissionDeals(),
+                yard: getCarYardItems()
+            };
+        }
+
+        let finalPeriods: CommissionPeriod[];
+        let finalDeals: CommissionDeal[];
+        let finalYard: CarYardItem[];
+
+        if (mode === 'REPLACE_ALL') {
+            finalPeriods = importedPeriods;
+            finalDeals = importedDeals;
+            finalYard = importedYard;
+        } else {
+            // Append mode: merge without duplicate IDs
+            const currentPeriods = getCommissionPeriods();
+            const currentDeals = getCommissionDeals();
+            const currentYard = getCarYardItems();
+
+            const existingPeriodIds = new Set(currentPeriods.map(p => p.id));
+            const newPeriods = importedPeriods.filter(p => !existingPeriodIds.has(p.id));
+            finalPeriods = [...currentPeriods, ...newPeriods];
+
+            const existingDealIds = new Set(currentDeals.map(d => d.id));
+            const newDeals = importedDeals.filter(d => !existingDealIds.has(d.id));
+            finalDeals = [...newDeals, ...currentDeals];
+
+            const existingYardIds = new Set(currentYard.map(y => y.id));
+            const newYard = importedYard.filter(y => !existingYardIds.has(y.id));
+            finalYard = [...newYard, ...currentYard];
+        }
+
+        saveCommissionPeriods(finalPeriods);
+        saveCommissionDeals(finalDeals);
+        saveCarYardItems(finalYard);
+        if (importedSettings) {
+            saveCommissionSettings(importedSettings);
+        }
+
+        return {
+            success: true,
+            periods: finalPeriods,
+            deals: finalDeals,
+            yard: finalYard,
+            settings: importedSettings,
+            activePeriodId: activePeriodId || (finalPeriods.length > 0 ? finalPeriods[0].id : undefined)
+        };
+    } catch (e: any) {
+        return {
+            success: false,
+            error: e?.message || 'خطا در پردازش و بارگذاری داده‌های JSON',
+            periods: getCommissionPeriods(),
+            deals: getCommissionDeals(),
+            yard: getCarYardItems()
+        };
+    }
 }

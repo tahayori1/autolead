@@ -661,7 +661,8 @@ export interface CommissionDeal {
     purchaseDate?: string; // تاریخ خرید
     saleDate: string; // تاریخ فروش
     salesPerson: string; // نام پرسنل فروش (یا همکار اول)
-    secondSalesPerson?: string; // همکار دوم در فروش (در صورت معامله ۲ نفره)
+    secondSalesPerson?: string; // همکار دوم در فروش (در صورت معامله ۲ یا ۳ نفره)
+    thirdSalesPerson?: string; // همکار سوم در فروش (در صورت معامله ۳ نفره)
     contractWriter?: string; // نویسنده قولنامه (قولنامه‌نویس - فیلد مجزا)
     customerName: string; // نام مشتری / خریدار
     sellerName?: string; // نام فروشنده (برای فروش آزاد)
@@ -682,7 +683,7 @@ export interface CommissionDeal {
     commissionRate?: number; // درصد پورسانت
     commissionAmount: number; // مبلغ پورسانت کل
     paidCommissionShare?: number; // سهم پورسانت پرداختی / تسهیم شده
-    sharedPersons?: string[]; // تفکیک اسامی برای تسهیم ۵۰/۵۰
+    sharedPersons?: string[]; // تفکیک اسامی برای تسهیم ۱/۲ یا ۱/۳ بین همکاران
     isManualCommission?: boolean; // آیا پورسانت به صورت دستی تغییر کرده است؟
     manualCommissionReason?: string; // علت / توضیح تغییر دستی پورسانت
     
@@ -749,6 +750,17 @@ export interface CarYardItem {
     deliveredBy: string; // نام تحویل‌دهنده خودرو
     status: 'PARKED' | 'RELEASED' | 'IN_REPAIR'; // وضعیت (در پارکینگ / ترخیص شده)
     notes?: string;
+}
+
+export interface CommissionBackupData {
+    version: string;
+    exportedAt: string;
+    system: string;
+    activePeriodId?: string;
+    settings?: CommissionSettings;
+    periods: CommissionPeriod[];
+    deals: CommissionDeal[];
+    yardItems: CarYardItem[];
 }
 
 

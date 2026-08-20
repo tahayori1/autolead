@@ -23,7 +23,8 @@ import {
     loadSampleCommissionData,
     parseSalesPersons,
     getCommissionSettings,
-    saveCommissionSettings
+    saveCommissionSettings,
+    exportCommissionJSONData
 } from '../services/commissionService';
 import { 
     exportFullCommissionWorkbook, 
@@ -32,6 +33,7 @@ import {
 import { getUsers } from '../services/api';
 import { CommissionDealModal } from '../components/commission/CommissionDealModal';
 import { CommissionExcelImportModal } from '../components/commission/CommissionExcelImportModal';
+import { CommissionJsonModal } from '../components/commission/CommissionJsonModal';
 import { CommissionSettingsModal } from '../components/commission/CommissionSettingsModal';
 import { CommissionPersonnelReport } from '../components/commission/CommissionPersonnelReport';
 import { CommissionMultiFactorCalculator } from '../components/commission/CommissionMultiFactorCalculator';
@@ -115,6 +117,7 @@ const CommissionPage: React.FC = () => {
     const [isDealModalOpen, setIsDealModalOpen] = useState(false);
     const [editingDeal, setEditingDeal] = useState<CommissionDeal | null>(null);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
     // Commission Rates Settings
@@ -472,6 +475,36 @@ const CommissionPage: React.FC = () => {
         setIsPeriodManagerOpen(false);
     };
 
+    // Handle JSON Backup Export
+    const handleExportJSON = () => {
+        if (deals.length === 0 && periods.length === 0) {
+            alert('هیچ داده‌ای برای خروجی JSON وجود ندارد.');
+            return;
+        }
+        exportCommissionJSONData(activePeriodId);
+    };
+
+    // Handle JSON Backup Import
+    const handleJsonImportSuccess = (result: {
+        periods: CommissionPeriod[];
+        deals: CommissionDeal[];
+        yard: CarYardItem[];
+        settings?: CommissionSettings;
+        activePeriodId?: string;
+    }) => {
+        setPeriods(result.periods);
+        setDeals(result.deals);
+        setYardItems(result.yard);
+        if (result.settings) {
+            setCommissionSettings(result.settings);
+        }
+        if (result.activePeriodId) {
+            setActivePeriodId(result.activePeriodId);
+        } else if (result.periods.length > 0) {
+            setActivePeriodId(result.periods[0].id);
+        }
+    };
+
     // Handle Comprehensive Multi-Sheet XLSX Export
     const handleExportFullXLSX = () => {
         if (deals.length === 0) {
@@ -634,6 +667,26 @@ const CommissionPage: React.FC = () => {
                         <Upload className="w-4 h-4 text-emerald-600" />
                         ورود اکسل (XLSX)
                     </button>
+
+                    {/* Import / Export JSON Buttons */}
+                    <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-0.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <button
+                            onClick={() => setIsJsonModalOpen(true)}
+                            className="px-3 py-1.5 text-amber-700 dark:text-amber-300 hover:bg-white dark:hover:bg-slate-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5"
+                            title="ورود و بازیابی فایل پشتیبان JSON"
+                        >
+                            <Upload className="w-3.5 h-3.5 text-amber-600" />
+                            ورود JSON
+                        </button>
+                        <button
+                            onClick={handleExportJSON}
+                            className="px-3 py-1.5 text-amber-700 dark:text-amber-300 hover:bg-white dark:hover:bg-slate-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 border-r border-slate-200 dark:border-slate-700"
+                            title="دانلود فایل پشتیبان کامل از تمامی معاملات و تنظیمات در قالب JSON"
+                        >
+                            <Download className="w-3.5 h-3.5 text-amber-600" />
+                            خروجی JSON
+                        </button>
+                    </div>
 
                     {/* Full XLSX Export Button in Top Header */}
                     <button
@@ -1222,7 +1275,11 @@ const CommissionPage: React.FC = () => {
                                     ) : (
                                         filteredDeals.map((deal, index) => {
                                             const div = metrics.divisor;
-                                            const isShared = (deal.sharedPersons && deal.sharedPersons.length > 1) || (deal.salesPerson || '').includes('/');
+                                            const partners = deal.sharedPersons && deal.sharedPersons.length > 0 
+                                                ? deal.sharedPersons 
+                                                : parseSalesPersons(deal.salesPerson);
+                                            const isShared = partners.length > 1;
+                                            const sharePercent = partners.length > 0 ? (100 / partners.length).toFixed(1).replace('.0', '') : '100';
 
                                             return (
                                                 <tr key={deal.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors">
@@ -1239,7 +1296,7 @@ const CommissionPage: React.FC = () => {
                                                         {isShared && (
                                                             <span className="text-[10px] text-indigo-600 dark:text-indigo-400 flex items-center gap-0.5 mt-0.5 font-bold">
                                                                 <Share2 className="w-3 h-3" />
-                                                                تسهیم ۵۰٪ (۲ همکار)
+                                                                تسهیم {sharePercent}٪ ({partners.length} همکار)
                                                             </span>
                                                         )}
                                                         {deal.contractWriter && (
@@ -1462,6 +1519,13 @@ const CommissionPage: React.FC = () => {
                 onAddNewPeriod={handleAddNewPeriodInline}
             />
 
+            {/* JSON Full Backup Import Modal */}
+            <CommissionJsonModal
+                isOpen={isJsonModalOpen}
+                onClose={() => setIsJsonModalOpen(false)}
+                onImportSuccess={handleJsonImportSuccess}
+            />
+
             {/* Standardized Role Reports & Printing Modal (Supports Multi-Period Selection) */}
             <CommissionRoleReportsModal
                 isOpen={isReportModalOpen}
@@ -1585,6 +1649,30 @@ const CommissionPage: React.FC = () => {
                                 </h4>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsPeriodManagerOpen(false);
+                                            handleExportJSON();
+                                        }}
+                                        className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 rounded-2xl border border-amber-200 dark:border-amber-800 text-right text-xs transition-colors"
+                                    >
+                                        <div className="font-black mb-0.5">💾 دانلود نسخه پشتیبان (JSON Backup)</div>
+                                        <div className="text-[11px] text-amber-600 dark:text-amber-400">ذخیره امن تمامی دوره‌ها و معاملات در یک فایل</div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsPeriodManagerOpen(false);
+                                            setIsJsonModalOpen(true);
+                                        }}
+                                        className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 rounded-2xl border border-indigo-200 dark:border-indigo-800 text-right text-xs transition-colors"
+                                    >
+                                        <div className="font-black mb-0.5">📥 بازیابی از فایل پشتیبان (JSON)</div>
+                                        <div className="text-[11px] text-indigo-600 dark:text-indigo-400">بارگذاری و جایگزینی یا ادغام داده‌ها</div>
+                                    </button>
+
                                     <button
                                         type="button"
                                         onClick={handlePurgeAll}
