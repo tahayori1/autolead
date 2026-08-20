@@ -149,15 +149,20 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
                 row.totalSalesVolume += dealSales;
                 row.dealsList.push(deal);
 
-                if (category === 'ANBAR') row.anbarCommission += shareComm;
-                else if (category === 'AZAD') row.azadCommission += shareComm;
-                else if (category === 'HAVALEH') row.havalehCommission += shareComm;
-                else if (category === 'LEASING') row.leasingCommission += shareComm;
-                else if (category === 'REGISTRATION') row.registrationCommission += shareComm;
-                else row.anbarCommission += shareComm;
+                // Use custom commission for this person if defined in multi-partner manual split
+                const personComm = (deal.customPersonCommissions && deal.customPersonCommissions[staffName] !== undefined)
+                    ? deal.customPersonCommissions[staffName]
+                    : shareComm;
+
+                if (category === 'ANBAR') row.anbarCommission += personComm;
+                else if (category === 'AZAD') row.azadCommission += personComm;
+                else if (category === 'HAVALEH') row.havalehCommission += personComm;
+                else if (category === 'LEASING') row.leasingCommission += personComm;
+                else if (category === 'REGISTRATION') row.registrationCommission += personComm;
+                else row.anbarCommission += personComm;
 
                 if (deal.paymentStatus === 'PAID') {
-                    row.paidAmount += shareComm;
+                    row.paidAmount += personComm;
                 } else if (deal.paymentStatus === 'PARTIAL' && deal.paidCommissionShare) {
                     row.paidAmount += Math.round(deal.paidCommissionShare * shareFactor);
                 }

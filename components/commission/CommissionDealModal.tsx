@@ -59,6 +59,12 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
     const [salesPerson3, setSalesPerson3] = useState('');
     const [contractWriter, setContractWriter] = useState(''); // Separate writer field
 
+    // Multi-person custom commission shares
+    const [isCustomPartnerSplit, setIsCustomPartnerSplit] = useState(false);
+    const [partner1Commission, setPartner1Commission] = useState<number | ''>('');
+    const [partner2Commission, setPartner2Commission] = useState<number | ''>('');
+    const [partner3Commission, setPartner3Commission] = useState<number | ''>('');
+
     const [customerName, setCustomerName] = useState('');
     const [sellerName, setSellerName] = useState('');
     const [buyerName, setBuyerName] = useState('');
@@ -75,7 +81,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
 
     const [commissionRate, setCommissionRate] = useState<number>(0.05);
     
-    // Manual Commission Override State
+    // Manual Commission Override State (Overall Deal)
     const [isManualCommission, setIsManualCommission] = useState(false);
     const [manualCommissionAmount, setManualCommissionAmount] = useState<number | ''>('');
     const [manualCommissionReason, setManualCommissionReason] = useState('');
@@ -96,27 +102,61 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             
             // Check if deal had 1, 2, or 3 partners or a split name
             const parsedPartners = initialDeal.sharedPersons || parseSalesPersons(initialDeal.salesPerson);
+            const p1 = parsedPartners[0] || initialDeal.salesPerson || '';
+            const p2 = parsedPartners[1] || initialDeal.secondSalesPerson || '';
+            const p3 = parsedPartners[2] || initialDeal.thirdSalesPerson || '';
+
             if (initialDeal.thirdSalesPerson || parsedPartners.length >= 3) {
                 setPartnerCount(3);
-                setSalesPerson1(parsedPartners[0] || initialDeal.salesPerson || '');
-                setSalesPerson2(parsedPartners[1] || initialDeal.secondSalesPerson || '');
-                setSalesPerson3(parsedPartners[2] || initialDeal.thirdSalesPerson || '');
+                setSalesPerson1(p1);
+                setSalesPerson2(p2);
+                setSalesPerson3(p3);
             } else if (initialDeal.secondSalesPerson || parsedPartners.length === 2) {
                 setPartnerCount(2);
-                setSalesPerson1(parsedPartners[0] || initialDeal.salesPerson || '');
-                setSalesPerson2(parsedPartners[1] || initialDeal.secondSalesPerson || '');
+                setSalesPerson1(p1);
+                setSalesPerson2(p2);
                 setSalesPerson3('');
             } else {
                 setPartnerCount(1);
-                setSalesPerson1(initialDeal.salesPerson || '');
+                setSalesPerson1(p1);
                 setSalesPerson2('');
                 setSalesPerson3('');
             }
 
+            // Custom multi-partner manual commissions
+            if (initialDeal.customPersonCommissions && Object.keys(initialDeal.customPersonCommissions).length > 0) {
+                setIsCustomPartnerSplit(true);
+                if (p1 && initialDeal.customPersonCommissions[p1] !== undefined) {
+                    setPartner1Commission(initialDeal.customPersonCommissions[p1]);
+                } else {
+                    setPartner1Commission('');
+                }
+                if (p2 && initialDeal.customPersonCommissions[p2] !== undefined) {
+                    setPartner2Commission(initialDeal.customPersonCommissions[p2]);
+                } else {
+                    setPartner2Commission('');
+                }
+                if (p3 && initialDeal.customPersonCommissions[p3] !== undefined) {
+                    setPartner3Commission(initialDeal.customPersonCommissions[p3]);
+                } else {
+                    setPartner3Commission('');
+                }
+            } else {
+                setIsCustomPartnerSplit(false);
+                setPartner1Commission('');
+                setPartner2Commission('');
+                setPartner3Commission('');
+            }
+
             setContractWriter(initialDeal.contractWriter || '');
-            setCustomerName(initialDeal.customerName || initialDeal.buyerName || '');
+            
+            // Fix: ensure buyerName and customerName are both populated from either field
+            const loadedBuyer = initialDeal.buyerName || initialDeal.customerName || '';
+            const loadedCustomer = initialDeal.customerName || initialDeal.buyerName || '';
+            setCustomerName(loadedCustomer);
             setSellerName(initialDeal.sellerName || '');
-            setBuyerName(initialDeal.buyerName || '');
+            setBuyerName(loadedBuyer);
+            
             setCustomerPhone(initialDeal.customerPhone || '');
             setCarModel(initialDeal.carModel || '');
 
@@ -155,6 +195,10 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             setSalesPerson1('');
             setSalesPerson2('');
             setSalesPerson3('');
+            setIsCustomPartnerSplit(false);
+            setPartner1Commission('');
+            setPartner2Commission('');
+            setPartner3Commission('');
             setContractWriter('');
             setCustomerName('');
             setSellerName('');
@@ -193,10 +237,25 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
         }, settings);
     }, [category, salePrice, purchasePrice, dailyPrice, nextBasketAmount, downPayment, commissionRate, settings]);
 
+    // Sum of custom partner commissions if in custom multi-person mode
+    const customPartnersTotal = useMemo(() => {
+        if (!isCustomPartnerSplit || partnerCount < 2) return 0;
+        const p1 = Number(partner1Commission) || 0;
+        const p2 = Number(partner2Commission) || 0;
+        const p3 = partnerCount === 3 ? (Number(partner3Commission) || 0) : 0;
+        return p1 + p2 + p3;
+    }, [isCustomPartnerSplit, partnerCount, partner1Commission, partner2Commission, partner3Commission]);
+
     // Effective final commission amount
-    const effectiveCommissionAmount = isManualCommission && manualCommissionAmount !== '' 
-        ? Number(manualCommissionAmount) 
-        : calculatedResult.commissionAmount;
+    const effectiveCommissionAmount = useMemo(() => {
+        if (isCustomPartnerSplit && partnerCount >= 2 && customPartnersTotal > 0) {
+            return customPartnersTotal;
+        }
+        if (isManualCommission && manualCommissionAmount !== '') {
+            return Number(manualCommissionAmount);
+        }
+        return calculatedResult.commissionAmount;
+    }, [isCustomPartnerSplit, partnerCount, customPartnersTotal, isManualCommission, manualCommissionAmount, calculatedResult.commissionAmount]);
 
     // Derived Sales Staff names & list
     const combinedSalesPerson = useMemo(() => {
@@ -246,8 +305,8 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
         e.preventDefault();
 
         const name = category === 'AZAD' 
-            ? (buyerName || customerName) 
-            : customerName;
+            ? (buyerName.trim() || customerName.trim()) 
+            : (customerName.trim() || buyerName.trim());
 
         if (!name.trim()) {
             alert('لطفاً نام مشتری یا خریدار را وارد کنید.');
@@ -272,6 +331,21 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
         const countOfPartners = activeSharedPersons ? activeSharedPersons.length : 1;
         const autoShare = Math.round(effectiveCommissionAmount / countOfPartners);
 
+        // Build customPersonCommissions if multi-partner custom split is active
+        let customCommissionsMap: Record<string, number> | undefined = undefined;
+        if (isCustomPartnerSplit && partnerCount >= 2) {
+            customCommissionsMap = {};
+            if (salesPerson1.trim()) {
+                customCommissionsMap[salesPerson1.trim()] = partner1Commission !== '' ? Number(partner1Commission) : autoShare;
+            }
+            if (salesPerson2.trim()) {
+                customCommissionsMap[salesPerson2.trim()] = partner2Commission !== '' ? Number(partner2Commission) : autoShare;
+            }
+            if (partnerCount === 3 && salesPerson3.trim()) {
+                customCommissionsMap[salesPerson3.trim()] = partner3Commission !== '' ? Number(partner3Commission) : autoShare;
+            }
+        }
+
         const newDeal: CommissionDeal = {
             id: initialDeal?.id || `deal-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             periodId: activePeriodId,
@@ -285,7 +359,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             contractWriter: contractWriter.trim() || undefined,
             customerName: name.trim(),
             sellerName: sellerName.trim() || undefined,
-            buyerName: buyerName.trim() || undefined,
+            buyerName: category === 'AZAD' ? name.trim() : (buyerName.trim() || name.trim()),
             customerPhone: customerPhone.trim() || undefined,
             carModel: carModel.trim(),
             
@@ -303,9 +377,12 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
             commissionAmount: effectiveCommissionAmount,
             paidCommissionShare: paidCommissionShare !== '' ? Number(paidCommissionShare) : autoShare,
             sharedPersons: activeSharedPersons,
+            customPersonCommissions: customCommissionsMap,
             
-            isManualCommission,
-            manualCommissionReason: isManualCommission ? manualCommissionReason.trim() : undefined,
+            isManualCommission: isManualCommission || isCustomPartnerSplit,
+            manualCommissionReason: isCustomPartnerSplit 
+                ? (manualCommissionReason.trim() || 'پورسانت دستی چند نفره') 
+                : (isManualCommission ? manualCommissionReason.trim() : undefined),
 
             paymentStatus,
             paymentDate: paymentDate.trim() || undefined,
@@ -625,28 +702,217 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                             )}
                         </div>
 
-                        {/* Live Sharing Information Banner */}
-                        {partnerCount === 2 && salesPerson1 && salesPerson2 && (
-                            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between text-xs text-indigo-900 dark:text-indigo-200">
-                                <span className="flex items-center gap-1.5 font-bold">
-                                    <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                                    تسهیم پورسانت مشترک بین ۲ همکار: ۵۰٪ به {salesPerson1} و ۵۰٪ به {salesPerson2}
-                                </span>
-                                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                                    هر همکار: {Math.round(effectiveCommissionAmount / 2).toLocaleString('fa-IR')} ریال
-                                </span>
-                            </div>
-                        )}
+                        {/* Multi-Partner Commission Split Mode Selection & Manual Inputs */}
+                        {partnerCount >= 2 && (
+                            <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-indigo-200 dark:border-indigo-800/60 space-y-3 animate-fade-in">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 text-xs font-black text-indigo-900 dark:text-indigo-200">
+                                        <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                                        <span>نحوه تسهیم پورسانت بین {partnerCount} همکار:</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 p-0.5 rounded-lg text-xs">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsCustomPartnerSplit(false);
+                                                setPartner1Commission('');
+                                                setPartner2Commission('');
+                                                setPartner3Commission('');
+                                            }}
+                                            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                !isCustomPartnerSplit 
+                                                    ? 'bg-indigo-600 text-white shadow-sm' 
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600'
+                                            }`}
+                                        >
+                                            🔄 تسهیم مساوی خودکار ({partnerCount === 2 ? '۵۰٪ - ۵۰٪' : '۳۳.۳٪ مساوی'})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsCustomPartnerSplit(true);
+                                                const total = effectiveCommissionAmount || calculatedResult.commissionAmount || 0;
+                                                if (partnerCount === 2) {
+                                                    setPartner1Commission(Math.round(total * 0.5));
+                                                    setPartner2Commission(Math.round(total * 0.5));
+                                                } else {
+                                                    const s = Math.round(total / 3);
+                                                    setPartner1Commission(s);
+                                                    setPartner2Commission(s);
+                                                    setPartner3Commission(s);
+                                                }
+                                            }}
+                                            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                isCustomPartnerSplit 
+                                                    ? 'bg-amber-500 text-white shadow-sm' 
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-amber-600'
+                                            }`}
+                                        >
+                                            ✏️ تعیین دستی پورسانت هر همکار
+                                        </button>
+                                    </div>
+                                </div>
 
-                        {partnerCount === 3 && salesPerson1 && salesPerson2 && salesPerson3 && (
-                            <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800/50 flex items-center justify-between text-xs text-purple-900 dark:text-purple-200">
-                                <span className="flex items-center gap-1.5 font-bold">
-                                    <Share2 className="w-4 h-4 text-purple-600 shrink-0" />
-                                    تسهیم پورسانت مشترک بین ۳ همکار: ۳۳.۳٪ به {salesPerson1}، {salesPerson2} و {salesPerson3}
-                                </span>
-                                <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
-                                    هر همکار: {Math.round(effectiveCommissionAmount / 3).toLocaleString('fa-IR')} ریال
-                                </span>
+                                {!isCustomPartnerSplit ? (
+                                    <div className="p-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-lg text-xs text-indigo-900 dark:text-indigo-200 flex items-center justify-between">
+                                        <span>
+                                            تسهیم مساوی خودکار: هر همکار 
+                                            <span className="font-bold text-indigo-700 dark:text-indigo-300 mr-1">
+                                                (۱/{partnerCount})
+                                            </span>
+                                        </span>
+                                        <span className="font-mono font-black text-indigo-800 dark:text-indigo-200">
+                                            سهم هر نفر: {Math.round(effectiveCommissionAmount / partnerCount).toLocaleString('fa-IR')} ریال
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200/80 dark:border-amber-800/50">
+                                        <div className="flex items-center justify-between text-xs">
+                                            <span className="font-bold text-amber-900 dark:text-amber-200">
+                                                مبالغ پورسانت دستی اختصاص‌یافته به هر همکار:
+                                            </span>
+                                            {/* Quick Presets */}
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-slate-500">الگوهای سریع:</span>
+                                                {partnerCount === 2 ? (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const base = calculatedResult.commissionAmount || 0;
+                                                                setPartner1Commission(Math.round(base * 0.5));
+                                                                setPartner2Commission(Math.round(base * 0.5));
+                                                            }}
+                                                            className="px-1.5 py-0.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded hover:bg-indigo-50"
+                                                        >
+                                                            ۵۰/۵۰
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const base = calculatedResult.commissionAmount || 0;
+                                                                setPartner1Commission(Math.round(base * 0.6));
+                                                                setPartner2Commission(Math.round(base * 0.4));
+                                                            }}
+                                                            className="px-1.5 py-0.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded hover:bg-indigo-50"
+                                                        >
+                                                            ۶۰/۴۰
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const base = calculatedResult.commissionAmount || 0;
+                                                                setPartner1Commission(Math.round(base * 0.7));
+                                                                setPartner2Commission(Math.round(base * 0.3));
+                                                            }}
+                                                            className="px-1.5 py-0.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded hover:bg-indigo-50"
+                                                        >
+                                                            ۷۰/۳۰
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const base = calculatedResult.commissionAmount || 0;
+                                                                const s = Math.round(base / 3);
+                                                                setPartner1Commission(s);
+                                                                setPartner2Commission(s);
+                                                                setPartner3Commission(s);
+                                                            }}
+                                                            className="px-1.5 py-0.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded hover:bg-purple-50"
+                                                        >
+                                                            مساوی (۳۳٪)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const base = calculatedResult.commissionAmount || 0;
+                                                                setPartner1Commission(Math.round(base * 0.5));
+                                                                setPartner2Commission(Math.round(base * 0.25));
+                                                                setPartner3Commission(Math.round(base * 0.25));
+                                                            }}
+                                                            className="px-1.5 py-0.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded hover:bg-purple-50"
+                                                        >
+                                                            ۵۰/۲۵/۲۵
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className={`grid grid-cols-1 ${partnerCount === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                    سهم {salesPerson1 || 'همکار اول'} (ریال) <span className="text-rose-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    value={partner1Commission}
+                                                    onChange={e => setPartner1Commission(e.target.value === '' ? '' : Number(e.target.value))}
+                                                    placeholder="مبلغ سهم به ریال"
+                                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-mono font-black text-amber-900 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 outline-none"
+                                                    required
+                                                />
+                                                {partner1Commission !== '' && (
+                                                    <span className="text-[10px] text-amber-700 dark:text-amber-300 block mt-0.5">
+                                                        {Number(partner1Commission).toLocaleString('fa-IR')} ریال
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                    سهم {salesPerson2 || 'همکار دوم'} (ریال) <span className="text-rose-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    value={partner2Commission}
+                                                    onChange={e => setPartner2Commission(e.target.value === '' ? '' : Number(e.target.value))}
+                                                    placeholder="مبلغ سهم به ریال"
+                                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-mono font-black text-amber-900 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 outline-none"
+                                                    required
+                                                />
+                                                {partner2Commission !== '' && (
+                                                    <span className="text-[10px] text-amber-700 dark:text-amber-300 block mt-0.5">
+                                                        {Number(partner2Commission).toLocaleString('fa-IR')} ریال
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {partnerCount === 3 && (
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        سهم {salesPerson3 || 'همکار سوم'} (ریال) <span className="text-rose-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        value={partner3Commission}
+                                                        onChange={e => setPartner3Commission(e.target.value === '' ? '' : Number(e.target.value))}
+                                                        placeholder="مبلغ سهم به ریال"
+                                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-mono font-black text-amber-900 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 outline-none"
+                                                        required
+                                                    />
+                                                    {partner3Commission !== '' && (
+                                                        <span className="text-[10px] text-amber-700 dark:text-amber-300 block mt-0.5">
+                                                            {Number(partner3Commission).toLocaleString('fa-IR')} ریال
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-2 border-t border-amber-200/60 dark:border-amber-800/40 flex items-center justify-between text-xs">
+                                            <span className="font-bold text-amber-900 dark:text-amber-200">
+                                                مجموع پورسانت دستی معامله:
+                                            </span>
+                                            <span className="font-mono font-black text-amber-700 dark:text-amber-300 text-sm">
+                                                {customPartnersTotal.toLocaleString('fa-IR')} ریال
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -680,7 +946,10 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                     <input
                                         type="text"
                                         value={buyerName}
-                                        onChange={e => setBuyerName(e.target.value)}
+                                        onChange={e => {
+                                            setBuyerName(e.target.value);
+                                            setCustomerName(e.target.value);
+                                        }}
                                         placeholder="مثلاً: دکتر نوید حقیقت"
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                                         required
@@ -712,6 +981,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                         value={customerName}
                                         onChange={e => {
                                             setCustomerName(e.target.value);
+                                            setBuyerName(e.target.value);
                                             setNameQuery(e.target.value);
                                         }}
                                         placeholder="مثلاً: علیرضا قربانی"
@@ -727,6 +997,7 @@ export const CommissionDealModal: React.FC<CommissionDealModalProps> = ({
                                                     type="button"
                                                     onClick={() => {
                                                         setCustomerName(u.name || '');
+                                                        setBuyerName(u.name || '');
                                                         setCustomerPhone(u.phone || '');
                                                         if (u.carModel) setCarModel(u.carModel);
                                                         setNameQuery('');

@@ -684,6 +684,7 @@ export interface CommissionDeal {
     commissionAmount: number; // مبلغ پورسانت کل
     paidCommissionShare?: number; // سهم پورسانت پرداختی / تسهیم شده
     sharedPersons?: string[]; // تفکیک اسامی برای تسهیم ۱/۲ یا ۱/۳ بین همکاران
+    customPersonCommissions?: Record<string, number>; // سهم پورسانت دستی اختصاصی برای هر یک از پرسنل معامله (به ریال)
     isManualCommission?: boolean; // آیا پورسانت به صورت دستی تغییر کرده است؟
     manualCommissionReason?: string; // علت / توضیح تغییر دستی پورسانت
     

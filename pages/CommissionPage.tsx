@@ -1279,6 +1279,26 @@ const CommissionPage: React.FC = () => {
                                                     <option key={model} value={model}>{model}</option>
                                                 ))}
                                             </select>
+
+                                            {(searchQuery || selectedPersonnel !== 'ALL' || selectedStatus !== 'ALL' || selectedCarModel !== 'ALL') && (
+                                                <button
+                                                    onClick={() => {
+                                                        setSearchQuery('');
+                                                        setSelectedPersonnel('ALL');
+                                                        setSelectedStatus('ALL');
+                                                        setSelectedCarModel('ALL');
+                                                    }}
+                                                    className="px-2.5 py-1.5 bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold flex items-center gap-1 hover:bg-rose-100 transition-colors"
+                                                    title="پاکسازی تمام فیلترها"
+                                                >
+                                                    <RotateCcw className="w-3 h-3" />
+                                                    <span>حذف فیلترها</span>
+                                                </button>
+                                            )}
+
+                                            <span className="text-[11px] font-mono text-slate-400 px-1 whitespace-nowrap">
+                                                {filteredDeals.length} از {periodDeals.length} معامله
+                                            </span>
                                         </div>
 
                                         {/* Table Action Buttons */}

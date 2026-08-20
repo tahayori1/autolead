@@ -82,7 +82,9 @@ export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
                 const shareFactor = 1 / staffList.length;
                 const dealComm = deal.commissionAmount || 0;
                 const dealSales = (deal.salePrice || deal.downPayment || 0) * shareFactor;
-                const shareComm = Math.round(dealComm * shareFactor);
+                const shareComm = (deal.customPersonCommissions && deal.customPersonCommissions[selectedStaff] !== undefined)
+                    ? deal.customPersonCommissions[selectedStaff]
+                    : Math.round(dealComm * shareFactor);
                 const category = deal.category || 'ANBAR';
 
                 totalSales += dealSales;

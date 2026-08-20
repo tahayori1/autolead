@@ -89,10 +89,14 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
                     };
                 }
 
+                const personComm = (deal.customPersonCommissions && deal.customPersonCommissions[name] !== undefined)
+                    ? deal.customPersonCommissions[name]
+                    : comm;
+
                 staffMap[name].dealsCount += shareFactor;
                 staffMap[name].salesVolume += sales;
                 staffMap[name].grossProfit += profit;
-                staffMap[name].commission += comm;
+                staffMap[name].commission += personComm;
                 if (isShared) staffMap[name].sharedDealsCount += 1;
             });
         });

@@ -84,8 +84,12 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                 if (!staffProfits[p]) {
                     staffProfits[p] = { profit: 0, commission: 0, dealsCount: 0 };
                 }
+                const pComm = (deal.customPersonCommissions && deal.customPersonCommissions[p] !== undefined)
+                    ? deal.customPersonCommissions[p]
+                    : comm * share;
+
                 staffProfits[p].profit += profit * share;
-                staffProfits[p].commission += comm * share;
+                staffProfits[p].commission += pComm;
                 staffProfits[p].dealsCount += share;
             });
         });

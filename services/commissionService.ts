@@ -592,16 +592,18 @@ export function calculateCommissionForCategory(
         }
 
         case 'AZAD': {
-            grossProfit = salePrice - purchasePrice; // کمیسیون کل معامله
-            dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
-            if (dailyProfitLoss < 0) {
-                // در صورت زیان روز: فرمول درصد جریمه زیان روز
-                isLossPenalty = true;
-                effectiveRate = settings.lossPenaltyRate;
-                commissionAmount = Math.round(salePrice * (settings.lossPenaltyRate / 100));
-            } else if (grossProfit > 0) {
+            // در معاملات فروش آزاد، سوددهی بر اساس اختلاف بین نرخ فروش نهایی و نرخ خرید است
+            grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : (dailyPrice > 0 ? salePrice - dailyPrice : 0);
+            dailyProfitLoss = grossProfit; // سوددهی فروش آزاد بر پایه اختلاف نرخ فروش و خرید
+            if (grossProfit > 0) {
+                // در صورت سوددهی: ۱۰٪ سود کمیسیون (یا درصد تنظیم‌شده برای فروش آزاد)
                 effectiveRate = settings.azadRate;
                 commissionAmount = Math.round(grossProfit * (settings.azadRate / 100));
+            } else if (grossProfit < 0) {
+                // در صورت زیان نسبت به نرخ خرید
+                isLossPenalty = true;
+                effectiveRate = settings.azadFlatRate;
+                commissionAmount = Math.round(salePrice * (settings.azadFlatRate / 100));
             } else {
                 effectiveRate = settings.azadFlatRate;
                 commissionAmount = Math.round(salePrice * (settings.azadFlatRate / 100));
