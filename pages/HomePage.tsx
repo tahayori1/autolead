@@ -7,7 +7,7 @@ import {
     ArrowRightLeft, FileSpreadsheet, Coins
 } from 'lucide-react';
 import type { ActiveView } from '../App';
-import { getConditions, getCarPriceStats } from '../services/api';
+import { getConditions, getCarPriceStats, formatConditionDateTime } from '../services/api';
 import type { CarSaleCondition, CarPriceStats } from '../types';
 
 interface HomePageProps {
@@ -66,15 +66,28 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         );
     }, [priceStats, priceSearch]);
 
-    // Filter conditions based on search
+    // Filter and sort conditions based on search: 1- Available 2- Car name
     const filteredConditions = useMemo(() => {
-        if (!conditionSearch.trim()) return conditions;
         const query = conditionSearch.toLowerCase().trim();
-        return (conditions || []).filter(cond => 
-            (cond?.car_model || '').toLowerCase().includes(query) ||
-            (cond?.sale_type || '').toLowerCase().includes(query) ||
-            (cond?.pay_type || '').toLowerCase().includes(query)
-        );
+        const list = (conditions || []).filter(cond => {
+            if (!query) return true;
+            return (
+                (cond?.car_model || '').toLowerCase().includes(query) ||
+                (cond?.sale_type || '').toLowerCase().includes(query) ||
+                (cond?.pay_type || '').toLowerCase().includes(query)
+            );
+        });
+
+        return [...list].sort((a, b) => {
+            const isAAvail = a.status === 'موجود';
+            const isBAvail = b.status === 'موجود';
+            if (isAAvail && !isBAvail) return -1;
+            if (!isAAvail && isBAvail) return 1;
+
+            const nameA = (a.car_model || '').trim();
+            const nameB = (b.car_model || '').trim();
+            return nameA.localeCompare(nameB, 'fa-IR', { numeric: true, sensitivity: 'base' });
+        });
     }, [conditions, conditionSearch]);
 
     // Computed Stats
@@ -407,11 +420,17 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                                         }`}>
                                             {cond.status}
                                         </span>
-                                        <p className="text-xs font-mono font-black text-slate-700 dark:text-slate-300 mt-1 sm:mt-0">
-                                            {cond.pay_type === 'نقدی' ? 'قیمت:' : 'پیش‌پرداخت:'} <span className="text-sm font-sans font-black text-indigo-600 dark:text-indigo-400">
-                                                {cond.initial_deposit ? cond.initial_deposit.toLocaleString('fa-IR') : '—'}
-                                            </span> <span className="text-[9px] font-sans font-bold text-slate-400">ریال</span>
-                                        </p>
+                                        <div className="text-left sm:text-right">
+                                            <p className="text-xs font-mono font-black text-slate-700 dark:text-slate-300 mt-1 sm:mt-0">
+                                                {cond.pay_type === 'نقدی' ? 'قیمت:' : 'پیش‌پرداخت:'} <span className="text-sm font-sans font-black text-indigo-600 dark:text-indigo-400">
+                                                    {cond.initial_deposit ? cond.initial_deposit.toLocaleString('fa-IR') : '—'}
+                                                </span> <span className="text-[9px] font-sans font-bold text-slate-400">ریال</span>
+                                            </p>
+                                            <div className="flex items-center justify-end gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
+                                                <Clock className="w-3 h-3 text-amber-500/80 shrink-0" />
+                                                <span className="font-mono dir-ltr">{formatConditionDateTime(cond)}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             ))

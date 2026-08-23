@@ -81,6 +81,12 @@ export interface CarSaleCondition {
     owner_phone?: string | null;
     expert_report_id?: number | null;
     expert_report_title?: string | null;
+    updatedAt?: string | null;
+    updated_at?: string | null;
+    last_update?: string | null;
+    last_updated?: string | null;
+    createdAt?: string | null;
+    created_at?: string | null;
 }
 
 export interface User {

@@ -47,7 +47,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     
     const [filters, setFilters] = useState<{ status: ConditionStatus | 'all'; car_model: string | 'all'; sale_type: SaleType | 'all' }>({ status: 'all', car_model: 'all', sale_type: 'all' });
-    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'id', direction: 'descending' });
+    const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
 
     const fetchAllConditions = useCallback(async () => {
@@ -143,11 +143,14 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
     };
 
     const handleSort = (key: keyof CarSaleCondition) => {
-        let direction: 'ascending' | 'descending' = 'ascending';
-        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-            direction = 'descending';
+        if (!sortConfig || sortConfig.key !== key) {
+            setSortConfig({ key, direction: 'ascending' });
+        } else if (sortConfig.direction === 'ascending') {
+            setSortConfig({ key, direction: 'descending' });
+        } else {
+            // Reset to default sort (1. Available cars 2. Car name)
+            setSortConfig(null);
         }
-        setSortConfig({ key, direction });
     };
 
     const sortedAndFilteredConditions = useMemo(() => {
@@ -158,25 +161,61 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
             return statusMatch && carModelMatch && saleTypeMatch;
         });
 
-        if (sortConfig !== null) {
-            return [...filtered].sort((a, b) => {
-                const aValue = a[sortConfig.key];
-                const bValue = b[sortConfig.key];
-                
-                if (typeof aValue === 'number' && typeof bValue === 'number') {
-                     if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
-                    if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
-                    return 0;
-                }
-                
-                const aStr = String(aValue);
-                const bStr = String(bValue);
+        // Default Sorting: 1- Available cars ('موجود' / AVAILABLE), 2- Car name (alphabetical in Persian)
+        const defaultComparator = (a: CarSaleCondition, b: CarSaleCondition) => {
+            const isAAvailable = a.status === ConditionStatus.AVAILABLE;
+            const isBAvailable = b.status === ConditionStatus.AVAILABLE;
 
-                const comparison = aStr.localeCompare(bStr, 'fa-IR');
-                return sortConfig.direction === 'ascending' ? comparison : -comparison;
-            });
+            // 1. Available cars first
+            if (isAAvailable && !isBAvailable) return -1;
+            if (!isAAvailable && isBAvailable) return 1;
+
+            // 2. Car model alphabetical (Persian locale)
+            const nameA = (a.car_model || '').trim();
+            const nameB = (b.car_model || '').trim();
+            const nameComparison = nameA.localeCompare(nameB, 'fa-IR', { numeric: true, sensitivity: 'base' });
+            if (nameComparison !== 0) return nameComparison;
+
+            // 3. Model Year descending
+            if (a.model && b.model && a.model !== b.model) {
+                return b.model - a.model;
+            }
+
+            return b.id - a.id;
+        };
+
+        if (sortConfig === null) {
+            return [...filtered].sort(defaultComparator);
         }
-        return filtered;
+
+        return [...filtered].sort((a, b) => {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
+
+            if (sortConfig.key === 'status') {
+                const isAAvail = a.status === ConditionStatus.AVAILABLE;
+                const isBAvail = b.status === ConditionStatus.AVAILABLE;
+                if (isAAvail && !isBAvail) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (!isAAvail && isBAvail) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return (a.car_model || '').localeCompare(b.car_model || '', 'fa-IR');
+            }
+            
+            if (typeof aValue === 'number' && typeof bValue === 'number') {
+                if (aValue !== bValue) {
+                    return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue;
+                }
+                return (a.car_model || '').localeCompare(b.car_model || '', 'fa-IR');
+            }
+            
+            const aStr = String(aValue ?? '');
+            const bStr = String(bValue ?? '');
+
+            const comparison = aStr.localeCompare(bStr, 'fa-IR', { numeric: true, sensitivity: 'base' });
+            if (comparison !== 0) {
+                return sortConfig.direction === 'ascending' ? comparison : -comparison;
+            }
+            return defaultComparator(a, b);
+        });
     }, [conditions, filters, sortConfig]);
 
     const handleSelectionChange = (id: number) => {

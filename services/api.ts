@@ -321,6 +321,47 @@ export const deleteStaffUser = async (id: number, username: string): Promise<voi
 
 // --- Car Sale Conditions ---
 
+export const formatConditionDateTime = (condition: CarSaleCondition | Partial<CarSaleCondition> | any): string => {
+    if (!condition) return '—';
+    const rawDate = condition.updatedAt || condition.updated_at || condition.last_update || condition.last_updated || condition.createdAt || condition.created_at || condition.date || condition.timestamp;
+    if (!rawDate) {
+        return 'به‌روز';
+    }
+
+    try {
+        const str = String(rawDate).trim();
+        if (!str) return 'به‌روز';
+
+        // If string already contains Persian year (14xx or 13xx or ۱۴xx)
+        if (str.startsWith('14') || str.startsWith('13') || str.startsWith('۱۴') || str.startsWith('۱۳')) {
+            return str;
+        }
+
+        // Standard regex for ISO or SQL timestamp: YYYY-MM-DD HH:MM:SS or YYYY-MM-DDTHH:MM:SS
+        const parts = str.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (parts) {
+            const [_, y, m, d, h, min] = parts.map(Number);
+            const dateObj = new Date(Date.UTC(y, m - 1, d, h, min));
+            if (!isNaN(dateObj.getTime())) {
+                const persianDate = dateObj.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                const persianTime = dateObj.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+                return `${persianDate} - ${persianTime}`;
+            }
+        }
+
+        const parsedDate = new Date(str);
+        if (!isNaN(parsedDate.getTime())) {
+            const persianDate = parsedDate.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            const persianTime = parsedDate.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+            return `${persianDate} - ${persianTime}`;
+        }
+
+        return str;
+    } catch {
+        return String(rawDate);
+    }
+};
+
 const normalizeCondition = (condition: any): CarSaleCondition => {
     if (!condition) return condition;
 
@@ -332,6 +373,12 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
         stock_qty, 
         qty, 
         inventory, 
+        updatedAt,
+        updated_at,
+        last_update,
+        last_updated,
+        createdAt,
+        created_at,
         ...restOfApiData 
     } = condition;
     
@@ -347,13 +394,20 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
                      : qty !== undefined ? qty
                      : inventory !== undefined ? inventory
                      : 0;
+
+    const updateStamp = updatedAt || updated_at || last_update || last_updated || createdAt || created_at || null;
+    const createStamp = createdAt || created_at || null;
             
     return { 
         ...restOfApiData, 
         document_status: indeed_status,
         colors: colorsArray,
         is_public: !!is_public,
-        stock_quantity: parseInt(rawStock, 10) || 0
+        stock_quantity: parseInt(rawStock, 10) || 0,
+        updatedAt: updateStamp,
+        updated_at: updateStamp,
+        createdAt: createStamp,
+        created_at: createStamp,
     } as CarSaleCondition;
 };
 
@@ -405,24 +459,39 @@ export const getConditionsByCarModel = async (carModel: string): Promise<CarSale
 
 export const createCondition = async (condition: Omit<CarSaleCondition, 'id'>): Promise<CarSaleCondition> => {
     ensureOnline();
+    const nowIso = new Date().toISOString();
+    const payload = {
+        ...condition,
+        updatedAt: nowIso,
+        createdAt: condition.createdAt || nowIso
+    };
     const response = await fetch(`${API_BASE_URL}/conditions`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(denormalizeCondition(condition)),
+        body: JSON.stringify(denormalizeCondition(payload)),
     });
     const newCondition = await handleResponse(response);
-    return normalizeCondition(newCondition);
+    const normalized = normalizeCondition(newCondition);
+    if (!normalized.updatedAt) normalized.updatedAt = nowIso;
+    return normalized;
 };
 
 export const updateCondition = async (id: number, updatedCondition: CarSaleCondition): Promise<CarSaleCondition> => {
     ensureOnline();
+    const nowIso = new Date().toISOString();
+    const payload = {
+        ...updatedCondition,
+        updatedAt: nowIso
+    };
     const response = await fetch(`${API_BASE_URL}/conditions`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(denormalizeCondition(updatedCondition)),
+        body: JSON.stringify(denormalizeCondition(payload)),
     });
     const resultCondition = await handleResponse(response);
-    return resultCondition ? normalizeCondition(resultCondition) : updatedCondition;
+    const normalized = resultCondition ? normalizeCondition(resultCondition) : payload;
+    if (!normalized.updatedAt) normalized.updatedAt = nowIso;
+    return normalized;
 };
 
 export const deleteCondition = async (id: number): Promise<void> => {
