@@ -4,6 +4,7 @@ export const DEFAULT_COMMISSION_SETTINGS: CommissionSettings = {
     anbarRate: 0.05, // 0.05% از نرخ فروش
     azadRate: 10, // 10% از سود کمیسیون
     azadFlatRate: 0.05, // 0.05% از نرخ فروش در صورت عدم سود
+    azadKaranehDivisor: 25, // ضریب تقسیم کارانه فروش آزاد: (مجموع کمیسیون - جمع کل پورسانت) ÷ ۲۵
     havalehRate: 0.05, // 0.05% از نرخ فروش
     leasingRate: 0.1, // 0.1% از پیش‌پرداخت
     registrationRate: 0.1, // 0.1% از پیش‌پرداخت
@@ -659,6 +660,31 @@ export function calculateCommissionForCategory(
     }
 
     return { dailyProfitLoss, grossProfit, commissionAmount, effectiveRate, isLossPenalty };
+}
+
+/**
+ * محاسبه کارانه فروش آزاد
+ * فرمول: کسر جمع کل پورسانت فروش آزاد از مجموع کمیسیون فروش آزاد و تقسیم بر ۲۵ (یا ضریب تنظیمی)
+ */
+export function calculateAzadKaraneh(
+    totalAzadGrossCommission: number,
+    totalAzadPersonnelCommission: number,
+    divisor: number = 25
+): {
+    surplus: number;
+    karaneh: number;
+    divisor: number;
+    formulaText: string;
+} {
+    const d = divisor > 0 ? divisor : 25;
+    const surplus = totalAzadGrossCommission - totalAzadPersonnelCommission;
+    const karaneh = Math.round(surplus / d);
+    return {
+        surplus,
+        karaneh,
+        divisor: d,
+        formulaText: `(${totalAzadGrossCommission.toLocaleString('fa-IR')} - ${totalAzadPersonnelCommission.toLocaleString('fa-IR')}) ÷ ${d.toLocaleString('fa-IR')}`
+    };
 }
 
 // Split shared persons (e.g. "درسا محمدی / ندا قاسمی / عرشیا عسکری" or "درسا محمدی و ندا قاسمی")

@@ -705,6 +705,7 @@ export interface CommissionSettings {
     anbarRate: number; // e.g. 0.05 (%)
     azadRate: number; // e.g. 10 (% of gross profit)
     azadFlatRate: number; // e.g. 0.05 (% of sale price when gross profit <= 0)
+    azadKaranehDivisor?: number; // e.g. 25 (ضریب تقسیم کارانه فروش آزاد: [کمیسیون - پورسانت] ÷ ۲۵)
     havalehRate: number; // e.g. 0.05 (%)
     leasingRate: number; // e.g. 0.1 (% of down payment)
     registrationRate: number; // e.g. 0.1 (% of down payment)

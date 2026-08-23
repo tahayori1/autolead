@@ -223,6 +223,25 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
         });
     }, [personnelData]);
 
+    // Azad Karaneh Calculation for the whole period: (مجموع کمیسیون آزاد - جمع پورسانت آزاد) ÷ ۲۵
+    const azadKaranehStats = useMemo(() => {
+        const azadDeals = deals.filter(d => d.category === 'AZAD');
+        const totalAzadSales = azadDeals.reduce((sum, d) => sum + (d.salePrice || 0), 0);
+        const totalAzadGross = azadDeals.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
+        const totalAzadComm = azadDeals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
+        const surplus = totalAzadGross - totalAzadComm;
+        const karaneh = Math.round(surplus / 25);
+        return {
+            count: azadDeals.length,
+            totalSales: Math.round(totalAzadSales / divisor),
+            totalGross: Math.round(totalAzadGross / divisor),
+            totalComm: Math.round(totalAzadComm / divisor),
+            surplus: Math.round(surplus / divisor),
+            karaneh: Math.round(karaneh / divisor),
+            formulaText: `(کمیسیون [${Math.round(totalAzadGross / divisor).toLocaleString('fa-IR')}] - پورسانت [${Math.round(totalAzadComm / divisor).toLocaleString('fa-IR')}]) ÷ ۲۵`
+        };
+    }, [deals, divisor]);
+
     const handleOpenEditAdjustment = (staffName: string) => {
         const current = adjustments[staffName] || { bonus: 0, deductions: 0, notes: '' };
         setEditingStaff(staffName);
@@ -316,6 +335,41 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
                     <p className="text-[10px] text-slate-400 mt-1">
                         اعمال شده در کارنامه نهایی
                     </p>
+                </div>
+            </div>
+
+            {/* Azad Karaneh Special Information Banner */}
+            <div className="p-4 bg-gradient-to-l from-amber-500/10 via-amber-400/5 to-transparent dark:from-amber-500/15 dark:via-amber-400/5 dark:to-transparent rounded-3xl border border-amber-200 dark:border-amber-800/60 flex flex-col md:flex-row items-center justify-between gap-3 text-xs shadow-xs">
+                <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-sm">
+                        🎁
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h4 className="font-black text-amber-950 dark:text-amber-200 text-sm">
+                                کارانه فروش آزاد دوره ({activePeriodName})
+                            </h4>
+                            <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full font-bold">
+                                سهم ۱/۲۵ مازاد
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            فرمول: کسر جمع کل پورسانت فروش آزاد از مجموع کمیسیون فروش آزاد و تقسیم حاصله بر ۲۵
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="text-right">
+                        <span className="text-[10px] text-slate-400 block">مازاد سود کمیسیون آزاد:</span>
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{azadKaranehStats.surplus.toLocaleString('fa-IR')} {unitLabel}</span>
+                    </div>
+                    <div className="h-8 w-px bg-amber-200 dark:bg-amber-800 hidden sm:block"></div>
+                    <div className="p-2.5 bg-amber-200/80 dark:bg-amber-800/60 rounded-2xl border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                        <span className="text-xs font-bold">کارانه کل حاصله:</span>
+                        <span className="font-mono text-base font-black">{azadKaranehStats.karaneh.toLocaleString('fa-IR')}</span>
+                        <span className="text-[10px]">{unitLabel}</span>
+                    </div>
                 </div>
             </div>
 

@@ -82,6 +82,13 @@ export function exportFullCommissionWorkbook({
     const pendingCommission = Math.max(0, totalCommission - totalPaidCommission);
     const payoutPct = totalCommission > 0 ? ((totalPaidCommission / totalCommission) * 100).toFixed(1) + '%' : '0%';
 
+    // Azad Karaneh Calculation
+    const azadDealsForSummary = activeDeals.filter(d => d.category === 'AZAD');
+    const totalAzadGrossForSummary = azadDealsForSummary.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
+    const totalAzadCommForSummary = azadDealsForSummary.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
+    const azadSurplusForSummary = totalAzadGrossForSummary - totalAzadCommForSummary;
+    const azadKaranehForSummary = Math.round(azadSurplusForSummary / 25);
+
     summaryData.push(
         ['تعداد کل معاملات ثبت‌شده', activeDeals.length, '-', `${activeDeals.length} فقره قرارداد`],
         ['مجموع حجم فروش و پیش‌پرداخت‌ها', totalSales, Math.round(totalSales / 10), 'گردش مالی حاصل از فروش'],
@@ -92,6 +99,7 @@ export function exportFullCommissionWorkbook({
         ['پورسانت‌های تسویه‌شده و واریزی', totalPaidCommission, Math.round(totalPaidCommission / 10), 'مبالغ قطعی پرداخت‌شده به مشاوران'],
         ['مانده پورسانت در انتظار پرداخت', pendingCommission, Math.round(pendingCommission / 10), 'تعهدات پرداخت‌نشده دوره'],
         ['درصد تحقق پرداخت پورسانت', payoutPct, '-', 'نسبت واریزی‌ها به کل تعهدات'],
+        ['کارانه فروش آزاد (سهم ۱/۲۵ مازاد)', azadKaranehForSummary, Math.round(azadKaranehForSummary / 10), 'فرمول: (مجموع کمیسیون آزاد - جمع کل پورسانت آزاد) ÷ ۲۵'],
         [''],
         ['تفکیک عملکرد بر اساس شیت و دسته‌بندی معامله:'],
         ['دسته‌بندی', 'تعداد معامله', 'حجم فروش (ریال)', 'سود ناخالص (ریال)', 'سود/زیان روز (ریال)', 'پورسانت (ریال)', 'نرخ محاسبه'],
@@ -201,12 +209,27 @@ export function exportFullCommissionWorkbook({
             d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : '')
         ]);
 
-        const azadWs = XLSX.utils.aoa_to_sheet([azadHeaders, ...azadRows]);
+        const totalAzadGross = azadDeals.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
+        const totalAzadComm = azadDeals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
+        const totalAzadPaid = azadDeals.reduce((sum, d) => sum + (d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)), 0);
+        const azadSurplus = totalAzadGross - totalAzadComm;
+        const azadKaraneh = Math.round(azadSurplus / 25);
+
+        const azadFooterRows = [
+            [''],
+            ['--- خلاصه کارکرد و کارانه فروش آزاد دوره ---'],
+            ['مجموع کمیسیون فروش آزاد (سود ناخالص)', formatNumber(totalAzadGross), 'ریال', `${Math.round(totalAzadGross / 10).toLocaleString('fa-IR')} تومان`],
+            ['جمع کل پورسانت فروش آزاد پرسنل', formatNumber(totalAzadComm), 'ریال', `${Math.round(totalAzadComm / 10).toLocaleString('fa-IR')} تومان`],
+            ['مازاد کمیسیون فروش آزاد (اختلاف کمیسیون و پورسانت)', formatNumber(azadSurplus), 'ریال', `${Math.round(azadSurplus / 10).toLocaleString('fa-IR')} تومان`],
+            ['کارانه فروش آزاد (سهم ۱/۲۵ مازاد)', formatNumber(azadKaraneh), 'ریال', `${Math.round(azadKaraneh / 10).toLocaleString('fa-IR')} تومان`, 'فرمول مصوب: (مجموع کمیسیون - جمع کل پورسانت) ÷ ۲۵']
+        ];
+
+        const azadWs = XLSX.utils.aoa_to_sheet([azadHeaders, ...azadRows, ...azadFooterRows]);
         azadWs['!cols'] = [
             { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 }, { wch: 22 },
             { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
             { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
-            { wch: 16 }, { wch: 18 }, { wch: 30 }
+            { wch: 16 }, { wch: 18 }, { wch: 35 }
         ];
         XLSX.utils.book_append_sheet(wb, azadWs, 'فروش آزاد');
     }

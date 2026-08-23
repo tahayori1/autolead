@@ -408,6 +408,22 @@ const CommissionPage: React.FC = () => {
         const pendingCommission = Math.max(0, totalCommission - totalPaidCommission);
         const payoutPercentage = totalCommission > 0 ? Math.round((totalPaidCommission / totalCommission) * 100) : 0;
 
+        // Azad Specific Karaneh Calculation: (مجموع کمیسیون فروش آزاد - جمع کل پورسانت فروش آزاد) / ۲۵
+        const azadKaranehDivisor = commissionSettings?.azadKaranehDivisor || 25;
+        const tabAzadSurplus = totalGrossProfit - totalCommission;
+        const tabAzadKaraneh = Math.round(tabAzadSurplus / azadKaranehDivisor);
+
+        // Period-wide Azad calculations
+        const periodAzadDeals = periodDeals.filter(d => d.category === 'AZAD');
+        let periodAzadGross = 0;
+        let periodAzadComm = 0;
+        periodAzadDeals.forEach(d => {
+            periodAzadGross += d.grossProfit || 0;
+            periodAzadComm += d.commissionAmount || 0;
+        });
+        const periodAzadSurplus = periodAzadGross - periodAzadComm;
+        const periodAzadKaraneh = Math.round(periodAzadSurplus / azadKaranehDivisor);
+
         return {
             totalDealsCount: filteredDeals.length,
             totalPurchase: Math.round(totalPurchase / divisor),
@@ -419,10 +435,17 @@ const CommissionPage: React.FC = () => {
             totalPaidCommission: Math.round(totalPaidCommission / divisor),
             pendingCommission: Math.round(pendingCommission / divisor),
             payoutPercentage,
+            azadKaranehDivisor,
+            tabAzadSurplus: Math.round(tabAzadSurplus / divisor),
+            tabAzadKaraneh: Math.round(tabAzadKaraneh / divisor),
+            periodAzadGross: Math.round(periodAzadGross / divisor),
+            periodAzadComm: Math.round(periodAzadComm / divisor),
+            periodAzadSurplus: Math.round(periodAzadSurplus / divisor),
+            periodAzadKaraneh: Math.round(periodAzadKaraneh / divisor),
             divisor,
             unitLabel: currencyUnit === 'TOMAN' ? 'تومان' : 'ریال'
         };
-    }, [filteredDeals, currencyUnit]);
+    }, [filteredDeals, periodDeals, currencyUnit, commissionSettings]);
 
     // Handle Save Single Deal
     const handleSaveDeal = (deal: CommissionDeal) => {
@@ -1172,8 +1195,8 @@ const CommissionPage: React.FC = () => {
                             {activeTab !== 'analytics' && activeTab !== 'summary' && activeTab !== 'yard' && activeTab !== 'calculator' && (
                                 <div className="space-y-4 animate-fade-in">
                                     
-                                    {/* 4 KPI Stat Cards */}
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    {/* KPI Stat Cards */}
+                                    <div className={`grid ${activeTab === 'AZAD' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'} gap-3`}>
                                         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs">
                                             <span className="text-[11px] text-slate-400 font-bold block mb-1">
                                                 {activeTab === 'LEASING' ? 'مجموع پیش‌پرداخت' : 'مجموع فروش'}
@@ -1185,8 +1208,8 @@ const CommissionPage: React.FC = () => {
                                         </div>
 
                                         {activeTab === 'AZAD' ? (
-                                            <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs">
-                                                <span className="text-[11px] text-indigo-500 font-bold block mb-1">مجموع کمیسیون کل معاملات</span>
+                                            <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs">
+                                                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold block mb-1">مجموع کمیسیون آزاد</span>
                                                 <div className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-base truncate">
                                                     {metrics.totalGrossProfit.toLocaleString('fa-IR')}
                                                 </div>
@@ -1204,7 +1227,7 @@ const CommissionPage: React.FC = () => {
 
                                         <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 shadow-xs">
                                             <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold block mb-1">
-                                                پورسانت کل تعلق‌گرفته
+                                                {activeTab === 'AZAD' ? 'جمع کل پورسانت آزاد' : 'پورسانت کل تعلق‌گرفته'}
                                             </span>
                                             <div className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base truncate">
                                                 {metrics.totalCommission.toLocaleString('fa-IR')}
@@ -1213,6 +1236,25 @@ const CommissionPage: React.FC = () => {
                                                 {activeTab === 'AZAD' ? '۱۰٪ سود کمیسیون' : activeTab === 'LEASING' ? '۰.۱٪ پیش‌پرداخت' : '۰.۰۵٪ فروش'}
                                             </span>
                                         </div>
+
+                                        {activeTab === 'AZAD' && (
+                                            <div className="p-4 bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl border border-amber-300 dark:border-amber-700/60 shadow-xs ring-1 ring-amber-400/30">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[11px] text-amber-900 dark:text-amber-300 font-black">
+                                                        کارانه فروش آزاد
+                                                    </span>
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-mono font-bold">
+                                                        سهم ۱/{metrics.azadKaranehDivisor}
+                                                    </span>
+                                                </div>
+                                                <div className="font-mono font-black text-amber-700 dark:text-amber-300 text-base truncate">
+                                                    {metrics.tabAzadKaraneh.toLocaleString('fa-IR')}
+                                                </div>
+                                                <span className="text-[10px] text-amber-700/80 dark:text-amber-400 block truncate" title={`(${metrics.totalGrossProfit.toLocaleString('fa-IR')} - ${metrics.totalCommission.toLocaleString('fa-IR')}) ÷ ${metrics.azadKaranehDivisor}`}>
+                                                    {metrics.unitLabel} • (کمیسیون - پورسانت) ÷ {metrics.azadKaranehDivisor}
+                                                </span>
+                                            </div>
+                                        )}
 
                                         <div className="p-4 bg-teal-50/70 dark:bg-teal-950/30 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs">
                                             <span className="text-[11px] text-teal-800 dark:text-teal-300 font-bold block mb-1">واریز شده به مشاوران</span>
@@ -1608,6 +1650,27 @@ const CommissionPage: React.FC = () => {
                                                 </tfoot>
                                             </table>
                                         </div>
+
+                                        {/* Azad Karaneh Formula & Total Banner */}
+                                        {activeTab === 'AZAD' && (
+                                            <div className="p-4 bg-gradient-to-l from-amber-500/10 via-amber-400/5 to-transparent dark:from-amber-500/15 dark:via-amber-400/5 dark:to-transparent rounded-2xl border border-amber-200 dark:border-amber-800/60 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+                                                <div className="flex flex-wrap items-center gap-2 text-slate-800 dark:text-slate-200">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                                    <span className="font-black text-amber-900 dark:text-amber-300">فرمول کارانه فروش آزاد:</span>
+                                                    <span className="font-mono bg-white dark:bg-slate-800 px-3 py-1 rounded-xl border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-bold shadow-xs">
+                                                        (کمیسیون کل [{metrics.totalGrossProfit.toLocaleString('fa-IR')}] - پورسانت کل [{metrics.totalCommission.toLocaleString('fa-IR')}]) ÷ {metrics.azadKaranehDivisor}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-slate-600 dark:text-slate-400">مازاد کمیسیون: <strong className="font-mono text-slate-900 dark:text-white font-bold">{metrics.tabAzadSurplus.toLocaleString('fa-IR')}</strong> {metrics.unitLabel}</span>
+                                                    <span className="text-amber-950 dark:text-amber-100 font-black bg-amber-200/90 dark:bg-amber-800/70 px-3.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 shadow-xs flex items-center gap-1.5">
+                                                        <span>کارانه حاصله:</span>
+                                                        <span className="font-mono text-sm font-black">{metrics.tabAzadKaraneh.toLocaleString('fa-IR')}</span>
+                                                        <span className="text-[10px] font-normal">{metrics.unitLabel}</span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                 </div>

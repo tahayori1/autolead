@@ -293,6 +293,34 @@ export const CommissionSettingsModal: React.FC<CommissionSettingsModalProps> = (
                             </div>
                         </div>
 
+                        {/* 7. Azad Karaneh Divisor */}
+                        <div className="p-4 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-900/60 space-y-2 md:col-span-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-black text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    مخرج محاسبه کارانه فروش آزاد (تقسیم بر عدد {settings.azadKaranehDivisor || 25})
+                                </label>
+                                <span className="text-[10px] text-amber-600 font-mono font-bold">پیش‌فرض: ۲۵</span>
+                            </div>
+                            <p className="text-[11px] text-amber-700/90 dark:text-amber-300/90">
+                                فرمول مصوب: کسر جمع کل پورسانت فروش آزاد از مجموع کمیسیون فروش آزاد و تقسیم حاصل بر عدد مخرج:
+                                <span className="font-mono font-bold mr-1">(کمیسیون کل - پورسانت کل) ÷ {settings.azadKaranehDivisor || 25}</span>
+                            </p>
+                            <div className="relative w-full sm:w-48">
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    max="1000"
+                                    value={settings.azadKaranehDivisor || 25}
+                                    onChange={e => setSettings({ ...settings, azadKaranehDivisor: parseInt(e.target.value, 10) || 25 })}
+                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-800 rounded-xl text-xs font-mono font-black text-amber-900 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 outline-none"
+                                    required
+                                />
+                                <span className="absolute left-3 top-2 text-xs font-bold text-amber-500">واحد</span>
+                            </div>
+                        </div>
+
                     </div>
 
                     {/* Live Test Simulator */}

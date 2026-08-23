@@ -99,6 +99,12 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
         const commissionCostRate = totalGrossProfit > 0 ? ((totalCommission / totalGrossProfit) * 100).toFixed(1) : '0';
         const roiFactor = totalCommission > 0 ? (totalGrossProfit / totalCommission).toFixed(1) : '0';
 
+        // Azad Karaneh: (مجموع کمیسیون آزاد - جمع کل پورسانت آزاد) / ۲۵
+        const azadProfit = categoryBreakdown.AZAD.profit;
+        const azadComm = categoryBreakdown.AZAD.commission;
+        const azadSurplus = azadProfit - azadComm;
+        const azadKaraneh = Math.round(azadSurplus / 25);
+
         const top3ProfitableStaff = Object.entries(staffProfits)
             .map(([name, data]) => ({ name, ...data }))
             .sort((a, b) => b.profit - a.profit)
@@ -110,6 +116,8 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
             totalCommission: Math.round(totalCommission / divisor),
             netCompanyMargin: Math.round(netCompanyMargin / divisor),
             totalPaid: Math.round(totalPaid / divisor),
+            azadSurplus: Math.round(azadSurplus / divisor),
+            azadKaraneh: Math.round(azadKaraneh / divisor),
             commissionCostRate,
             roiFactor,
             dealsCount: deals.length,
@@ -265,6 +273,12 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                                         <span className="text-slate-400 text-[11px]">پورسانت تیم:</span>
                                         <span className="font-mono font-black text-indigo-600">{Math.round(item.data.commission / divisor).toLocaleString('fa-IR')} {unitLabel}</span>
                                     </div>
+                                    {item.name.includes('آزاد') && (
+                                        <div className="flex justify-between pt-1 bg-amber-50 dark:bg-amber-950/40 -mx-2 px-2 py-0.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                                            <span className="text-amber-800 dark:text-amber-300 text-[11px] font-bold">کارانه فروش آزاد (سهم ۱/۲۵):</span>
+                                            <span className="font-mono font-black text-amber-700 dark:text-amber-300">{ceoMetrics.azadKaraneh.toLocaleString('fa-IR')} {unitLabel}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
