@@ -132,13 +132,13 @@ const ZeroCarDeliveryPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [carModelFilter, setCarModelFilter] = useState('all');
-    const [dateFieldFilter, setDateFieldFilter] = useState<'deliveryDateTime' | 'arrivalDateTime' | 'contactDateTime' | 'documentDate'>('deliveryDateTime');
+    const [dateFieldFilter, setDateFieldFilter] = useState<'deliveryDateTime' | 'arrivalDateTime' | 'contactDateTime' | 'documentDate'>('contactDateTime');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [deliveryStatusQuickFilter, setDeliveryStatusQuickFilter] = useState<'ALL' | 'DELIVERED' | 'PENDING_DELIVERY' | 'HAS_DELIVERY_DATE' | 'NO_PLATE'>('ALL');
 
-    // Sorting State (Default sort by deliveryDateTime descending)
-    const [sortField, setSortField] = useState<SortField>('deliveryDateTime');
+    // Sorting State (Default sort by contactDateTime descending -> Latest customer contact date first)
+    const [sortField, setSortField] = useState<SortField>('contactDateTime');
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
     // Filter States (Report View)
@@ -497,11 +497,11 @@ const ZeroCarDeliveryPage: React.FC = () => {
         setSearchQuery('');
         setStatusFilter('all');
         setCarModelFilter('all');
-        setDateFieldFilter('deliveryDateTime');
+        setDateFieldFilter('contactDateTime');
         setStartDate('');
         setEndDate('');
         setDeliveryStatusQuickFilter('ALL');
-        setSortField('deliveryDateTime');
+        setSortField('contactDateTime');
         setSortOrder('desc');
         setCurrentPage(1);
     };
@@ -787,13 +787,13 @@ const ZeroCarDeliveryPage: React.FC = () => {
                         </select>
                     </div>
 
-                    {/* Sorting Field & Direction (Explicit deliveryDateTime requirement) */}
+                    {/* Sorting Field & Direction (Default: contactDateTime desc) */}
                     <div className="md:col-span-4 flex items-center gap-2">
                         <div className="flex-1">
                             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center justify-between">
                                 <span>مرتب‌سازی بر اساس</span>
-                                {sortField === 'deliveryDateTime' && (
-                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-black">پیش‌فرض: آخرین تحویل</span>
+                                {sortField === 'contactDateTime' && (
+                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-black">پیش‌فرض: آخرین تماس با مشتری</span>
                                 )}
                             </label>
                             <select 
@@ -801,9 +801,9 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 value={sortField}
                                 onChange={(e) => setSortField(e.target.value as SortField)}
                             >
-                                <option value="deliveryDateTime">آخرین تحویل - تاریخ و ساعت تحویل (deliveryDateTime)</option>
+                                <option value="contactDateTime">تاریخ تماس با مشتری - از جدیدترین (contactDateTime)</option>
+                                <option value="deliveryDateTime">تاریخ و ساعت تحویل (deliveryDateTime)</option>
                                 <option value="arrivalDateTime">تاریخ ورود خودرو (arrivalDateTime)</option>
-                                <option value="contactDateTime">تاریخ تماس با مشتری (contactDateTime)</option>
                                 <option value="documentDate">تاریخ سند (documentDate)</option>
                                 <option value="id">شناسه پرونده (ID)</option>
                                 <option value="createdAt">تاریخ ثبت سیستم (createdAt)</option>
@@ -848,7 +848,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     </div>
                     
                     <div className="sm:col-span-1 flex justify-end">
-                        {(searchQuery || statusFilter !== 'all' || carModelFilter !== 'all' || startDate || endDate || deliveryStatusQuickFilter !== 'ALL' || sortField !== 'deliveryDateTime' || sortOrder !== 'desc') && (
+                        {(searchQuery || statusFilter !== 'all' || carModelFilter !== 'all' || startDate || endDate || deliveryStatusQuickFilter !== 'ALL' || sortField !== 'contactDateTime' || sortOrder !== 'desc') && (
                             <button
                                 onClick={handleResetFilters}
                                 className="px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors whitespace-nowrap"
@@ -890,14 +890,20 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                         {sortField === 'chassisNumber' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
                                     </th>
                                     <th className="p-4">پلاک</th>
-                                    <th className="p-4 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-950/40 bg-cyan-50/50 dark:bg-cyan-950/20 text-cyan-900 dark:text-cyan-200" onClick={() => handleSort('deliveryDateTime')}>
+                                    <th className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('deliveryDateTime')}>
                                         <div className="flex items-center gap-1">
                                             <CalendarIcon className="w-3.5 h-3.5 text-cyan-600" />
-                                            <span>تاریخ و ساعت تحویل</span>
+                                            <span>تاریخ تحویل</span>
                                             {sortField === 'deliveryDateTime' && <span className="mr-1 font-black text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
                                         </div>
                                     </th>
-                                    <th className="p-4">سند و ورود</th>
+                                    <th className="p-4 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-950/40 bg-cyan-50/40 dark:bg-cyan-950/20 text-cyan-900 dark:text-cyan-200" onClick={() => handleSort('contactDateTime')} title="مرتب‌سازی بر اساس تاریخ تماس با مشتری">
+                                        <div className="flex items-center gap-1">
+                                            <PhoneIcon className="w-3.5 h-3.5 text-cyan-600" />
+                                            <span>تاریخ تماس / ورود</span>
+                                            {sortField === 'contactDateTime' && <span className="mr-1 font-black text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
+                                        </div>
+                                    </th>
                                     <th className="p-4 text-center">عملیات</th>
                                 </tr>
                             </thead>

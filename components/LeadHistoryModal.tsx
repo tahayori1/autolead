@@ -2526,7 +2526,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             {/* Q1 */}
                                             <div className="space-y-1.5">
                                                 <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                                                    ۱. چقدر از سرعت خدمات نمایندگی راضی بودید؟ (از ۱ تا ۱۰)
+                                                    ۱. رضایت از سرعت خدمات نمایندگی (از ۱ تا ۱۰):
                                                 </span>
                                                 <RatingSelector value={delQ1} onChange={setDelQ1} />
                                             </div>
@@ -2534,7 +2534,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             {/* Q2 */}
                                             <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800/60 pt-3">
                                                 <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                                                    ۲. چقدر از فرایند تحویل خودرو (مدارک، زمان، توضیحات هنگام تحویل) راضی بودید؟ (از ۱ تا ۱۰)
+                                                    ۲. رضایت از فرایند تحویل خودرو (مدارک، زمان، توضیحات هنگام تحویل) (از ۱ تا ۱۰):
                                                 </span>
                                                 <RatingSelector value={delQ2} onChange={setDelQ2} />
                                             </div>
@@ -2542,7 +2542,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             {/* Q3 */}
                                             <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800/60 pt-3">
                                                 <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                                                    ۳. چقدر از برخورد و پاسخگویی پرسنل نمایندگی راضی بودید؟ (از ۱ تا ۱۰)
+                                                    ۳. رضایت از برخورد و پاسخگویی پرسنل نمایندگی (از ۱ تا ۱۰):
                                                 </span>
                                                 <RatingSelector value={delQ3} onChange={setDelQ3} />
                                             </div>
@@ -2550,7 +2550,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             {/* Q4 */}
                                             <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800/60 pt-3">
                                                 <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                                                    ۴. چقدر از سلامت و کیفیت خودرو تحویل‌شده راضی بودید؟ (از ۱ تا ۱۰)
+                                                    ۴. رضایت از سلامت و کیفیت خودرو تحویل‌شده (از ۱ تا ۱۰):
                                                 </span>
                                                 <RatingSelector value={delQ4} onChange={setDelQ4} />
                                             </div>
@@ -2558,7 +2558,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             {/* Q5 */}
                                             <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800/60 pt-3">
                                                 <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                                                    ۵. چقدر از اطلاع‌رسانی نمایندگی (مثل تماس‌ها، پیامک‌ها و توضیحات) راضی بودید؟ (از ۱ تا ۱۰)
+                                                    ۵. رضایت از اطلاع‌رسانی نمایندگی (تماس‌ها، پیامک‌ها و توضیحات) (از ۱ تا ۱۰):
                                                 </span>
                                                 <RatingSelector value={delQ5} onChange={setDelQ5} />
                                             </div>
@@ -2566,7 +2566,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                             {/* Q6 */}
                                             <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800/60 pt-3">
                                                 <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                                                    ۶. چقدر از امکانات رفاهی نمایندگی (اتاق انتظار، نوشیدنی، پارکینگ) راضی بودید؟ (از ۱ تا ۱۰)
+                                                    ۶. رضایت از امکانات رفاهی نمایندگی (اتاق انتظار، نوشیدنی، پارکینگ) (از ۱ تا ۱۰):
                                                 </span>
                                                 <RatingSelector value={delQ6} onChange={setDelQ6} />
                                             </div>
