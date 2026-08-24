@@ -19,6 +19,30 @@ const PERSIAN_MONTHS = [
 
 // --- Helpers ---
 
+export const formatPollQuestionTitle = (title: string): string => {
+    if (!title) return 'سوال نظرسنجی';
+    const clean = title.trim();
+    if (clean.includes('سرعت')) {
+        return '۱. رضایت از سرعت خدمات نمایندگی:';
+    }
+    if (clean.includes('فرایند') || clean.includes('تحویل') || clean.includes('مدارک') || clean.includes('توضیحات')) {
+        return '۲. رضایت از فرایند تحویل خودرو (مدارک، زمان، توضیحات هنگام تحویل):';
+    }
+    if (clean.includes('برخورد') || clean.includes('پاسخگویی') || clean.includes('پرسنل')) {
+        return '۳. رضایت از برخورد و پاسخگویی پرسنل نمایندگی:';
+    }
+    if (clean.includes('سلامت') || clean.includes('کیفیت')) {
+        return '۴. رضایت از سلامت و کیفیت خودرو تحویل‌شده:';
+    }
+    if (clean.includes('اطلاع') || clean.includes('پیامک') || clean.includes('تماس')) {
+        return '۵. رضایت از اطلاع‌رسانی نمایندگی (تماس‌ها، پیامک‌ها و توضیحات):';
+    }
+    if (clean.includes('امکانات') || clean.includes('رفاهی') || clean.includes('انتظار') || clean.includes('پارکینگ') || clean.includes('نوشیدنی')) {
+        return '۶. رضایت از امکانات رفاهی نمایندگی (اتاق انتظار، نوشیدنی، پارکینگ):';
+    }
+    return clean;
+};
+
 const calculateCustomerAverage = (fields: Record<string, any>): number => {
     const scores = Object.entries(fields)
         .filter(([key, value]) => key.startsWith('Field_') && typeof value === 'number')
@@ -231,13 +255,13 @@ const CustomerFeedbackCard: React.FC<{
 
             <div className="grid grid-cols-3 gap-2">
                 {scores.map(s => {
-                    const fullTitle = questionMap[s.key] || '';
-                    const shortLabel = fullTitle.includes('برخورد') ? 'برخورد' :
-                                     fullTitle.includes('اطلاع') ? 'اطلاع‌رسانی' :
-                                     fullTitle.includes('فرایند تحویل') ? 'فرایند تحویل' :
-                                     fullTitle.includes('سرعت') ? 'سرعت' :
-                                     fullTitle.includes('امکانات') ? 'امکانات' :
-                                     fullTitle.includes('سلامت') ? 'سلامت خودرو' : 'سایر';
+                    const fullTitle = formatPollQuestionTitle(questionMap[s.key] || '');
+                    const shortLabel = fullTitle.includes('سرعت') ? 'سرعت خدمات' :
+                                     (fullTitle.includes('فرایند') || fullTitle.includes('تحویل') || fullTitle.includes('مدارک')) ? 'فرایند تحویل' :
+                                     (fullTitle.includes('برخورد') || fullTitle.includes('پاسخگویی') || fullTitle.includes('پرسنل')) ? 'برخورد پرسنل' :
+                                     (fullTitle.includes('سلامت') || fullTitle.includes('کیفیت')) ? 'سلامت خودرو' :
+                                     (fullTitle.includes('اطلاع') || fullTitle.includes('پیامک') || fullTitle.includes('تماس')) ? 'اطلاع‌رسانی' :
+                                     (fullTitle.includes('امکانات') || fullTitle.includes('رفاهی')) ? 'امکانات رفاهی' : 'سایر';
 
                     let colorClass = 'bg-slate-50 text-slate-600 border-slate-100';
                     if (s.score >= 9) colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800';
@@ -246,7 +270,7 @@ const CustomerFeedbackCard: React.FC<{
                     return (
                         <div key={s.key} className={`flex flex-col items-center justify-center p-2 rounded-xl border ${colorClass}`}>
                             <span className="text-base font-black font-mono">{s.score}</span>
-                            <span className="text-[8px] font-bold opacity-80 whitespace-nowrap uppercase tracking-tighter">{shortLabel}</span>
+                            <span className="text-[8px] font-bold opacity-80 whitespace-nowrap uppercase tracking-tighter" title={fullTitle}>{shortLabel}</span>
                         </div>
                     );
                 })}
@@ -380,7 +404,7 @@ const PollPage: React.FC = () => {
 
         return Object.entries(questionSums).map(([key, stats]) => ({
             key,
-            question: data.questions[key] || 'سوال نامشخص',
+            question: formatPollQuestionTitle(data.questions[key] || 'سوال نامشخص'),
             score: stats.total / stats.count
         })).sort((a, b) => b.score - a.score);
 

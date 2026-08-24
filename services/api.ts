@@ -906,6 +906,30 @@ export const sendBulkSMS = async (numbers: string[], message: string): Promise<a
 };
 
 // --- Poll / Survey ---
+export const normalizeSurveyQuestion = (title: string): string => {
+    if (!title) return 'سوال نظرسنجی';
+    const clean = title.trim();
+    if (clean.includes('سرعت')) {
+        return '۱. رضایت از سرعت خدمات نمایندگی:';
+    }
+    if (clean.includes('فرایند') || clean.includes('تحویل خودرو') || clean.includes('مدارک') || clean.includes('زمان تحویل') || clean.includes('توضیحات هنگام')) {
+        return '۲. رضایت از فرایند تحویل خودرو (مدارک، زمان، توضیحات هنگام تحویل):';
+    }
+    if (clean.includes('برخورد') || clean.includes('پاسخگویی') || clean.includes('پرسنل')) {
+        return '۳. رضایت از برخورد و پاسخگویی پرسنل نمایندگی:';
+    }
+    if (clean.includes('سلامت') || clean.includes('کیفیت')) {
+        return '۴. رضایت از سلامت و کیفیت خودرو تحویل‌شده:';
+    }
+    if (clean.includes('اطلاع') || clean.includes('پیامک') || clean.includes('تماس')) {
+        return '۵. رضایت از اطلاع‌رسانی نمایندگی (تماس‌ها، پیامک‌ها و توضیحات):';
+    }
+    if (clean.includes('امکانات') || clean.includes('رفاهی') || clean.includes('انتظار') || clean.includes('پارکینگ') || clean.includes('نوشیدنی')) {
+        return '۶. رضایت از امکانات رفاهی نمایندگی (اتاق انتظار، نوشیدنی، پارکینگ):';
+    }
+    return clean;
+};
+
 export const getPollAverages = async (): Promise<ProcessedPollData> => {
     const response = await fetch(`${API_BASE_URL}/poll/avg`, { headers: getAuthHeaders() });
     const rawData: PollApiResponseItem[] = await handleResponse(response);
@@ -934,7 +958,7 @@ export const getPollAverages = async (): Promise<ProcessedPollData> => {
             }
             if (item.fieldsGuid) {
                 item.fieldsGuid.forEach(field => {
-                    result.questions[field.Key] = field.Title;
+                    result.questions[field.Key] = normalizeSurveyQuestion(field.Title);
                 });
             }
         });
