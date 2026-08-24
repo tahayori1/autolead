@@ -445,26 +445,28 @@ export interface OvertimeRequest {
 
 export interface ZeroCarDelivery {
     id: number;
-    // Section 1: Verification
+    // Section 1: Verification & Customer Info
     customerName: string;
+    phoneNumber: string;
     carModel: string;
     color: string;
     chassisNumber: string;
-    plateNumber?: string;
-    contractNumber?: string;
-    documentNumber?: string;
-    documentDate: string;
-    phoneNumber: string;
-    status: 'VERIFICATION' | 'PROCESSING' | 'DELIVERED';
-    secondOwnerName?: string;
-    verificationNotes?: string;
+    plateNumber?: string | null;
+    contractNumber?: string | null;
+    documentNumber?: string | null;
+    documentDate?: string | null;
+    status: string;
+    secondOwnerName?: string | null;
+    verificationNotes?: string | null;
 
-    // Section 2: Delivery Process (Dates include times)
-    arrivalDateTime?: string;
-    contactDateTime?: string;
-    deliveryDateTime?: string;
-    installedOptions?: string;
-    deliveryNotes?: string;
+    // Section 2: Delivery Process & Logistics
+    arrivalDateTime?: string | null;
+    contactDateTime?: string | null;
+    deliveryDateTime?: string | null;
+    installedOptions?: string | null;
+    deliveryNotes?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
 }
 
 // --- Secure Transaction (Transfer Paks) Types ---
