@@ -35,7 +35,14 @@ import {
     XCircle,
     CheckCircle,
     MapPin,
-    Users
+    Users,
+    BarChart3,
+    TrendingUp,
+    Award,
+    Activity,
+    Share2,
+    Copy,
+    CheckCheck
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -74,7 +81,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     initialTab
 }) => {
     const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS'>('COMBINED_HISTORY');
-    const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY'>('REGISTRATION');
+    const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY' | 'DELIVERY_STATS'>('REGISTRATION');
+    const [copiedStats, setCopiedStats] = useState(false);
     
     // Send Message Modal visibility
     const [isSendMessageOpen, setIsSendMessageOpen] = useState(false);
@@ -1137,6 +1145,214 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
     // Scan for submitted surveys in journals list
     const historicalRegSurveys = journals.filter(j => j.content.includes('📝 گزارش نظرسنجی ثبت‌نام / خرید'));
     const historicalDelSurveys = journals.filter(j => j.content.includes('🚗 نظرسنجی تحویل خودرو'));
+
+    // Parser for delivery survey entries
+    const parseDeliverySurvey = (journal: CustomerJournal) => {
+        if (!journal.content.includes('🚗 نظرسنجی تحویل خودرو')) return null;
+        
+        const lines = journal.content.split('\n');
+        let q1 = 0, q2 = 0, q3 = 0, q4 = 0, q5 = 0, q6 = 0;
+        let comment = '';
+
+        const extractScore = (str: string): number => {
+            const match = str.match(/\[(\d+)\s*(?:از|\/)\s*۱۰\]/) || str.match(/(\d+)\s*(?:از|\/)\s*۱۰/);
+            return match ? parseInt(match[1], 10) : 0;
+        };
+
+        lines.forEach(line => {
+            if (line.includes('سرعت')) {
+                q1 = extractScore(line);
+            } else if (line.includes('فرایند') || line.includes('تحویل خودرو') || line.includes('مدارک') || line.includes('توضیحات هنگام')) {
+                q2 = extractScore(line);
+            } else if (line.includes('برخورد') || line.includes('پاسخگویی') || line.includes('پرسنل')) {
+                q3 = extractScore(line);
+            } else if (line.includes('سلامت') || line.includes('کیفیت')) {
+                q4 = extractScore(line);
+            } else if (line.includes('اطلاع') || line.includes('پیامک') || line.includes('تماس')) {
+                q5 = extractScore(line);
+            } else if (line.includes('امکانات') || line.includes('رفاهی') || line.includes('انتظار') || line.includes('پارکینگ')) {
+                q6 = extractScore(line);
+            } else if (line.includes('توضیحات تکمیلی') || line.includes('توضیحات:')) {
+                comment = line.replace(/توضیحات تکمیلی مشتری:|توضیحات تکمیلی:|توضیحات:/g, '').trim();
+            }
+        });
+
+        // Fallback: match bracket scores sequentially if names changed
+        if (q1 === 0 && q2 === 0 && q3 === 0 && q4 === 0 && q5 === 0 && q6 === 0) {
+            const allMatches = [...journal.content.matchAll(/\[(\d+)\s*(?:از|\/)\s*۱۰\]/g)].map(m => parseInt(m[1], 10));
+            if (allMatches.length >= 6) {
+                [q1, q2, q3, q4, q5, q6] = allMatches;
+            }
+        }
+
+        const validScores = [q1, q2, q3, q4, q5, q6].filter(s => s > 0);
+        const averageScore = validScores.length > 0 ? Number((validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(1)) : 0;
+        const csiPercentage = Math.round((averageScore / 10) * 100);
+
+        return {
+            id: journal.id,
+            createdAt: journal.createdAt,
+            author: journal.author,
+            q1Speed: q1,
+            q2Process: q2,
+            q3Staff: q3,
+            q4Quality: q4,
+            q5Info: q5,
+            q6Facilities: q6,
+            averageScore,
+            csiPercentage,
+            comment,
+            rawContent: journal.content
+        };
+    };
+
+    const parsedDeliverySurveys = historicalDelSurveys.map(parseDeliverySurvey).filter(Boolean) as Array<{
+        id: number | string;
+        createdAt: string;
+        author: string;
+        q1Speed: number;
+        q2Process: number;
+        q3Staff: number;
+        q4Quality: number;
+        q5Info: number;
+        q6Facilities: number;
+        averageScore: number;
+        csiPercentage: number;
+        comment: string;
+        rawContent: string;
+    }>;
+
+    // Delivery Survey Aggregate Statistics
+    const deliveryStatsSummary = (() => {
+        if (parsedDeliverySurveys.length === 0) return null;
+
+        const count = parsedDeliverySurveys.length;
+        const avgQ1 = Number((parsedDeliverySurveys.reduce((sum, s) => sum + (s.q1Speed || 0), 0) / count).toFixed(1));
+        const avgQ2 = Number((parsedDeliverySurveys.reduce((sum, s) => sum + (s.q2Process || 0), 0) / count).toFixed(1));
+        const avgQ3 = Number((parsedDeliverySurveys.reduce((sum, s) => sum + (s.q3Staff || 0), 0) / count).toFixed(1));
+        const avgQ4 = Number((parsedDeliverySurveys.reduce((sum, s) => sum + (s.q4Quality || 0), 0) / count).toFixed(1));
+        const avgQ5 = Number((parsedDeliverySurveys.reduce((sum, s) => sum + (s.q5Info || 0), 0) / count).toFixed(1));
+        const avgQ6 = Number((parsedDeliverySurveys.reduce((sum, s) => sum + (s.q6Facilities || 0), 0) / count).toFixed(1));
+
+        const overallAvg = Number(((avgQ1 + avgQ2 + avgQ3 + avgQ4 + avgQ5 + avgQ6) / 6).toFixed(1));
+        const overallCsi = Math.round((overallAvg / 10) * 100);
+
+        const dimensions = [
+            {
+                id: 'q1',
+                title: '۱. رضایت از سرعت خدمات نمایندگی',
+                shortTitle: 'سرعت خدمات',
+                score: avgQ1,
+                percent: Math.round((avgQ1 / 10) * 100),
+                color: avgQ1 >= 8 ? 'emerald' : avgQ1 >= 6 ? 'amber' : 'rose'
+            },
+            {
+                id: 'q2',
+                title: '۲. رضایت از فرایند تحویل خودرو (مدارک، زمان، توضیحات هنگام تحویل)',
+                shortTitle: 'فرایند تحویل',
+                score: avgQ2,
+                percent: Math.round((avgQ2 / 10) * 100),
+                color: avgQ2 >= 8 ? 'emerald' : avgQ2 >= 6 ? 'amber' : 'rose'
+            },
+            {
+                id: 'q3',
+                title: '۳. رضایت از برخورد و پاسخگویی پرسنل نمایندگی',
+                shortTitle: 'برخورد پرسنل',
+                score: avgQ3,
+                percent: Math.round((avgQ3 / 10) * 100),
+                color: avgQ3 >= 8 ? 'emerald' : avgQ3 >= 6 ? 'amber' : 'rose'
+            },
+            {
+                id: 'q4',
+                title: '۴. رضایت از سلامت و کیفیت خودرو تحویل‌شده',
+                shortTitle: 'سلامت خودرو',
+                score: avgQ4,
+                percent: Math.round((avgQ4 / 10) * 100),
+                color: avgQ4 >= 8 ? 'emerald' : avgQ4 >= 6 ? 'amber' : 'rose'
+            },
+            {
+                id: 'q5',
+                title: '۵. رضایت از اطلاع‌رسانی نمایندگی (تماس‌ها، پیامک‌ها و توضیحات)',
+                shortTitle: 'اطلاع‌رسانی',
+                score: avgQ5,
+                percent: Math.round((avgQ5 / 10) * 100),
+                color: avgQ5 >= 8 ? 'emerald' : avgQ5 >= 6 ? 'amber' : 'rose'
+            },
+            {
+                id: 'q6',
+                title: '۶. رضایت از امکانات رفاهی نمایندگی (اتاق انتظار، نوشیدنی، پارکینگ)',
+                shortTitle: 'امکانات رفاهی',
+                score: avgQ6,
+                percent: Math.round((avgQ6 / 10) * 100),
+                color: avgQ6 >= 8 ? 'emerald' : avgQ6 >= 6 ? 'amber' : 'rose'
+            },
+        ];
+
+        const allScores = parsedDeliverySurveys.flatMap(s => [s.q1Speed, s.q2Process, s.q3Staff, s.q4Quality, s.q5Info, s.q6Facilities]).filter(s => s > 0);
+        const excellentCount = allScores.filter(s => s >= 9).length;
+        const goodCount = allScores.filter(s => s >= 7 && s <= 8).length;
+        const mediumCount = allScores.filter(s => s >= 5 && s <= 6).length;
+        const weakCount = allScores.filter(s => s < 5).length;
+
+        const sortedDims = [...dimensions].sort((a, b) => b.score - a.score);
+        const bestDim = sortedDims[0];
+        const weakestDim = sortedDims[sortedDims.length - 1];
+
+        let satisfactionLevel = 'بسیار عالی و وفادار';
+        let levelBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800';
+        if (overallAvg < 5) {
+            satisfactionLevel = 'ناراضی (نیازمند رسیدگی و پیگیری)';
+            levelBadgeClass = 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800';
+        } else if (overallAvg < 7) {
+            satisfactionLevel = 'متوسط (نیازمند بهبود عملکرد)';
+            levelBadgeClass = 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800';
+        } else if (overallAvg < 8.5) {
+            satisfactionLevel = 'خوب و رضایت‌بخش';
+            levelBadgeClass = 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800';
+        }
+
+        return {
+            totalSurveys: count,
+            overallAvg,
+            overallCsi,
+            dimensions,
+            satisfactionLevel,
+            levelBadgeClass,
+            bestDim,
+            weakestDim,
+            distribution: {
+                excellentCount,
+                goodCount,
+                mediumCount,
+                weakCount,
+                totalAnswers: allScores.length
+            }
+        };
+    })();
+
+    const handleCopyDeliveryStatsReport = () => {
+        if (!deliveryStatsSummary) return;
+        const reportText = `📊 گزارش آماری نظرسنجی تحویل خودرو (CRM)
+نام مشتری: ${leadName || '-'} | شماره: ${leadNumber || '-'}
+تعداد نظرسنجی‌های ثبت‌شده: ${deliveryStatsSummary.totalSurveys}
+━━━━━━━━━━━━━━━━━━━━
+⭐️ شاخص کل رضایت مشتری (CSI): ${deliveryStatsSummary.overallAvg} از ۱۰ (${deliveryStatsSummary.overallCsi}٪)
+وضعیت سطح رضایت: ${deliveryStatsSummary.satisfactionLevel}
+━━━━━━━━━━━━━━━━━━━━
+📈 نمرات تفکیکی شاخص‌های ۶‌گانه:
+${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰ (${d.percent}٪)`).join('\n')}
+━━━━━━━━━━━━━━━━━━━━
+🏆 بالاترین امتیاز: ${deliveryStatsSummary.bestDim.shortTitle} (${deliveryStatsSummary.bestDim.score} از ۱۰)
+⚠️ نیازمند توجه: ${deliveryStatsSummary.weakestDim.shortTitle} (${deliveryStatsSummary.weakestDim.score} از ۱۰)`;
+
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(reportText);
+            setCopiedStats(true);
+            setTimeout(() => setCopiedStats(false), 2500);
+            setToastMessage('گزارش آماری نظرسنجی با موفقیت کپی شد.');
+            setToastType('success');
+        }
+    };
 
     const RatingSelector: React.FC<{
         value: number;
@@ -2325,30 +2541,228 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                         {activeTab === 'SURVEYS' && (
                             <div className="space-y-4">
                                 {/* Survey Type Selector */}
-                                <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 gap-1">
                                     <button
                                         type="button"
                                         onClick={() => setSurveySubTab('REGISTRATION')}
-                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
                                             surveySubTab === 'REGISTRATION' 
-                                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white' 
+                                                ? 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 shadow-xs border border-sky-150 dark:border-sky-800' 
                                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
                                         }`}
                                     >
-                                        گزارش نظرسنجی ثبت‌نام / خرید
+                                        📝 نظرسنجی ثبت‌نام / خرید
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setSurveySubTab('DELIVERY')}
-                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
                                             surveySubTab === 'DELIVERY' 
-                                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white' 
+                                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-150 dark:border-emerald-800' 
                                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
                                         }`}
                                     >
-                                        فرم نظرسنجی تحویل خودرو
+                                        🚗 فرم نظرسنجی تحویل
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSurveySubTab('DELIVERY_STATS')}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                                            surveySubTab === 'DELIVERY_STATS' 
+                                                ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 shadow-xs border border-indigo-150 dark:border-indigo-800' 
+                                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                                        }`}
+                                    >
+                                        <BarChart3 className="w-3.5 h-3.5" />
+                                        <span>📊 گزارشات آماری تحویل</span>
+                                        {parsedDeliverySurveys.length > 0 && (
+                                            <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold">
+                                                {parsedDeliverySurveys.length}
+                                            </span>
+                                        )}
                                     </button>
                                 </div>
+
+                                {/* Survey C: Delivery Statistics & Analytics Report */}
+                                {surveySubTab === 'DELIVERY_STATS' && (
+                                    <div className="space-y-4">
+                                        {!deliveryStatsSummary ? (
+                                            <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-3">
+                                                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">
+                                                    <BarChart3 className="w-6 h-6" />
+                                                </div>
+                                                <h4 className="text-sm font-black text-slate-700 dark:text-slate-200">هنوز نظرسنجی تحویل خودرو ثبت نشده است</h4>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                                                    برای مشاهده آمار و شاخص‌های رضایت‌سنجی تحویل (CSI)، ابتدا فرم نظرسنجی تحویل خودرو را تکمیل نمایید.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSurveySubTab('DELIVERY')}
+                                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-xs mt-2"
+                                                >
+                                                    <Compass className="w-4 h-4" />
+                                                    ثبت اولین نظرسنجی تحویل خودرو
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {/* Header Stats Overview */}
+                                                <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-indigo-800 relative overflow-hidden">
+                                                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-sky-400 to-indigo-400"></div>
+                                                    
+                                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-indigo-800/60">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2.5 bg-indigo-500/20 rounded-xl text-indigo-300 border border-indigo-500/30">
+                                                                <Award className="w-6 h-6" />
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="text-sm font-black text-white flex items-center gap-2">
+                                                                    شاخص رضایت تحویل خودرو (CSI)
+                                                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                                                                        {deliveryStatsSummary.totalSurveys} نظرسنجی ثبت‌شده
+                                                                    </span>
+                                                                </h4>
+                                                                <p className="text-xs text-indigo-200/80 mt-0.5">
+                                                                    ارزیابی ۶ شاخص کیفیت و خدمات تحویل خودرو به مشتری
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleCopyDeliveryStatsReport}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/60 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition border border-indigo-400/30 shadow-xs"
+                                                            title="کپی گزارش متنی جهت اشتراک‌گذاری"
+                                                        >
+                                                            {copiedStats ? <CheckCheck className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                                                            <span>{copiedStats ? 'کپی شد!' : 'کپی گزارش تحلیلی'}</span>
+                                                        </button>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 items-center">
+                                                        <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-800/40 flex items-center justify-between">
+                                                            <div>
+                                                                <span className="text-[11px] text-indigo-300 block">نمره کل رضایت (CSI)</span>
+                                                                <div className="flex items-baseline gap-1 mt-0.5">
+                                                                    <span className="text-2xl font-black font-mono text-emerald-400">{deliveryStatsSummary.overallAvg}</span>
+                                                                    <span className="text-xs text-indigo-300 font-mono">از ۱۰</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-lg font-black font-mono text-white">{deliveryStatsSummary.overallCsi}٪</span>
+                                                                <span className="text-[10px] text-indigo-300 block">ضریب رضایت</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-800/40">
+                                                            <span className="text-[11px] text-indigo-300 block mb-1">سطح کیفی رضایت مشتری</span>
+                                                            <span className={`inline-block text-xs font-black px-2.5 py-1 rounded-lg border ${deliveryStatsSummary.levelBadgeClass}`}>
+                                                                {deliveryStatsSummary.satisfactionLevel}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="bg-indigo-950/60 p-3 rounded-xl border border-indigo-800/40">
+                                                            <div className="text-xs space-y-1">
+                                                                <div className="flex justify-between items-center text-[11px]">
+                                                                    <span className="text-emerald-300 font-bold">🏆 نقطه قوت:</span>
+                                                                    <span className="text-white font-black truncate max-w-[120px]">{deliveryStatsSummary.bestDim.shortTitle}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center text-[11px]">
+                                                                    <span className="text-amber-300 font-bold">⚠️ نیازمند توجه:</span>
+                                                                    <span className="text-white font-black truncate max-w-[120px]">{deliveryStatsSummary.weakestDim.shortTitle}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 6 Dimensions Detailed Progress Cards */}
+                                                <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
+                                                    <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
+                                                        <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                                            <TrendingUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                                            تحلیل نمرات ۶ شاخص ارزیابی تحویل خودرو
+                                                        </h4>
+                                                        <span className="text-[11px] text-slate-400">میانگین از ۱۰</span>
+                                                    </div>
+
+                                                    <div className="space-y-3">
+                                                        {deliveryStatsSummary.dimensions.map((dim) => {
+                                                            const isHigh = dim.score >= 8;
+                                                            const isMid = dim.score >= 6 && dim.score < 8;
+                                                            return (
+                                                                <div key={dim.id} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-150 dark:border-slate-700/60 space-y-1.5">
+                                                                    <div className="flex justify-between items-center text-xs">
+                                                                        <span className="font-bold text-slate-700 dark:text-slate-200">{dim.title}</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-black font-mono text-slate-800 dark:text-white">{dim.score} از ۱۰</span>
+                                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold font-mono ${
+                                                                                isHigh 
+                                                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' 
+                                                                                    : isMid 
+                                                                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' 
+                                                                                        : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                                                            }`}>
+                                                                                {dim.percent}٪
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    {/* Visual Progress Bar */}
+                                                                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                        <div 
+                                                                            className={`h-full rounded-full transition-all duration-500 ${
+                                                                                isHigh 
+                                                                                    ? 'bg-emerald-500' 
+                                                                                    : isMid 
+                                                                                        ? 'bg-amber-500' 
+                                                                                        : 'bg-rose-500'
+                                                                            }`}
+                                                                            style={{ width: `${Math.min(100, Math.max(5, dim.percent))}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+
+                                                {/* Distribution Cards */}
+                                                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                                                    <h4 className="text-xs font-black text-slate-800 dark:text-white mb-3 flex items-center gap-1.5">
+                                                        <Activity className="w-4 h-4 text-slate-500" />
+                                                        توزیع نمرات ارزیابی (تعداد پاسخ‌ها)
+                                                    </h4>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                                                        <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60">
+                                                            <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold block">عالی (۹-۱۰)</span>
+                                                            <span className="text-lg font-black font-mono text-emerald-800 dark:text-emerald-200 mt-0.5 block">
+                                                                {deliveryStatsSummary.distribution.excellentCount}
+                                                            </span>
+                                                        </div>
+                                                        <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60">
+                                                            <span className="text-[11px] text-sky-700 dark:text-sky-300 font-bold block">خوب (۷-۸)</span>
+                                                            <span className="text-lg font-black font-mono text-sky-800 dark:text-sky-200 mt-0.5 block">
+                                                                {deliveryStatsSummary.distribution.goodCount}
+                                                            </span>
+                                                        </div>
+                                                        <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
+                                                            <span className="text-[11px] text-amber-700 dark:text-amber-300 font-bold block">متوسط (۵-۶)</span>
+                                                            <span className="text-lg font-black font-mono text-amber-800 dark:text-amber-200 mt-0.5 block">
+                                                                {deliveryStatsSummary.distribution.mediumCount}
+                                                            </span>
+                                                        </div>
+                                                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60">
+                                                            <span className="text-[11px] text-rose-700 dark:text-rose-300 font-bold block">ضعیف (زیر ۵)</span>
+                                                            <span className="text-lg font-black font-mono text-rose-800 dark:text-rose-200 mt-0.5 block">
+                                                                {deliveryStatsSummary.distribution.weakCount}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Survey A: Registration / Purchase Form */}
                                 {surveySubTab === 'REGISTRATION' && (
@@ -2600,8 +3014,13 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                 )}
 
                                 {/* Survey History Logs */}
-                                <div className="space-y-2">
-                                    <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 px-1">سوابق نظرسنجی‌های ثبت‌شده برای این مشتری:</h4>
+                                <div className="space-y-2 pt-2">
+                                    <div className="flex justify-between items-center px-1">
+                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400">سوابق نظرسنجی‌های ثبت‌شده برای این مشتری:</h4>
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                            {(historicalRegSurveys.length + historicalDelSurveys.length).toLocaleString('fa-IR')} مورد
+                                        </span>
+                                    </div>
                                     
                                     {historicalRegSurveys.length === 0 && historicalDelSurveys.length === 0 ? (
                                         <div className="text-center text-slate-400 py-6 text-xs bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-850 rounded-2xl">
@@ -2609,15 +3028,68 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                                         </div>
                                     ) : (
                                         <div className="space-y-3">
-                                            {[...historicalRegSurveys, ...historicalDelSurveys].map((s) => (
-                                                <div key={s.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex flex-col gap-2">
-                                                    <div className="flex justify-between items-center text-[10px] text-slate-400 border-b border-slate-50 dark:border-slate-800/50 pb-2">
-                                                        <span className="font-bold text-slate-600 dark:text-slate-300">{s.author}</span>
-                                                        <span className="font-mono">{s.createdAt}</span>
+                                            {[...historicalRegSurveys, ...historicalDelSurveys].map((s) => {
+                                                const isDel = s.content.includes('🚗 نظرسنجی تحویل خودرو');
+                                                const parsed = isDel ? parseDeliverySurvey(s) : null;
+
+                                                return (
+                                                    <div key={s.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex flex-col gap-2.5 shadow-2xs">
+                                                        <div className="flex justify-between items-center text-[10px] text-slate-400 border-b border-slate-50 dark:border-slate-800/50 pb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-slate-700 dark:text-slate-200">{s.author}</span>
+                                                                <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
+                                                                    isDel 
+                                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' 
+                                                                        : 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                                                                }`}>
+                                                                    {isDel ? 'نظرسنجی تحویل' : 'نظرسنجی خرید'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {parsed && parsed.averageScore > 0 && (
+                                                                    <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 text-[10px]">
+                                                                        CSI: {parsed.averageScore}/۱۰ ({parsed.csiPercentage}٪)
+                                                                    </span>
+                                                                )}
+                                                                <span className="font-mono">{s.createdAt}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {parsed && (
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                                                                <div className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-[11px] flex justify-between items-center border border-slate-100 dark:border-slate-800">
+                                                                    <span className="text-slate-600 dark:text-slate-400">۱. سرعت:</span>
+                                                                    <span className="font-black font-mono text-slate-800 dark:text-white">{parsed.q1Speed}/۱۰</span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-[11px] flex justify-between items-center border border-slate-100 dark:border-slate-800">
+                                                                    <span className="text-slate-600 dark:text-slate-400">۲. فرایند تحویل:</span>
+                                                                    <span className="font-black font-mono text-slate-800 dark:text-white">{parsed.q2Process}/۱۰</span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-[11px] flex justify-between items-center border border-slate-100 dark:border-slate-800">
+                                                                    <span className="text-slate-600 dark:text-slate-400">۳. پرسنل:</span>
+                                                                    <span className="font-black font-mono text-slate-800 dark:text-white">{parsed.q3Staff}/۱۰</span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-[11px] flex justify-between items-center border border-slate-100 dark:border-slate-800">
+                                                                    <span className="text-slate-600 dark:text-slate-400">۴. کیفیت خودرو:</span>
+                                                                    <span className="font-black font-mono text-slate-800 dark:text-white">{parsed.q4Quality}/۱۰</span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-[11px] flex justify-between items-center border border-slate-100 dark:border-slate-800">
+                                                                    <span className="text-slate-600 dark:text-slate-400">۵. اطلاع‌رسانی:</span>
+                                                                    <span className="font-black font-mono text-slate-800 dark:text-white">{parsed.q5Info}/۱۰</span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-[11px] flex justify-between items-center border border-slate-100 dark:border-slate-800">
+                                                                    <span className="text-slate-600 dark:text-slate-400">۶. امکانات:</span>
+                                                                    <span className="font-black font-mono text-slate-800 dark:text-white">{parsed.q6Facilities}/۱۰</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <p className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed pt-1">
+                                                            {s.content}
+                                                        </p>
                                                     </div>
-                                                    <p className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">{s.content}</p>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
