@@ -373,14 +373,32 @@ export interface ProcessedPollData {
 
 // --- HR & Admin Types ---
 
+export type CorrectiveActionPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type CorrectiveActionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CANCELLED';
+export type CorrectiveActionEffectiveness = 'PENDING_REVIEW' | 'EFFECTIVE' | 'PARTIALLY_EFFECTIVE' | 'INEFFECTIVE';
+
 export interface CorrectiveAction {
     id: number;
     title: string;
     description: string;
     responsiblePerson: string;
-    dueDate: string;
+    dueDate: string; // مهلت اجرا (Due Date)
     isCompleted: boolean;
-    createdAt: string;
+    createdAt?: string; // زمان ثبت اقدام اصلاحی
+    registrationDate?: string; // تاریخ ثبت
+    registrationTime?: string; // ساعت ثبت
+    executionDate?: string; // تاریخ اجرا (Execution Date)
+    executedAt?: string; // زمان دقیق انجام
+    department?: string; // واحد / بخش مرتبط
+    priority?: CorrectiveActionPriority; // اولویت / فوریت
+    status?: CorrectiveActionStatus; // وضعیت اقدام
+    rootCause?: string; // ریشه‌یابی و علت وقوع مشکل
+    actionPlan?: string; // برنامه و شرح اقدام اصلاحی
+    executionNotes?: string; // توضیحات و گزارش اجرای اقدام
+    effectiveness?: CorrectiveActionEffectiveness; // ارزیابی اثربخشی
+    registeredBy?: string; // ثبت‌کننده اقدام
+    verifierPerson?: string; // مسئول تایید و نظارت
+    resourcesRequired?: string; // منابع و الزامات مورد نیاز
 }
 
 export interface MeetingMinute {
