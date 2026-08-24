@@ -273,7 +273,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
             return true;
         });
 
-        // Sorting Logic (Default: deliveryDateTime)
+        // Sorting Logic (Default: deliveryDateTime descending -> Latest Deliveries First)
         return filtered.sort((a, b) => {
             let valA: any = a[sortField];
             let valB: any = b[sortField];
@@ -284,12 +284,18 @@ const ZeroCarDeliveryPage: React.FC = () => {
                 const normB = normalizeDateForSort(valB);
 
                 // Handle empty/null values: push to end if desc, start if asc
-                if (!normA && !normB) return 0;
+                if (!normA && !normB) {
+                    return (Number(b.id) || 0) - (Number(a.id) || 0);
+                }
                 if (!normA) return sortOrder === 'desc' ? 1 : -1;
                 if (!normB) return sortOrder === 'desc' ? -1 : 1;
 
                 const comp = normA.localeCompare(normB);
-                return sortOrder === 'desc' ? -comp : comp;
+                if (comp !== 0) {
+                    return sortOrder === 'desc' ? -comp : comp;
+                }
+                // Secondary fallback sort by ID descending
+                return (Number(b.id) || 0) - (Number(a.id) || 0);
             }
 
             // Numeric ID sort
@@ -303,18 +309,23 @@ const ZeroCarDeliveryPage: React.FC = () => {
             const strA = (valA || '').toString();
             const strB = (valB || '').toString();
 
-            if (!strA && !strB) return 0;
+            if (!strA && !strB) {
+                return (Number(b.id) || 0) - (Number(a.id) || 0);
+            }
             if (!strA) return 1;
             if (!strB) return -1;
 
             const comp = strA.localeCompare(strB, 'fa-IR', { numeric: true });
-            return sortOrder === 'desc' ? -comp : comp;
+            if (comp !== 0) {
+                return sortOrder === 'desc' ? -comp : comp;
+            }
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
     }, [deliveries, searchQuery, statusFilter, carModelFilter, dateFieldFilter, startDate, endDate, deliveryStatusQuickFilter, sortField, sortOrder]);
 
-    // Report Logic
+    // Report Logic (Sorted by latest delivery date descending)
     const reportData = useMemo(() => {
-        return deliveries.filter(item => {
+        const filtered = deliveries.filter(item => {
             const matchesModel = reportCarModel === 'all' || item.carModel === reportCarModel;
             const matchesStatus = reportStatus === 'all' || item.status === reportStatus;
             
@@ -331,6 +342,16 @@ const ZeroCarDeliveryPage: React.FC = () => {
             }
 
             return matchesModel && matchesStatus && matchesDate;
+        });
+
+        return filtered.sort((a, b) => {
+            const normA = normalizeDateForSort(a.deliveryDateTime);
+            const normB = normalizeDateForSort(b.deliveryDateTime);
+            if (!normA && !normB) return (Number(b.id) || 0) - (Number(a.id) || 0);
+            if (!normA) return 1;
+            if (!normB) return -1;
+            const comp = normA.localeCompare(normB);
+            return comp !== 0 ? -comp : (Number(b.id) || 0) - (Number(a.id) || 0);
         });
     }, [deliveries, reportCarModel, reportStatus, reportStartDate, reportEndDate]);
 
@@ -772,7 +793,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center justify-between">
                                 <span>مرتب‌سازی بر اساس</span>
                                 {sortField === 'deliveryDateTime' && (
-                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-black">پیش‌فرض: تاریخ تحویل</span>
+                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-black">پیش‌فرض: آخرین تحویل</span>
                                 )}
                             </label>
                             <select 
@@ -780,7 +801,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 value={sortField}
                                 onChange={(e) => setSortField(e.target.value as SortField)}
                             >
-                                <option value="deliveryDateTime">تاریخ و ساعت تحویل (deliveryDateTime)</option>
+                                <option value="deliveryDateTime">آخرین تحویل - تاریخ و ساعت تحویل (deliveryDateTime)</option>
                                 <option value="arrivalDateTime">تاریخ ورود خودرو (arrivalDateTime)</option>
                                 <option value="contactDateTime">تاریخ تماس با مشتری (contactDateTime)</option>
                                 <option value="documentDate">تاریخ سند (documentDate)</option>
