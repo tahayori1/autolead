@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getUsers, getCars, carOrdersService, getCallLogs, getCrmMeetings } from '../services/api';
-import type { User, Car, CarOrder, CrmCallLog, CrmMeeting } from '../types';
+import { getUsers, getCars, carOrdersService, getCallLogs, getCrmMeetings, getStaffUsers } from '../services/api';
+import type { User, Car, CarOrder, CrmCallLog, CrmMeeting, StaffUser } from '../types';
 import { OrderStatus, LeadStatus } from '../types';
 import Spinner from '../components/Spinner';
+import { StaffPerformanceReport } from '../components/StaffPerformanceReport';
 import { motion } from 'framer-motion';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -13,7 +14,8 @@ import {
     ChartBar, Users, Car as CarIcon, Map, Megaphone, 
     Calendar, Filter, TrendingUp, Activity, ShoppingCart,
     Copy, Check, FileText, Layers, Award, BarChart3, HelpCircle,
-    PhoneCall, CheckCircle2, Flame, Share2, FileSpreadsheet, Phone
+    PhoneCall, CheckCircle2, Flame, Share2, FileSpreadsheet, Phone,
+    Trophy
 } from 'lucide-react';
 
 // Declare moment from global scope
@@ -55,11 +57,12 @@ const ReportsPage: React.FC = () => {
     const [orders, setOrders] = useState<CarOrder[]>([]);
     const [callLogs, setCallLogs] = useState<CrmCallLog[]>([]);
     const [meetings, setMeetings] = useState<CrmMeeting[]>([]);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
     // Sub-tab selection and notifications
-    const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics' | 'meetings' | 'callLogs'>('kpis');
+    const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics' | 'meetings' | 'callLogs' | 'staffPerformance'>('kpis');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -321,18 +324,20 @@ const ReportsPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const [usersData, carsData, ordersData, logsData, meetingsData] = await Promise.all([
+            const [usersData, carsData, ordersData, logsData, meetingsData, staffData] = await Promise.all([
                 getUsers(),
                 getCars(),
                 carOrdersService.getAll(),
                 getCallLogs().catch(() => []),
-                getCrmMeetings().catch(() => [])
+                getCrmMeetings().catch(() => []),
+                getStaffUsers().catch(() => [])
             ]);
             setUsers(usersData);
             setCars(carsData);
             setOrders(ordersData);
             setCallLogs(logsData);
             setMeetings(meetingsData);
+            setStaffUsers(staffData);
         } catch (err) {
             setError('خطا در دریافت اطلاعات گزارشات');
         } finally {
@@ -772,6 +777,17 @@ const ReportsPage: React.FC = () => {
                 {/* Sub-tab selection */}
                 <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start gap-1">
                     <button
+                        onClick={() => setActiveSubTab('staffPerformance')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                            activeSubTab === 'staffPerformance'
+                            ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-md'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}
+                    >
+                        <Trophy className="w-4 h-4 text-amber-300" />
+                        عملکرد و رتبه‌بندی کارمندان 🏆
+                    </button>
+                    <button
                         onClick={() => setActiveSubTab('kpis')}
                         className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
                             activeSubTab === 'kpis'
@@ -818,7 +834,8 @@ const ReportsPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Global Date Filters Card */}
+            {/* Global Date Filters Card (shown for general KPIs, analytics, meetings, callLogs) */}
+            {activeSubTab !== 'staffPerformance' && (
             <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -966,9 +983,21 @@ const ReportsPage: React.FC = () => {
                     </motion.div>
                 )}
             </motion.div>
+            )}
 
             {/* Render conditional views */}
-            {activeSubTab === 'kpis' ? (
+            {activeSubTab === 'staffPerformance' && (
+                <StaffPerformanceReport
+                    users={users}
+                    orders={orders}
+                    callLogs={callLogs}
+                    meetings={meetings}
+                    staffUsers={staffUsers}
+                    showToast={showToast}
+                />
+            )}
+
+            {activeSubTab === 'kpis' && (
                 <div className="space-y-8">
                     {/* KPI Quick Action Banner */}
                     <motion.div 
@@ -1481,7 +1510,10 @@ const ReportsPage: React.FC = () => {
                         </div>
                     </motion.div>
                 </div>
-            ) : (
+            )}
+
+            {/* Analytics Tab */}
+            {activeSubTab === 'analytics' && (
                 <div className="space-y-8">
                     {/* Filters for Manual Analytics */}
                     <div className="flex flex-col lg:flex-row gap-4 items-end lg:items-center bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 self-end justify-end">
