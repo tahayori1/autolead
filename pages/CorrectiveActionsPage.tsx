@@ -72,15 +72,17 @@ const toGregorian = (dateStr?: string): string => {
     if (!dateStr) return '';
     try {
         const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
-        if (!normalized.includes('/') && normalized.includes('-')) {
-            const m = moment(normalized);
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                                  .trim();
+        const dateOnly = normalized.replace('T', ' ').split(' ')[0].trim();
+        if (!dateOnly.includes('/') && dateOnly.includes('-')) {
+            const m = moment(dateOnly);
             if (m && m.isValid()) {
                 return m.format('YYYY-MM-DD');
             }
         }
         if (typeof moment !== 'undefined') {
-            const m = moment(normalized, 'jYYYY/jMM/jDD');
+            const m = moment(dateOnly, 'jYYYY/jMM/jDD');
             if (m && m.isValid()) {
                 return m.format('YYYY-MM-DD');
             }
@@ -88,14 +90,16 @@ const toGregorian = (dateStr?: string): string => {
     } catch (e) {
         console.error("Error converting Jalali to Gregorian:", e);
     }
-    return dateStr || '';
+    return dateStr.replace('T', ' ').split(' ')[0] || '';
 };
 
 const toJalali = (gregorianStr?: string): string => {
     if (!gregorianStr) return '';
     try {
+        const clean = gregorianStr.replace('T', ' ').split(' ')[0].trim();
+        if (clean.includes('/')) return clean; // Already Jalali
         if (typeof moment !== 'undefined') {
-            const m = moment(gregorianStr);
+            const m = moment(clean);
             if (m && m.isValid()) {
                 return m.locale('fa').format('jYYYY/jMM/jDD');
             }
@@ -122,6 +126,77 @@ const getCurrentTimeStr = (): string => {
     const hours = now.getHours().toString().padStart(2, '0');
     const minutes = now.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
+};
+
+// Parse any createdAt / datetime string into Jalali date and time
+const parseCreatedAt = (rawCreatedAt?: string): { jalaliDate: string; time: string; fullDisplay: string } => {
+    if (!rawCreatedAt || !rawCreatedAt.trim()) {
+        const today = getCurrentJalaliDate();
+        const nowTime = getCurrentTimeStr();
+        return { jalaliDate: today, time: nowTime, fullDisplay: `${today} - ${nowTime}` };
+    }
+
+    try {
+        // If it's something like "2026-08-24 12:43:00" or "2026-08-24T12:43:00" or "1405/06/02 - 12:43"
+        const clean = rawCreatedAt.replace('T', ' ').trim();
+        if (clean.includes(' - ')) {
+            const [d, t] = clean.split(' - ');
+            const jalali = d.includes('/') ? d : toJalali(d);
+            const time = t ? t.trim().substring(0, 5) : getCurrentTimeStr();
+            return { jalaliDate: jalali, time, fullDisplay: `${jalali} (ساعت ${time})` };
+        }
+
+        const parts = clean.split(' ');
+        const datePart = parts[0] || '';
+        const timePart = parts[1] ? parts[1].trim().substring(0, 5) : getCurrentTimeStr();
+        const jalaliDate = datePart.includes('/') ? datePart : toJalali(datePart);
+        const time = timePart || getCurrentTimeStr();
+
+        return {
+            jalaliDate,
+            time,
+            fullDisplay: `${jalaliDate} (ساعت ${time})`
+        };
+    } catch (e) {
+        return { jalaliDate: getCurrentJalaliDate(), time: getCurrentTimeStr(), fullDisplay: rawCreatedAt };
+    }
+};
+
+// Format strictly to MySQL DATETIME "YYYY-MM-DD HH:mm:ss", e.g. "2026-08-24 12:43:00"
+const formatToMySqlDateTime = (dateStr?: string, timeStr?: string): string => {
+    try {
+        const now = new Date();
+        const defaultTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+        let gregorianDate = '';
+        if (!dateStr || !dateStr.trim()) {
+            gregorianDate = now.toISOString().split('T')[0];
+        } else {
+            const cleanedDate = dateStr.replace('T', ' ').split(' ')[0].trim();
+            gregorianDate = toGregorian(cleanedDate);
+        }
+
+        if (!gregorianDate || gregorianDate.length < 10) {
+            gregorianDate = now.toISOString().split('T')[0];
+        }
+
+        let formattedTime = defaultTime;
+        if (timeStr && timeStr.trim()) {
+            const cleanTime = timeStr.trim();
+            const timeParts = cleanTime.split(':');
+            const h = (timeParts[0] || '00').padStart(2, '0');
+            const m = (timeParts[1] || '00').padStart(2, '0');
+            const s = (timeParts[2] || '00').padStart(2, '0');
+            formattedTime = `${h}:${m}:${s}`;
+        }
+
+        return `${gregorianDate} ${formattedTime}`;
+    } catch (e) {
+        const now = new Date();
+        const ymd = now.toISOString().split('T')[0];
+        const hms = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        return `${ymd} ${hms}`;
+    }
 };
 
 const CorrectiveActionsPage: React.FC = () => {
@@ -178,7 +253,7 @@ const CorrectiveActionsPage: React.FC = () => {
             rootCause: '',
             actionPlan: '',
             resourcesRequired: '',
-            createdAt: `${todayJalali} - ${currentTime}`,
+            createdAt: formatToMySqlDateTime(todayJalali, currentTime),
             registrationDate: todayJalali,
             registrationTime: currentTime,
             dueDate: '',
@@ -193,12 +268,13 @@ const CorrectiveActionsPage: React.FC = () => {
     };
 
     const openEditModal = (action: CorrectiveAction) => {
+        const parsedCreated = parseCreatedAt(action.createdAt);
         setCurrentAction({
             ...action,
             dueDate: toJalali(action.dueDate),
             executionDate: action.executionDate ? toJalali(action.executionDate) : '',
-            registrationDate: action.registrationDate || (action.createdAt ? action.createdAt.split(' - ')[0] : getCurrentJalaliDate()),
-            registrationTime: action.registrationTime || (action.createdAt && action.createdAt.includes(' - ') ? action.createdAt.split(' - ')[1] : getCurrentTimeStr()),
+            registrationDate: action.registrationDate || parsedCreated.jalaliDate,
+            registrationTime: action.registrationTime || parsedCreated.time,
             priority: action.priority || 'MEDIUM',
             department: action.department || 'خدمات پس از فروش و تعمیرگاه',
             status: action.status || (action.isCompleted ? 'COMPLETED' : 'IN_PROGRESS'),
@@ -224,18 +300,21 @@ const CorrectiveActionsPage: React.FC = () => {
             const isDone = Boolean(currentAction.isCompleted);
             const todayJalali = getCurrentJalaliDate();
             
-            // Build full registration timestamp
+            // Build valid MySQL DATETIME for createdAt: "YYYY-MM-DD HH:mm:ss" (e.g. 2026-08-24 12:43:00)
             const regDate = currentAction.registrationDate || todayJalali;
             const regTime = currentAction.registrationTime || getCurrentTimeStr();
-            const createdAtCombined = `${regDate} - ${regTime}`;
+            const validCreatedAt = formatToMySqlDateTime(regDate, regTime);
+
+            const gregorianDueDate = currentAction.dueDate ? toGregorian(currentAction.dueDate) : '';
+            const gregorianExecDate = currentAction.executionDate ? toGregorian(currentAction.executionDate) : (isDone ? toGregorian(todayJalali) : '');
 
             const apiPayload: Partial<CorrectiveAction> = {
                 ...currentAction,
-                createdAt: createdAtCombined,
+                createdAt: validCreatedAt,
                 registrationDate: regDate,
                 registrationTime: regTime,
-                dueDate: toGregorian(currentAction.dueDate),
-                executionDate: currentAction.executionDate ? toGregorian(currentAction.executionDate) : (isDone ? toGregorian(todayJalali) : ''),
+                dueDate: gregorianDueDate,
+                executionDate: gregorianExecDate,
                 isCompleted: isDone,
                 status: isDone ? 'COMPLETED' : (currentAction.status || 'IN_PROGRESS'),
                 priority: currentAction.priority || 'MEDIUM',
@@ -278,11 +357,16 @@ const CorrectiveActionsPage: React.FC = () => {
             const todayJalali = getCurrentJalaliDate();
             const todayGregorian = toGregorian(todayJalali);
 
+            // Ensure valid MySQL DATETIME format for createdAt
+            const parsedCreated = parseCreatedAt(action.createdAt);
+            const validCreatedAt = formatToMySqlDateTime(action.registrationDate || parsedCreated.jalaliDate, action.registrationTime || parsedCreated.time);
+
             const updated: CorrectiveAction = {
                 ...action,
+                createdAt: validCreatedAt,
                 isCompleted: nextCompleted,
                 status: nextCompleted ? 'COMPLETED' : 'IN_PROGRESS',
-                executionDate: nextCompleted ? (action.executionDate || todayGregorian) : '',
+                executionDate: nextCompleted ? (action.executionDate ? toGregorian(action.executionDate) : todayGregorian) : '',
                 executedAt: nextCompleted ? `${todayJalali} - ${getCurrentTimeStr()}` : undefined
             };
 
@@ -400,13 +484,16 @@ const CorrectiveActionsPage: React.FC = () => {
     }, [actions]);
 
     const handleCopyActionText = (action: CorrectiveAction) => {
+        const parsedCreated = parseCreatedAt(action.createdAt);
+        const regDateStr = action.registrationDate || parsedCreated.jalaliDate || '-';
+        const regTimeStr = action.registrationTime || parsedCreated.time;
         const text = `📋 شناسنامه اقدام اصلاحی (CAPA)
 ━━━━━━━━━━━━━━━━━━━━
 📌 عنوان: ${action.title}
 🏢 واحد مرتبط: ${action.department || 'نامشخص'} | اولویت: ${PRIORITIES.find(p => p.key === action.priority)?.label || 'عادی'}
 👤 مسئول اجرا: ${action.responsiblePerson} | ثبت‌کننده: ${action.registeredBy || '-'}
 ━━━━━━━━━━━━━━━━━━━━
-🕒 زمان ثبت اقدام اصلاحی: ${action.registrationDate || action.createdAt || '-'} ${action.registrationTime ? `(ساعت ${action.registrationTime})` : ''}
+🕒 زمان ثبت اقدام اصلاحی: ${regDateStr} ${regTimeStr ? `(ساعت ${regTimeStr})` : ''}
 ⏳ مهلت اجرا: ${toJalali(action.dueDate) || 'نامشخص'}
 ✅ تاریخ اجرا: ${action.executionDate ? toJalali(action.executionDate) : (action.isCompleted ? 'انجام شده' : 'هنوز اجرا نشده')}
 ━━━━━━━━━━━━━━━━━━━━
@@ -643,8 +730,9 @@ const CorrectiveActionsPage: React.FC = () => {
                         const isOverdue = isActionOverdue(action);
                         const deadline = getDeadlineInfo(action.dueDate, action.isCompleted, action.executionDate);
                         const priorityInfo = PRIORITIES.find(p => p.key === action.priority) || PRIORITIES[0];
-                        const regDateDisplay = action.registrationDate || (action.createdAt ? action.createdAt.split(' - ')[0] : 'نامشخص');
-                        const regTimeDisplay = action.registrationTime || (action.createdAt && action.createdAt.includes(' - ') ? action.createdAt.split(' - ')[1] : '');
+                        const parsedCreated = parseCreatedAt(action.createdAt);
+                        const regDateDisplay = action.registrationDate || parsedCreated.jalaliDate || 'نامشخص';
+                        const regTimeDisplay = action.registrationTime || parsedCreated.time || '';
                         const dueDateDisplay = toJalali(action.dueDate) || 'تعیین نشده';
                         const execDateDisplay = action.executionDate ? toJalali(action.executionDate) : '';
 
@@ -1117,7 +1205,7 @@ const CorrectiveActionsPage: React.FC = () => {
                                                         تاریخ ثبت شمسی
                                                     </label>
                                                     <PersianDatePicker
-                                                        value={currentAction.registrationDate || currentAction.createdAt?.split(' - ')[0] || ''}
+                                                        value={currentAction.registrationDate || parseCreatedAt(currentAction.createdAt).jalaliDate || ''}
                                                         onChange={val => setCurrentAction({ ...currentAction, registrationDate: val })}
                                                         placeholder="تاریخ ثبت"
                                                     />
@@ -1129,8 +1217,8 @@ const CorrectiveActionsPage: React.FC = () => {
                                                     </label>
                                                     <input
                                                         type="text"
-                                                        placeholder="مثال: ۱۰:۳۰"
-                                                        value={currentAction.registrationTime || currentAction.createdAt?.split(' - ')[1] || ''}
+                                                        placeholder="مثال: ۱۲:۴۳"
+                                                        value={currentAction.registrationTime || parseCreatedAt(currentAction.createdAt).time || ''}
                                                         onChange={e => setCurrentAction({ ...currentAction, registrationTime: e.target.value })}
                                                         className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-mono"
                                                     />
@@ -1391,13 +1479,11 @@ const CorrectiveActionsPage: React.FC = () => {
                                             <Clock className="w-3 h-3 text-sky-400" /> زمان ثبت اقدام اصلاحی
                                         </span>
                                         <span className="text-xs font-black font-mono mt-1 block text-white">
-                                            {selectedActionForDetail.registrationDate || selectedActionForDetail.createdAt || '-'}
+                                            {selectedActionForDetail.registrationDate || parseCreatedAt(selectedActionForDetail.createdAt).jalaliDate || '-'}
                                         </span>
-                                        {selectedActionForDetail.registrationTime && (
-                                            <span className="text-[10px] font-mono text-indigo-300 block mt-0.5">
-                                                ساعت {selectedActionForDetail.registrationTime}
-                                            </span>
-                                        )}
+                                        <span className="text-[10px] font-mono text-indigo-300 block mt-0.5">
+                                            ساعت {selectedActionForDetail.registrationTime || parseCreatedAt(selectedActionForDetail.createdAt).time}
+                                        </span>
                                     </div>
 
                                     <div className="bg-indigo-950/70 p-2.5 rounded-lg border border-indigo-800/60 text-center">
