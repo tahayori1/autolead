@@ -1055,6 +1055,28 @@ const CRM_URL = `${API_BASE_URL}/crm`;
 const CALLOG_URL = `${API_BASE_URL}/calllog`;
 const SALARY_ADVANCE_URL = `${API_BASE_URL}/SalaryAdvance`;
 
+// Helper to sanitize payload and prevent MySQL ER_TRUNCATED_WRONG_VALUE on empty date strings
+const sanitizePayload = <T>(item: Partial<T>): any => {
+    if (!item || typeof item !== 'object') return item;
+    const sanitized: any = { ...item };
+    
+    const knownDateFields = [
+        'executionDate', 'dueDate', 'executedAt', 'registrationDate', 'createdAt', 'updatedAt',
+        'targetDate', 'startDate', 'endDate', 'deliveryDate', 'purchaseDate', 'saleDate',
+        'paymentDate', 'meetingDate', 'followUpDate', 'completedAt', 'crmDate'
+    ];
+
+    for (const key of Object.keys(sanitized)) {
+        const val = sanitized[key];
+        if (val === '') {
+            if (knownDateFields.includes(key) || key.endsWith('Date') || key.endsWith('At')) {
+                sanitized[key] = null;
+            }
+        }
+    }
+    return sanitized;
+};
+
 // Generic CRUD helper
 const createCrudService = <T>(url: string) => ({
     getAll: async (): Promise<T[]> => {
@@ -1066,19 +1088,21 @@ const createCrudService = <T>(url: string) => ({
     },
     create: async (item: Partial<T>): Promise<T> => {
         ensureOnline();
+        const payload = sanitizePayload(item);
         const response = await fetch(url, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify(item),
+            body: JSON.stringify(payload),
         });
         return handleResponse(response);
     },
     update: async (item: Partial<T> & { id: number }): Promise<T> => {
         ensureOnline();
+        const payload = sanitizePayload(item);
         const response = await fetch(url, {
             method: 'PUT',
             headers: getAuthHeaders(),
-            body: JSON.stringify(item),
+            body: JSON.stringify(payload),
         });
         return handleResponse(response);
     },

@@ -332,25 +332,29 @@ const CorrectiveActionsPage: React.FC = () => {
             const regDateJalali = currentAction.registrationDate || todayJalali;
             const regTime = currentAction.registrationTime || getCurrentTimeStr();
             
-            // 2. CONVERT ALL DATES TO GREGORIAN BEFORE SENDING TO API
-            const gregorianRegDate = toGregorian(regDateJalali);
-            const gregorianDueDate = currentAction.dueDate ? toGregorian(currentAction.dueDate) : '';
-            const gregorianExecDate = currentAction.executionDate 
-                ? toGregorian(currentAction.executionDate) 
-                : (isDone ? toGregorian(todayJalali) : '');
+            // 2. CONVERT ALL DATES TO GREGORIAN BEFORE SENDING TO API (use null instead of empty string for MySQL DATE columns)
+            const gregorianRegDate = regDateJalali ? (toGregorian(regDateJalali) || null) : null;
+            const gregorianDueDate = (currentAction.dueDate && currentAction.dueDate.trim()) 
+                ? (toGregorian(currentAction.dueDate) || null) 
+                : null;
+            const gregorianExecDate = (currentAction.executionDate && currentAction.executionDate.trim())
+                ? (toGregorian(currentAction.executionDate) || null) 
+                : (isDone ? (toGregorian(todayJalali) || null) : null);
 
             // 3. MySQL DATETIME (YYYY-MM-DD HH:mm:ss) in Gregorian
-            const validCreatedAt = formatToMySqlDateTime(gregorianRegDate, regTime);
-            const validExecutedAt = isDone ? formatToMySqlDateTime(gregorianExecDate, getCurrentTimeStr()) : undefined;
+            const validCreatedAt = formatToMySqlDateTime(gregorianRegDate || todayJalali, regTime);
+            const validExecutedAt = (isDone && gregorianExecDate) 
+                ? formatToMySqlDateTime(gregorianExecDate, getCurrentTimeStr()) 
+                : null;
 
             const apiPayload: Partial<CorrectiveAction> = {
                 ...currentAction,
-                createdAt: validCreatedAt, // Gregorian DATETIME "YYYY-MM-DD HH:mm:ss"
-                registrationDate: gregorianRegDate, // Gregorian Date "YYYY-MM-DD"
-                registrationTime: regTime,
-                dueDate: gregorianDueDate, // Gregorian Date "YYYY-MM-DD"
-                executionDate: gregorianExecDate, // Gregorian Date "YYYY-MM-DD"
-                executedAt: validExecutedAt, // Gregorian DATETIME or undefined
+                createdAt: validCreatedAt || null, // Gregorian DATETIME "YYYY-MM-DD HH:mm:ss"
+                registrationDate: gregorianRegDate || null, // Gregorian Date "YYYY-MM-DD"
+                registrationTime: regTime || null,
+                dueDate: gregorianDueDate || null, // Gregorian Date "YYYY-MM-DD" or null
+                executionDate: gregorianExecDate || null, // Gregorian Date "YYYY-MM-DD" or null
+                executedAt: validExecutedAt || null, // Gregorian DATETIME or null
                 isCompleted: isDone,
                 status: isDone ? 'COMPLETED' : (currentAction.status || 'IN_PROGRESS'),
                 priority: currentAction.priority || 'MEDIUM',
@@ -400,20 +404,24 @@ const CorrectiveActionsPage: React.FC = () => {
             const regTime = action.registrationTime || parsedCreated.time;
             const validCreatedAt = formatToMySqlDateTime(gregorianRegDate, regTime);
 
-            const gregorianDueDate = action.dueDate ? toGregorian(action.dueDate) : '';
+            const gregorianDueDate = (action.dueDate && action.dueDate.trim()) 
+                ? (toGregorian(action.dueDate) || null) 
+                : null;
             const gregorianExecDate = nextCompleted 
-                ? (action.executionDate ? toGregorian(action.executionDate) : todayGregorian) 
-                : '';
-            const validExecutedAt = nextCompleted ? formatToMySqlDateTime(gregorianExecDate, getCurrentTimeStr()) : undefined;
+                ? ((action.executionDate && action.executionDate.trim()) ? (toGregorian(action.executionDate) || todayGregorian) : todayGregorian) 
+                : null;
+            const validExecutedAt = (nextCompleted && gregorianExecDate) 
+                ? formatToMySqlDateTime(gregorianExecDate, getCurrentTimeStr()) 
+                : null;
 
             const updated: CorrectiveAction = {
                 ...action,
-                createdAt: validCreatedAt,
-                registrationDate: gregorianRegDate,
-                registrationTime: regTime,
-                dueDate: gregorianDueDate,
-                executionDate: gregorianExecDate,
-                executedAt: validExecutedAt,
+                createdAt: validCreatedAt || null,
+                registrationDate: gregorianRegDate || null,
+                registrationTime: regTime || null,
+                dueDate: gregorianDueDate || null,
+                executionDate: gregorianExecDate || null,
+                executedAt: validExecutedAt || null,
                 isCompleted: nextCompleted,
                 status: nextCompleted ? 'COMPLETED' : 'IN_PROGRESS',
             };
