@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getUsers, getCars, carOrdersService, getCallLogs, getCrmMeetings, getStaffUsers } from '../services/api';
-import type { User, Car, CarOrder, CrmCallLog, CrmMeeting, StaffUser } from '../types';
+import { getUsers, getCars, carOrdersService, getCallLogs, getCrmMeetings, getStaffUsers, getAllCustomerJournals } from '../services/api';
+import type { User, Car, CarOrder, CrmCallLog, CrmMeeting, StaffUser, CustomerJournal } from '../types';
 import { OrderStatus, LeadStatus } from '../types';
 import Spinner from '../components/Spinner';
 import { StaffPerformanceReport } from '../components/StaffPerformanceReport';
@@ -58,6 +58,7 @@ const ReportsPage: React.FC = () => {
     const [callLogs, setCallLogs] = useState<CrmCallLog[]>([]);
     const [meetings, setMeetings] = useState<CrmMeeting[]>([]);
     const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+    const [customerJournals, setCustomerJournals] = useState<CustomerJournal[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
@@ -324,13 +325,14 @@ const ReportsPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const [usersData, carsData, ordersData, logsData, meetingsData, staffData] = await Promise.all([
+            const [usersData, carsData, ordersData, logsData, meetingsData, staffData, journalsData] = await Promise.all([
                 getUsers(),
                 getCars(),
                 carOrdersService.getAll(),
                 getCallLogs().catch(() => []),
                 getCrmMeetings().catch(() => []),
-                getStaffUsers().catch(() => [])
+                getStaffUsers().catch(() => []),
+                getAllCustomerJournals().catch(() => [])
             ]);
             setUsers(usersData);
             setCars(carsData);
@@ -338,6 +340,7 @@ const ReportsPage: React.FC = () => {
             setCallLogs(logsData);
             setMeetings(meetingsData);
             setStaffUsers(staffData);
+            setCustomerJournals(journalsData);
         } catch (err) {
             setError('خطا در دریافت اطلاعات گزارشات');
         } finally {
@@ -992,6 +995,7 @@ const ReportsPage: React.FC = () => {
                     orders={orders}
                     callLogs={callLogs}
                     meetings={meetings}
+                    customerJournals={customerJournals}
                     staffUsers={staffUsers}
                     showToast={showToast}
                 />

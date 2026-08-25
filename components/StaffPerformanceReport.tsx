@@ -9,9 +9,10 @@ import {
     CheckCircle2, Clock, Calendar, Search, ArrowUpDown, 
     Eye, Copy, Check, Download, Printer, Filter, Star, 
     Sparkles, Target, Zap, Activity, ShoppingCart, UserCheck, 
-    FileSpreadsheet, ArrowUpRight, CheckCheck, X
+    FileSpreadsheet, ArrowUpRight, CheckCheck, X, FileText,
+    History, MessageSquare, Flame, CheckSquare, Layers
 } from 'lucide-react';
-import type { User, CarOrder, CrmCallLog, CrmMeeting, StaffUser } from '../types';
+import type { User, CarOrder, CrmCallLog, CrmMeeting, StaffUser, CustomerJournal } from '../types';
 import { LeadStatus } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -22,6 +23,7 @@ interface StaffPerformanceReportProps {
     orders: CarOrder[];
     callLogs: CrmCallLog[];
     meetings: CrmMeeting[];
+    customerJournals?: CustomerJournal[];
     staffUsers?: StaffUser[];
     showToast: (message: string, type: 'success' | 'error') => void;
 }
@@ -31,31 +33,38 @@ export interface StaffPerformanceData {
     name: string;
     username: string;
     role: string;
-    // Leads
+    // 1. میزان فعالیت در CRM
+    crmActivityScore: number;
+    totalCrmActivities: number;
     assignedLeadsCount: number;
-    wonLeadsCount: number;
     inProgressLeadsCount: number;
     lostLeadsCount: number;
     newLeadsCount: number;
-    // Calls
+    // 2. تعداد تماس‌های گرفته شده
     totalCalls: number;
-    successfulCalls: number;
-    inboundCalls: number;
     outboundCalls: number;
+    inboundCalls: number;
+    successfulCalls: number;
     missedOrNoAnswerCalls: number;
     totalCallDurationMinutes: number;
     callSuccessRate: number; // %
-    // Meetings
+    // 3. تعداد معاملات موفق
+    wonLeadsCount: number;
+    completedOrders: number;
+    totalWonDeals: number;
+    totalOrders: number;
+    totalOrderAmount: number;
+    // 4. تعداد گزارشات و تاریخچه‌ای که ثبت کرده است
+    customerJournalsCount: number;
+    notesAndHistoriesCount: number;
+    totalReportsAndHistories: number;
+    // 5. تعداد قرار ملاقات ثبت شده
     totalMeetings: number;
-    completedMeetings: number;
     scheduledMeetings: number;
+    completedMeetings: number;
     cancelledMeetings: number;
     meetingSuccessRate: number; // %
-    // Orders
-    totalOrders: number;
-    completedOrders: number;
-    totalOrderAmount: number;
-    // Conversion & Score
+    // Conversion & Comprehensive Score
     conversionRate: number; // %
     performanceScore: number; // 0 - 100+
     rank: number;
@@ -72,13 +81,14 @@ const PERSIAN_MONTHS = [
 ];
 
 type PeriodType = 'today' | 'week' | 'month' | 'all' | 'custom';
-type SortField = 'performanceScore' | 'wonLeadsCount' | 'successfulCalls' | 'completedMeetings' | 'conversionRate' | 'assignedLeadsCount' | 'totalOrders';
+type SortField = 'performanceScore' | 'totalCalls' | 'outboundCalls' | 'wonLeadsCount' | 'totalReportsAndHistories' | 'totalMeetings' | 'totalCrmActivities' | 'conversionRate';
 
 export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
     users,
     orders,
     callLogs,
     meetings,
+    customerJournals = [],
     staffUsers = [],
     showToast
 }) => {
@@ -88,8 +98,8 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
     const [sortField, setSortField] = useState<SortField>('performanceScore');
     const [sortAsc, setSortAsc] = useState<boolean>(false);
     
-    // Active chart view
-    const [activeChartMetric, setActiveChartMetric] = useState<'score' | 'calls' | 'meetings' | 'sales' | 'conversion'>('score');
+    // Active chart view based on user's 5 key criteria
+    const [activeChartMetric, setActiveChartMetric] = useState<'score' | 'calls' | 'sales' | 'reports' | 'meetings' | 'activity'>('score');
 
     // Selected staff for scorecard modal
     const [selectedStaffForModal, setSelectedStaffForModal] = useState<StaffPerformanceData | null>(null);
@@ -185,6 +195,10 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         return users.filter(u => isDateInPeriod(u.RegisterTime || u.createdAt || u.crmDate));
     }, [users, period, customStartYear, customStartMonth, customStartDay, customEndYear, customEndMonth, customEndDay]);
 
+    const filteredCustomerJournals = useMemo(() => {
+        return customerJournals.filter(j => isDateInPeriod(j.createdAt));
+    }, [customerJournals, period, customStartYear, customStartMonth, customStartDay, customEndYear, customEndMonth, customEndDay]);
+
     // Build consolidated list of staff identities
     const staffMembersMap = useMemo(() => {
         const map = new Map<string, { id: string; name: string; username: string; role: string }>();
@@ -215,7 +229,20 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             }
         });
 
-        // 3. From meetings
+        // 3. From customer journals
+        filteredCustomerJournals.forEach(j => {
+            const author = j.author?.trim();
+            if (author && !map.has(author)) {
+                map.set(author, {
+                    id: author,
+                    name: author,
+                    username: author,
+                    role: 'کارشناس فروش'
+                });
+            }
+        });
+
+        // 4. From meetings
         filteredMeetings.forEach(m => {
             const agent = m.agentName?.trim();
             if (agent && !map.has(agent)) {
@@ -228,7 +255,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             }
         });
 
-        // 4. From leads
+        // 5. From leads
         filteredLeads.forEach(u => {
             const person = u.reservedByUserName?.trim() || u.crmPerson?.trim();
             if (person && !map.has(person)) {
@@ -241,7 +268,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             }
         });
 
-        // 5. From orders
+        // 6. From orders
         filteredOrders.forEach(o => {
             const creator = o.createdBy?.trim();
             if (creator && !map.has(creator)) {
@@ -255,9 +282,9 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         });
 
         return map;
-    }, [staffUsers, filteredCallLogs, filteredMeetings, filteredLeads, filteredOrders]);
+    }, [staffUsers, filteredCallLogs, filteredCustomerJournals, filteredMeetings, filteredLeads, filteredOrders]);
 
-    // Calculate aggregated metrics for each staff member
+    // Calculate aggregated metrics for each staff member based on user's 5 core criteria
     const calculatedStaffStats = useMemo<StaffPerformanceData[]>(() => {
         const staffList: StaffPerformanceData[] = [];
 
@@ -265,14 +292,16 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             const nameLower = staffInfo.name.toLowerCase();
             const usernameLower = staffInfo.username.toLowerCase();
 
-            // Match helper
+            // Matching helper
             const isMatch = (target?: string | null) => {
                 if (!target) return false;
                 const t = target.trim().toLowerCase();
                 return t === nameLower || t === usernameLower || t === staffKey.toLowerCase();
             };
 
-            // 1. Leads assigned to this staff
+            // -------------------------------------------------------------
+            // Criterion 1 & CRM Activity: Leads assigned & managed
+            // -------------------------------------------------------------
             const staffLeads = filteredLeads.filter(u => 
                 isMatch(u.reservedByUserName) || isMatch(u.crmPerson)
             );
@@ -286,12 +315,14 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
                 u.leadStatus === LeadStatus.NEGOTIATION
             ).length;
 
-            // 2. Call logs by this staff
+            // -------------------------------------------------------------
+            // Criterion 2: تعداد تماس‌های گرفته شده (Calls Made / Handled)
+            // -------------------------------------------------------------
             const staffCalls = filteredCallLogs.filter(c => isMatch(c.agentName));
             const totalCalls = staffCalls.length;
-            const successfulCalls = staffCalls.filter(c => c.callStatus === 'SUCCESSFUL').length;
             const outboundCalls = staffCalls.filter(c => c.callType === 'OUTBOUND').length;
             const inboundCalls = staffCalls.filter(c => c.callType === 'INBOUND').length;
+            const successfulCalls = staffCalls.filter(c => c.callStatus === 'SUCCESSFUL').length;
             const missedOrNoAnswerCalls = staffCalls.filter(c => 
                 c.callStatus === 'MISSED' || c.callStatus === 'NO_ANSWER' || c.callStatus === 'BUSY' || c.callStatus === 'REJECTED'
             ).length;
@@ -299,7 +330,28 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             const totalCallDurationMinutes = Math.round(totalCallDurationSeconds / 60);
             const callSuccessRate = totalCalls > 0 ? Math.round((successfulCalls / totalCalls) * 100) : 0;
 
-            // 3. Meetings held by this staff
+            // -------------------------------------------------------------
+            // Criterion 3: تعداد معاملات موفق (Won Leads & Completed Sales)
+            // -------------------------------------------------------------
+            const staffOrders = filteredOrders.filter(o => isMatch(o.createdBy));
+            const totalOrders = staffOrders.length;
+            const completedOrders = staffOrders.filter(o => o.status === 'تکمیل شده').length;
+            const totalOrderAmount = staffOrders.reduce((acc, o) => acc + (Number(o.proposedPrice || o.finalPrice) || 0), 0);
+            const totalWonDeals = wonLeadsCount + completedOrders;
+
+            // -------------------------------------------------------------
+            // Criterion 4: تعداد گزارشات و تاریخچه‌ای که ثبت کرده است (Customer Journal Reports & History Logged)
+            // -------------------------------------------------------------
+            const staffJournals = filteredCustomerJournals.filter(j => isMatch(j.author));
+            const customerJournalsCount = staffJournals.length;
+            // Calls that have documented history/notes or remarks
+            const staffCallsWithNotes = staffCalls.filter(c => c.notes && c.notes.trim().length > 3).length;
+            const notesAndHistoriesCount = staffCallsWithNotes;
+            const totalReportsAndHistories = customerJournalsCount + staffCallsWithNotes;
+
+            // -------------------------------------------------------------
+            // Criterion 5: تعداد قرار ملاقات ثبت شده (Meetings Scheduled & Held)
+            // -------------------------------------------------------------
             const staffMeetings = filteredMeetings.filter(m => isMatch(m.agentName));
             const totalMeetings = staffMeetings.length;
             const completedMeetings = staffMeetings.filter(m => m.stage === 'برگزار شد').length;
@@ -307,44 +359,45 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             const cancelledMeetings = staffMeetings.filter(m => m.stage === 'برگزار نشد').length;
             const meetingSuccessRate = totalMeetings > 0 ? Math.round((completedMeetings / totalMeetings) * 100) : 0;
 
-            // 4. Car Orders submitted by this staff
-            const staffOrders = filteredOrders.filter(o => isMatch(o.createdBy));
-            const totalOrders = staffOrders.length;
-            const completedOrders = staffOrders.filter(o => o.status === 'تکمیل شده').length;
-            const totalOrderAmount = staffOrders.reduce((acc, o) => acc + (Number(o.proposedPrice || o.finalPrice) || 0), 0);
-
-            // 5. Conversion Rate
+            // -------------------------------------------------------------
+            // Conversion Rate calculation
+            // -------------------------------------------------------------
             const totalOpportunities = assignedLeadsCount + (totalOrders > assignedLeadsCount ? totalOrders : 0);
-            const totalSuccesses = wonLeadsCount + completedOrders;
             const conversionRate = totalOpportunities > 0 
-                ? Math.min(100, Math.round((totalSuccesses / totalOpportunities) * 100))
-                : (totalCalls > 0 && wonLeadsCount > 0 ? Math.round((wonLeadsCount / totalCalls) * 100) : 0);
+                ? Math.min(100, Math.round((totalWonDeals / totalOpportunities) * 100))
+                : (totalCalls > 0 && totalWonDeals > 0 ? Math.round((totalWonDeals / totalCalls) * 100) : 0);
 
-            // 6. Comprehensive Weighted Performance Score Calculation
-            // Weights:
-            // - Each Won Lead / Completed Sale: +30 points
-            // - Each In-Person Meeting Completed: +15 points
-            // - Each Successful Call: +3 points
-            // - Each Outbound Call made: +1 point
-            // - Each Lead in active progress/negotiation: +2 points
-            // - Conversion rate bonus: (conversionRate * 0.4)
+            // -------------------------------------------------------------
+            // Comprehensive CRM Activity Level & Performance Scoring Formula
+            // Directly weighting the 5 requested pillars:
+            // 1. معاملات موفق (Won Deals): +30 pts each
+            // 2. تماس‌های گرفته شده: +1 pt per outbound call, +3 pts per successful call
+            // 3. گزارشات و تاریخچه‌ها ثبت‌شده: +5 pts per journal report / documented history
+            // 4. قرار ملاقات‌های ثبت شده: +5 pts per scheduled, +15 pts per completed meeting
+            // 5. میزان فعالیت و پویایی در CRM: +2 pts per active lead negotiation + conversion bonus
+            // -------------------------------------------------------------
+            const totalCrmActivities = totalCalls + totalMeetings + totalReportsAndHistories + assignedLeadsCount + totalOrders;
+            
             const rawScore = 
                 (wonLeadsCount * 30) +
                 (completedOrders * 25) +
                 (completedMeetings * 15) +
                 (scheduledMeetings * 5) +
+                (totalReportsAndHistories * 5) +
                 (successfulCalls * 3) +
                 (outboundCalls * 1) +
                 (inProgressLeadsCount * 2) +
-                Math.round(conversionRate * 0.5);
+                Math.round(conversionRate * 0.4);
+
+            const crmActivityScore = (totalCalls * 2) + (totalMeetings * 4) + (totalReportsAndHistories * 3) + (inProgressLeadsCount * 2);
 
             // Determine Efficiency Status
             let efficiencyStatus: StaffPerformanceData['efficiencyStatus'] = 'AVERAGE';
             if (rawScore >= 80 || (wonLeadsCount >= 3 && completedMeetings >= 2)) {
                 efficiencyStatus = 'EXCELLENT';
-            } else if (rawScore >= 40 || wonLeadsCount >= 1 || successfulCalls >= 10) {
+            } else if (rawScore >= 40 || wonLeadsCount >= 1 || successfulCalls >= 10 || totalReportsAndHistories >= 10) {
                 efficiencyStatus = 'GOOD';
-            } else if (totalCalls === 0 && totalMeetings === 0 && assignedLeadsCount === 0) {
+            } else if (totalCalls === 0 && totalMeetings === 0 && totalReportsAndHistories === 0 && assignedLeadsCount === 0) {
                 efficiencyStatus = 'NEEDS_IMPROVEMENT';
             }
 
@@ -353,26 +406,38 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
                 name: staffInfo.name,
                 username: staffInfo.username,
                 role: staffInfo.role,
+                // Criterion 1: CRM Activity Level
+                crmActivityScore,
+                totalCrmActivities,
                 assignedLeadsCount,
-                wonLeadsCount,
                 inProgressLeadsCount,
                 lostLeadsCount,
                 newLeadsCount,
+                // Criterion 2: تماس‌های گرفته شده
                 totalCalls,
-                successfulCalls,
-                inboundCalls,
                 outboundCalls,
+                inboundCalls,
+                successfulCalls,
                 missedOrNoAnswerCalls,
                 totalCallDurationMinutes,
                 callSuccessRate,
+                // Criterion 3: معاملات موفق
+                wonLeadsCount,
+                completedOrders,
+                totalWonDeals,
+                totalOrders,
+                totalOrderAmount,
+                // Criterion 4: گزارشات و تاریخچه ثبت شده
+                customerJournalsCount,
+                notesAndHistoriesCount,
+                totalReportsAndHistories,
+                // Criterion 5: قرار ملاقات ثبت شده
                 totalMeetings,
-                completedMeetings,
                 scheduledMeetings,
+                completedMeetings,
                 cancelledMeetings,
                 meetingSuccessRate,
-                totalOrders,
-                completedOrders,
-                totalOrderAmount,
+                // Conversion & Score
                 conversionRate,
                 performanceScore: rawScore,
                 efficiencyStatus,
@@ -385,7 +450,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         // Sort descending by performance score to assign ranks
         staffList.sort((a, b) => b.performanceScore - a.performanceScore);
 
-        // Assign ranks and badges
+        // Assign ranks and badges based on the 5 criteria
         staffList.forEach((staff, index) => {
             staff.rank = index + 1;
             if (index === 0 && staff.performanceScore > 0) {
@@ -397,15 +462,21 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             } else if (index === 2 && staff.performanceScore > 0) {
                 staff.badgeTitle = '🥉 رتبه سوم و کارشناس کوشا';
                 staff.badgeColor = 'text-amber-800 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200';
-            } else if (staff.successfulCalls >= 20) {
+            } else if (staff.wonLeadsCount >= 3) {
+                staff.badgeTitle = '🏆 قهرمان معاملات موفق';
+                staff.badgeColor = 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300';
+            } else if (staff.totalReportsAndHistories >= 15) {
+                staff.badgeTitle = '📝 پیشتاز ثبت گزارش و تاریخچه CRM';
+                staff.badgeColor = 'text-indigo-700 bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-300';
+            } else if (staff.totalCalls >= 25 || staff.outboundCalls >= 20) {
                 staff.badgeTitle = '📞 پیشتاز تماس‌ها و پیگیری';
                 staff.badgeColor = 'text-sky-700 bg-sky-100 dark:bg-sky-900/40 dark:text-sky-300 border-sky-300';
-            } else if (staff.completedMeetings >= 5) {
-                staff.badgeTitle = '🤝 قهرمان جلسات حضوری';
-                staff.badgeColor = 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300';
-            } else if (staff.conversionRate >= 30) {
-                staff.badgeTitle = '🎯 بالاترین نرخ تبدیل';
+            } else if (staff.totalMeetings >= 5 || staff.completedMeetings >= 3) {
+                staff.badgeTitle = '🤝 قهرمان قرار ملاقات‌ها';
                 staff.badgeColor = 'text-purple-700 bg-purple-100 dark:bg-purple-900/40 dark:text-purple-300 border-purple-300';
+            } else if (staff.conversionRate >= 25) {
+                staff.badgeTitle = '🎯 بالاترین نرخ تبدیل';
+                staff.badgeColor = 'text-rose-700 bg-rose-100 dark:bg-rose-900/40 dark:text-rose-300 border-rose-300';
             } else {
                 staff.badgeTitle = '🚗 کارشناس فروش';
                 staff.badgeColor = 'text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-400';
@@ -413,7 +484,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         });
 
         return staffList;
-    }, [staffMembersMap, filteredLeads, filteredCallLogs, filteredMeetings, filteredOrders]);
+    }, [staffMembersMap, filteredLeads, filteredCallLogs, filteredCustomerJournals, filteredMeetings, filteredOrders]);
 
     // Filter and sort for the leaderboard table
     const displayedStaffList = useMemo(() => {
@@ -449,41 +520,49 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         return calculatedStaffStats.slice(0, 3).filter(s => s.performanceScore > 0);
     }, [calculatedStaffStats]);
 
-    // Aggregated team totals for overview
+    // Aggregated team totals for overview of the 5 criteria
     const teamTotals = useMemo(() => {
         const totalStaff = calculatedStaffStats.length;
         const totalCalls = calculatedStaffStats.reduce((a, b) => a + b.totalCalls, 0);
+        const totalOutboundCalls = calculatedStaffStats.reduce((a, b) => a + b.outboundCalls, 0);
         const totalSuccessfulCalls = calculatedStaffStats.reduce((a, b) => a + b.successfulCalls, 0);
-        const totalMeetings = calculatedStaffStats.reduce((a, b) => a + b.completedMeetings, 0);
-        const totalWonLeads = calculatedStaffStats.reduce((a, b) => a + b.wonLeadsCount, 0);
-        const totalOrders = calculatedStaffStats.reduce((a, b) => a + b.totalOrders, 0);
+        const totalWonDeals = calculatedStaffStats.reduce((a, b) => a + b.totalWonDeals, 0);
+        const totalReportsAndHistories = calculatedStaffStats.reduce((a, b) => a + b.totalReportsAndHistories, 0);
+        const totalMeetings = calculatedStaffStats.reduce((a, b) => a + b.totalMeetings, 0);
+        const totalCompletedMeetings = calculatedStaffStats.reduce((a, b) => a + b.completedMeetings, 0);
+        const totalCrmActivities = calculatedStaffStats.reduce((a, b) => a + b.totalCrmActivities, 0);
         const avgScore = totalStaff > 0 ? Math.round(calculatedStaffStats.reduce((a, b) => a + b.performanceScore, 0) / totalStaff) : 0;
-        const overallConversion = totalCalls > 0 && totalWonLeads > 0 
-            ? Math.round((totalWonLeads / (totalCalls + totalMeetings || 1)) * 100)
+        const overallConversion = totalCalls > 0 && totalWonDeals > 0 
+            ? Math.round((totalWonDeals / (totalCalls + totalMeetings || 1)) * 100)
             : 0;
 
         return {
             totalStaff,
             totalCalls,
+            totalOutboundCalls,
             totalSuccessfulCalls,
+            totalWonDeals,
+            totalReportsAndHistories,
             totalMeetings,
-            totalWonLeads,
-            totalOrders,
+            totalCompletedMeetings,
+            totalCrmActivities,
             avgScore,
             overallConversion
         };
     }, [calculatedStaffStats]);
 
-    // Chart data based on selected metric
+    // Chart data based on selected metric for the 5 criteria
     const chartData = useMemo(() => {
         return calculatedStaffStats.slice(0, 10).map(s => ({
             name: s.name.length > 12 ? `${s.name.slice(0, 12)}...` : s.name,
             fullName: s.name,
             score: s.performanceScore,
-            calls: s.successfulCalls,
-            totalCalls: s.totalCalls,
-            meetings: s.completedMeetings,
-            sales: s.wonLeadsCount + s.completedOrders,
+            calls: s.totalCalls,
+            outboundCalls: s.outboundCalls,
+            sales: s.totalWonDeals,
+            reports: s.totalReportsAndHistories,
+            meetings: s.totalMeetings,
+            activity: s.totalCrmActivities,
             conversion: s.conversionRate
         }));
     }, [calculatedStaffStats]);
@@ -497,7 +576,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         return 'کل دوره فعالیت';
     };
 
-    // Copy Text Report for Sales Manager
+    // Copy Text Report structured strictly around the 5 criteria
     const handleCopyReportText = () => {
         const nowStr = moment().locale('fa').format('YYYY/MM/DD');
         const periodTitle = getPeriodLabel();
@@ -506,36 +585,36 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         calculatedStaffStats.forEach((s, idx) => {
             const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
             leaderboardText += `${medal} *${s.name}*
-   ▫️ امتیاز: *${s.performanceScore.toLocaleString('fa-IR')}* | رتبه: *${(idx + 1).toLocaleString('fa-IR')}*
-   ▫️ فروش موفق: *${s.wonLeadsCount.toLocaleString('fa-IR')}* معامله ✅
-   ▫️ تماس‌های موفق: *${s.successfulCalls.toLocaleString('fa-IR')}* از ${s.totalCalls.toLocaleString('fa-IR')} تماس 📞
-   ▫️ جلسات برگزار شده: *${s.completedMeetings.toLocaleString('fa-IR')}* جلسه 🤝
-   ▫️ نرخ تبدیل: *${s.conversionRate.toLocaleString('fa-IR')}٪* 🎯
-\n`;
+   ⚡ امتیاز و شاخص فعالیت: *${s.performanceScore.toLocaleString('fa-IR')}* | رتبه: *${(idx + 1).toLocaleString('fa-IR')}*
+   📞 تماس‌های گرفته شده: *${s.totalCalls.toLocaleString('fa-IR')}* تماس (${s.successfulCalls.toLocaleString('fa-IR')} موفق | ${s.outboundCalls.toLocaleString('fa-IR')} خروجی)
+   🏆 معاملات موفق: *${s.totalWonDeals.toLocaleString('fa-IR')}* معامله قطعی ✅
+   📝 گزارشات و تاریخچه ثبت شده: *${s.totalReportsAndHistories.toLocaleString('fa-IR')}* گزارش و یادداشت در CRM
+   🤝 قرارهای ملاقات ثبت شده: *${s.totalMeetings.toLocaleString('fa-IR')}* جلسه (${s.completedMeetings.toLocaleString('fa-IR')} برگزار شده)
+   🎯 نرخ تبدیل: *${s.conversionRate.toLocaleString('fa-IR')}٪*\n\n`;
         });
 
-        const text = `📊 *گزارش و رتبه‌بندی عملکرد کارشناسان فروش* 📊
+        const text = `📊 *گزارش و رتبه‌بندی عملکرد کارشناسان بر اساس معیارهای ۵گانه CRM* 📊
 📅 *تاریخ:* ${nowStr}
 ⏱️ *بازه ارزیابی:* ${periodTitle}
-👥 *تعداد کارشناسان ارزیابی‌شده:* ${calculatedStaffStats.length.toLocaleString('fa-IR')} نفر
+👥 *تعداد پرسنل فعال:* ${calculatedStaffStats.length.toLocaleString('fa-IR')} نفر
 
 ━━━━━━━━━━━━━━━━━━━━
-🏆 *خلاصه شاخص‌های کلیدی تیم فروش:*
-⚡ کل تماس‌های برقرار شده: ${teamTotals.totalCalls.toLocaleString('fa-IR')} تماس
-✅ تماس‌های موفق: ${teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} تماس
-🤝 جلسات حضوری برگزار شده: ${teamTotals.totalMeetings.toLocaleString('fa-IR')} جلسه
-🎉 معاملات و خریدهای موفق (Won): ${teamTotals.totalWonLeads.toLocaleString('fa-IR')} معامله
-📈 میانگین امتیاز عملکرد تیم: ${teamTotals.avgScore.toLocaleString('fa-IR')} امتیاز
+🎯 *خلاصه ۵ معیار اصلی عملکرد در سطح کل سازمان:*
+1️⃣ ⚡ شاخص کل فعالیت در CRM: ${teamTotals.totalCrmActivities.toLocaleString('fa-IR')} اقدام و تعامل
+2️⃣ 📞 کل تماس‌های گرفته شده: ${teamTotals.totalCalls.toLocaleString('fa-IR')} تماس (${teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} موفق)
+3️⃣ 🏆 کل معاملات موفق (Won): ${teamTotals.totalWonDeals.toLocaleString('fa-IR')} معامله
+4️⃣ 📝 گزارشات و تاریخچه‌های ثبت‌شده در CRM: ${teamTotals.totalReportsAndHistories.toLocaleString('fa-IR')} گزارش
+5️⃣ 🤝 کل قرارهای ملاقات ثبت‌شده: ${teamTotals.totalMeetings.toLocaleString('fa-IR')} جلسه (${teamTotals.totalCompletedMeetings.toLocaleString('fa-IR')} برگزار شده)
 
 ━━━━━━━━━━━━━━━━━━━━
-🏅 *جدول رتبه‌بندی و لیدربورد کارمندان:*
+🏅 *رتبه‌بندی و لیدربورد انفرادی کارمندان:*
 ${leaderboardText}
 ━━━━━━━━━━━━━━━━━━━━
-🚗 *سامانه یکپارچه مدیریت فروش و CRM حسینی خودرو*`;
+🚗 *سامانه جامع CRM و مدیریت فروش حسینی خودرو*`;
 
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(text).then(() => {
-                showToast('گزارش رتبه‌بندی کارمندان با موفقیت کپی شد', 'success');
+                showToast('گزارش عملکرد و ۵ معیار رتبه‌بندی با موفقیت کپی شد', 'success');
             }).catch(() => fallbackCopy(text));
         } else {
             fallbackCopy(text);
@@ -551,14 +630,14 @@ ${leaderboardText}
         textArea.select();
         try {
             document.execCommand('copy');
-            showToast('گزارش رتبه‌بندی کارمندان با موفقیت کپی شد', 'success');
+            showToast('گزارش عملکرد با موفقیت کپی شد', 'success');
         } catch (err) {
             showToast('خطا در کپی گزارش', 'error');
         }
         document.body.removeChild(textArea);
     };
 
-    // Export to Excel
+    // Export to Excel with the 5 criteria
     const handleExportExcel = () => {
         try {
             const dataToExport = calculatedStaffStats.map((s, index) => ({
@@ -566,28 +645,31 @@ ${leaderboardText}
                 'نام کارشناس': s.name,
                 'نام کاربری': s.username,
                 'سمت': s.role,
-                'امتیاز عملکرد': s.performanceScore,
-                'نشان و وضعیت': s.badgeTitle,
-                'کل سرنخ‌های اختصاصی': s.assignedLeadsCount,
-                'معاملات موفق (Won)': s.wonLeadsCount,
-                'سرنخ‌های در جریان': s.inProgressLeadsCount,
-                'سرنخ‌های از دست رفته': s.lostLeadsCount,
-                'کل تماس‌ها': s.totalCalls,
-                'تماس‌های موفق': s.successfulCalls,
-                'تماس‌های خروجی': s.outboundCalls,
-                'تماس‌های ورودی': s.inboundCalls,
+                'امتیاز کل عملکرد': s.performanceScore,
+                'نشان شایستگی': s.badgeTitle,
+                '1. میزان فعالیت در CRM (کل اقدامات)': s.totalCrmActivities,
+                'سرنخ‌های تحت پوشش': s.assignedLeadsCount,
+                'سرنخ‌های فعال در جریان': s.inProgressLeadsCount,
+                '2. تعداد تماس‌های گرفته شده (کل)': s.totalCalls,
+                'تماس‌های خروجی گرفته شده': s.outboundCalls,
+                'تماس‌های موفق و پاسخ‌داده': s.successfulCalls,
                 'مدت مکالمه (دقیقه)': s.totalCallDurationMinutes,
                 'درصد موفقیت تماس (%)': s.callSuccessRate,
-                'کل جلسات حضوری': s.totalMeetings,
-                'جلسات برگزار شده': s.completedMeetings,
-                'جلسات لغو شده': s.cancelledMeetings,
+                '3. تعداد معاملات موفق (Won)': s.totalWonDeals,
+                'سرنخ‌های تبدیل شده به خرید': s.wonLeadsCount,
                 'سفارشات خودرو ثبت‌شده': s.totalOrders,
+                '4. تعداد گزارشات و تاریخچه ثبت شده': s.totalReportsAndHistories,
+                'یادداشت‌های ژورنال CRM': s.customerJournalsCount,
+                'شرح تماس و وضعیت‌ها': s.notesAndHistoriesCount,
+                '5. تعداد قرار ملاقات ثبت شده': s.totalMeetings,
+                'جلسات حضوری برگزار شده': s.completedMeetings,
+                'جلسات تعیین وقت شده': s.scheduledMeetings,
                 'نرخ تبدیل نهایی (%)': s.conversionRate
             }));
 
             const worksheet = XLSX.utils.json_to_sheet(dataToExport);
             const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'رتبه‌بندی کارمندان');
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'رتبه‌بندی ۵ معیار CRM');
             
             const fileName = `گزارش_رتبه_بندی_کارشناسان_${moment().locale('fa').format('YYYY-MM-DD')}.xlsx`;
             XLSX.writeFile(workbook, fileName);
@@ -616,13 +698,13 @@ ${leaderboardText}
                             </div>
                             <div>
                                 <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    گزارش جامع عملکرد و رتبه‌بندی کارشناسان فروش (CRM)
+                                    گزارش عملکرد و رتبه‌بندی کارشناسان فروش (CRM)
                                     <span className="text-[10px] font-black bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-800">
-                                        ویژه مدیر فروش 🎯
+                                        ارزیابی ۵ معیار اصلی 🎯
                                     </span>
                                 </h3>
-                                <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                                    ارزیابی روزانه، هفتگی و ماهانه تماس‌ها، جلسات حضوری، تبدیل سرنخ‌ها به فروش و لیدربورد پرسنل
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                    ارزیابی بر مبنای: ۱. میزان فعالیت در CRM • ۲. تعداد تماس‌های گرفته شده • ۳. معاملات موفق • ۴. گزارشات و تاریخچه‌ها • ۵. قرارهای ملاقات
                                 </p>
                             </div>
                         </div>
@@ -682,12 +764,55 @@ ${leaderboardText}
                     </div>
                 </div>
 
+                {/* Criteria Pillars Legend Bar */}
+                <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                    <div className="bg-indigo-50/70 dark:bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <div className="text-[11px] leading-tight">
+                            <span className="font-bold text-indigo-900 dark:text-indigo-300 block">۱. میزان فعالیت در CRM</span>
+                            <span className="text-[9px] text-slate-400">پیگیری‌ها و پویایی سیستم</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-sky-50/70 dark:bg-sky-950/40 p-2.5 rounded-xl border border-sky-100 dark:border-sky-900/40 flex items-center gap-2">
+                        <PhoneCall className="w-4 h-4 text-sky-600 shrink-0" />
+                        <div className="text-[11px] leading-tight">
+                            <span className="font-bold text-sky-900 dark:text-sky-300 block">۲. تماس‌های گرفته شده</span>
+                            <span className="text-[9px] text-slate-400">خروجی، ورودی و پاسخ‌داده</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-emerald-50/70 dark:bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/40 flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div className="text-[11px] leading-tight">
+                            <span className="font-bold text-emerald-900 dark:text-emerald-300 block">۳. معاملات موفق</span>
+                            <span className="text-[9px] text-slate-400">خریدهای نهایی و Won</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-amber-50/70 dark:bg-amber-950/40 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/40 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div className="text-[11px] leading-tight">
+                            <span className="font-bold text-amber-900 dark:text-amber-300 block">۴. گزارشات و تاریخچه‌ها</span>
+                            <span className="text-[9px] text-slate-400">یادداشت‌ها و پرونده CRM</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-purple-50/70 dark:bg-purple-950/40 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/40 flex items-center gap-2 col-span-2 sm:col-span-1">
+                        <Users className="w-4 h-4 text-purple-600 shrink-0" />
+                        <div className="text-[11px] leading-tight">
+                            <span className="font-bold text-purple-900 dark:text-purple-300 block">۵. قرار ملاقات ثبت شده</span>
+                            <span className="text-[9px] text-slate-400">جلسات حضوری و دعوت‌ها</span>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Custom Persian Range Filter Accordion */}
                 {period === 'custom' && (
                     <motion.div 
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
-                        className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 md:grid-cols-2 gap-4"
+                        className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 md:grid-cols-2 gap-4"
                     >
                         {/* Start Date */}
                         <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
@@ -701,7 +826,7 @@ ${leaderboardText}
                                         className="w-full px-2 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
                                     >
                                         {Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(d => (
-                                            <option key={d} value={d}>{d}</option>
+                                             <option key={d} value={d}>{d}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -780,98 +905,125 @@ ${leaderboardText}
                 )}
             </div>
 
-            {/* Team Summary KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* 5-Key Criteria Summary KPI Cards (شاخص‌های ۵گانه کل تیم) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* 1. میزان فعالیت در CRM */}
                 <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-[24px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
+                    className="bg-white dark:bg-slate-800 p-4 rounded-[22px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
                 >
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-black text-slate-400 dark:text-slate-500">تعداد کارشناسان</span>
-                        <div className="p-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                            <Users className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500">۱. کل فعالیت‌های CRM</span>
+                        <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                            <Zap className="w-4 h-4" />
                         </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-800 dark:text-white font-mono">
-                            {teamTotals.totalStaff.toLocaleString('fa-IR')}
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                            {teamTotals.totalCrmActivities.toLocaleString('fa-IR')}
                         </span>
-                        <span className="text-xs text-slate-400">نفر فعال</span>
+                        <span className="text-[10px] text-slate-400">اقدام فعال</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-2 font-medium">میانگین امتیاز تیم: {teamTotals.avgScore.toLocaleString('fa-IR')} pts</p>
-                </motion.div>
-
-                <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-[24px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
-                >
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-black text-slate-400 dark:text-slate-500">تماس‌های موفق تیم</span>
-                        <div className="p-2.5 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-xl">
-                            <PhoneCall className="w-5 h-5" />
-                        </div>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-800 dark:text-white font-mono">
-                            {teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')}
-                        </span>
-                        <span className="text-xs text-slate-400">از {teamTotals.totalCalls.toLocaleString('fa-IR')} تماس</span>
-                    </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
-                        <div 
-                            className="bg-sky-500 h-full rounded-full transition-all"
-                            style={{ width: `${teamTotals.totalCalls > 0 ? (teamTotals.totalSuccessfulCalls / teamTotals.totalCalls) * 100 : 0}%` }}
-                        />
-                    </div>
-                </motion.div>
-
-                <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-[24px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
-                >
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-black text-slate-400 dark:text-slate-500">جلسات حضوری موفق</span>
-                        <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                            <CheckCircle2 className="w-5 h-5" />
-                        </div>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-800 dark:text-white font-mono">
-                            {teamTotals.totalMeetings.toLocaleString('fa-IR')}
-                        </span>
-                        <span className="text-xs text-slate-400">جلسه برگزار شده</span>
-                    </div>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2 font-black flex items-center gap-1">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        تعاملات رو در رو با مشتریان
+                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400 mt-1 font-bold">
+                        میانگین امتیاز تیم: {teamTotals.avgScore.toLocaleString('fa-IR')}
                     </p>
                 </motion.div>
 
+                {/* 2. تعداد تماس‌های گرفته شده */}
                 <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
-                    className="bg-white dark:bg-slate-800 p-5 rounded-[24px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
+                    transition={{ delay: 0.04 }}
+                    className="bg-white dark:bg-slate-800 p-4 rounded-[22px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
                 >
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-black text-slate-400 dark:text-slate-500">معاملات موفق (Won Leads)</span>
-                        <div className="p-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl">
-                            <Award className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500">۲. تماس‌های گرفته شده</span>
+                        <div className="p-2 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-xl">
+                            <PhoneCall className="w-4 h-4" />
                         </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-800 dark:text-white font-mono">
-                            {teamTotals.totalWonLeads.toLocaleString('fa-IR')}
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                            {teamTotals.totalCalls.toLocaleString('fa-IR')}
                         </span>
-                        <span className="text-xs text-slate-400">خرید نهایی</span>
+                        <span className="text-[10px] text-slate-400">تماس</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-2 font-medium">
-                        ثبت {teamTotals.totalOrders.toLocaleString('fa-IR')} پیش‌سفارش خودرو
+                    <p className="text-[10px] text-sky-600 dark:text-sky-400 mt-1 font-bold">
+                        {teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} تماس موفق پاسخ‌داده
+                    </p>
+                </motion.div>
+
+                {/* 3. تعداد معاملات موفق */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08 }}
+                    className="bg-white dark:bg-slate-800 p-4 rounded-[22px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500">۳. معاملات موفق (Won)</span>
+                        <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                            <Award className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                            {teamTotals.totalWonDeals.toLocaleString('fa-IR')}
+                        </span>
+                        <span className="text-[10px] text-slate-400">خرید نهایی</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-bold flex items-center gap-1">
+                        <CheckCheck className="w-3 h-3" />
+                        نرخ تبدیل تیم: {teamTotals.overallConversion}٪
+                    </p>
+                </motion.div>
+
+                {/* 4. تعداد گزارشات و تاریخچه */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 }}
+                    className="bg-white dark:bg-slate-800 p-4 rounded-[22px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500">۴. گزارشات و تاریخچه</span>
+                        <div className="p-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl">
+                            <FileText className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                            {teamTotals.totalReportsAndHistories.toLocaleString('fa-IR')}
+                        </span>
+                        <span className="text-[10px] text-slate-400">ثبت در CRM</span>
+                    </div>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 font-bold">
+                        ژورنال و شرح وضعیت مشتری
+                    </p>
+                </motion.div>
+
+                {/* 5. تعداد قرار ملاقات ثبت شده */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.16 }}
+                    className="bg-white dark:bg-slate-800 p-4 rounded-[22px] shadow-sm border border-slate-100 dark:border-slate-700/60 relative overflow-hidden group"
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500">۵. قرارهای ملاقات</span>
+                        <div className="p-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl">
+                            <Users className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-slate-800 dark:text-white font-mono">
+                            {teamTotals.totalMeetings.toLocaleString('fa-IR')}
+                        </span>
+                        <span className="text-[10px] text-slate-400">جلسه ثبت‌شده</span>
+                    </div>
+                    <p className="text-[10px] text-purple-600 dark:text-purple-400 mt-1 font-bold">
+                        {teamTotals.totalCompletedMeetings.toLocaleString('fa-IR')} جلسه برگزار شده
                     </p>
                 </motion.div>
             </div>
@@ -882,9 +1034,9 @@ ${leaderboardText}
                     <div className="flex items-center justify-between">
                         <h4 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
                             <Crown className="w-5 h-5 text-amber-500" />
-                            سکوی افتخار و ۳ کارشناس برتر در دوره ({getPeriodLabel()})
+                            سکوی افتخار ۳ کارشناس برتر در دوره ({getPeriodLabel()})
                         </h4>
-                        <span className="text-xs text-slate-400 font-bold">رتبه‌بندی هوشمند بر مبنای امتیاز کل عملکرد</span>
+                        <span className="text-xs text-slate-400 font-bold">رتبه‌بندی بر مبنای امتیاز تلفیقی ۵ معیار CRM</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -937,41 +1089,39 @@ ${leaderboardText}
                                     </div>
 
                                     {/* Badge */}
-                                    <div className="mb-5">
+                                    <div className="mb-4">
                                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${staff.badgeColor}`}>
                                             {staff.badgeTitle}
                                         </span>
                                     </div>
 
-                                    {/* Stats Grid */}
-                                    <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 mb-4">
-                                        <div className="text-center">
-                                            <span className="text-[10px] text-slate-400 font-bold block mb-0.5">امتیاز کل</span>
-                                            <span className="text-base font-black text-indigo-600 dark:text-indigo-400 font-mono">
-                                                {staff.performanceScore.toLocaleString('fa-IR')}
-                                            </span>
+                                    {/* 5-Criteria Mini Grid */}
+                                    <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 mb-4 text-xs">
+                                        <div className="flex items-center justify-between p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                            <span className="text-slate-400 text-[10px]">📞 تماس‌ها:</span>
+                                            <span className="font-mono font-black text-sky-600 dark:text-sky-400">{staff.totalCalls}</span>
                                         </div>
-                                        <div className="text-center border-x border-slate-200 dark:border-slate-700/60">
-                                            <span className="text-[10px] text-slate-400 font-bold block mb-0.5">فروش موفق</span>
-                                            <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                                                {staff.wonLeadsCount.toLocaleString('fa-IR')}
-                                            </span>
+                                        <div className="flex items-center justify-between p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                            <span className="text-slate-400 text-[10px]">🏆 معاملات:</span>
+                                            <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">{staff.totalWonDeals}</span>
                                         </div>
-                                        <div className="text-center">
-                                            <span className="text-[10px] text-slate-400 font-bold block mb-0.5">جلسات موفق</span>
-                                            <span className="text-base font-black text-amber-600 dark:text-amber-400 font-mono">
-                                                {staff.completedMeetings.toLocaleString('fa-IR')}
-                                            </span>
+                                        <div className="flex items-center justify-between p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                            <span className="text-slate-400 text-[10px]">📝 گزارشات:</span>
+                                            <span className="font-mono font-black text-amber-600 dark:text-amber-400">{staff.totalReportsAndHistories}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-1.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                            <span className="text-slate-400 text-[10px]">🤝 جلسات:</span>
+                                            <span className="font-mono font-black text-purple-600 dark:text-purple-400">{staff.totalMeetings}</span>
                                         </div>
                                     </div>
 
                                     {/* Footer Details */}
                                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                                        <span className="flex items-center gap-1 font-bold">
-                                            <Phone className="w-3.5 h-3.5 text-sky-500" />
-                                            {staff.successfulCalls.toLocaleString('fa-IR')} تماس موفق ({staff.callSuccessRate}٪)
+                                        <span className="flex items-center gap-1 font-black text-indigo-600 dark:text-indigo-400">
+                                            <Zap className="w-3.5 h-3.5" />
+                                            امتیاز کل: {staff.performanceScore.toLocaleString('fa-IR')}
                                         </span>
-                                        <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-black group-hover:translate-x-[-4px] transition-transform flex items-center gap-0.5">
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold group-hover:translate-x-[-4px] transition-transform flex items-center gap-0.5">
                                             مشاهده کارنامه 👈
                                         </span>
                                     </div>
@@ -982,25 +1132,26 @@ ${leaderboardText}
                 </div>
             )}
 
-            {/* Visual Analytics & Comparison Charts */}
+            {/* Visual Analytics & Comparison Charts (نمودار مقایسه ۵ معیار) */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-[28px] shadow-sm border border-slate-100 dark:border-slate-700/60 space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h4 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
                             <Activity className="w-5 h-5 text-indigo-500" />
-                            نمودار تحلیلی مقایسه فعالیت و بازدهی کارشناسان
+                            نمودار تحلیلی مقایسه ۵ معیار کلیدی کارشناسان
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5 font-medium">مقایسه حجم و کیفیت عملکرد پرسنل بر اساس شاخص‌های کلیدی</p>
+                        <p className="text-xs text-slate-400 mt-0.5 font-medium">مشاهده و مقایسه عملکرد پرسنل بر اساس هریک از معیارهای درخواستی</p>
                     </div>
 
                     {/* Metric Tabs */}
-                    <div className="flex bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl self-start">
+                    <div className="flex flex-wrap bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl self-start gap-1">
                         {[
-                            { id: 'score', label: 'امتیاز عملکرد ⚡' },
-                            { id: 'sales', label: 'فروش و خریدهای موفق 🏆' },
-                            { id: 'calls', label: 'تماس‌های موفق 📞' },
-                            { id: 'meetings', label: 'جلسات حضوری 🤝' },
-                            { id: 'conversion', label: 'نرخ تبدیل (٪) 🎯' }
+                            { id: 'score', label: 'امتیاز کل ⚡' },
+                            { id: 'calls', label: 'تعداد تماس‌ها 📞' },
+                            { id: 'sales', label: 'معاملات موفق 🏆' },
+                            { id: 'reports', label: 'گزارشات و تاریخچه 📝' },
+                            { id: 'meetings', label: 'قرار ملاقات‌ها 🤝' },
+                            { id: 'activity', label: 'شاخص فعالیت CRM 📊' }
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -1034,26 +1185,30 @@ ${leaderboardText}
                                     if (active && payload && payload.length) {
                                         const data = payload[0].payload;
                                         return (
-                                            <div className="bg-slate-900 text-white p-3.5 rounded-2xl text-xs font-bold shadow-xl border border-slate-700 space-y-1.5">
+                                            <div className="bg-slate-900 text-white p-4 rounded-2xl text-xs font-bold shadow-xl border border-slate-700 space-y-1.5">
                                                 <p className="text-amber-400 font-black border-b border-slate-700 pb-1">{data.fullName}</p>
                                                 <p className="flex justify-between gap-4">
-                                                    <span className="text-slate-400">امتیاز عملکرد:</span>
+                                                    <span className="text-slate-400">⚡ امتیاز کل عملکرد:</span>
                                                     <span className="font-mono text-indigo-300 font-black">{data.score} pts</span>
                                                 </p>
                                                 <p className="flex justify-between gap-4">
-                                                    <span className="text-slate-400">فروش موفق:</span>
+                                                    <span className="text-slate-400">📞 تماس‌های گرفته شده:</span>
+                                                    <span className="font-mono text-sky-400 font-black">{data.calls} تماس ({data.outboundCalls} خروجی)</span>
+                                                </p>
+                                                <p className="flex justify-between gap-4">
+                                                    <span className="text-slate-400">🏆 معاملات موفق:</span>
                                                     <span className="font-mono text-emerald-400 font-black">{data.sales} معامله</span>
                                                 </p>
                                                 <p className="flex justify-between gap-4">
-                                                    <span className="text-slate-400">تماس‌های موفق:</span>
-                                                    <span className="font-mono text-sky-400 font-black">{data.calls} از {data.totalCalls}</span>
+                                                    <span className="text-slate-400">📝 گزارشات و تاریخچه‌ها:</span>
+                                                    <span className="font-mono text-amber-400 font-black">{data.reports} ثبت</span>
                                                 </p>
                                                 <p className="flex justify-between gap-4">
-                                                    <span className="text-slate-400">جلسات حضوری:</span>
+                                                    <span className="text-slate-400">🤝 قرارهای ملاقات:</span>
                                                     <span className="font-mono text-purple-400 font-black">{data.meetings} جلسه</span>
                                                 </p>
                                                 <p className="flex justify-between gap-4">
-                                                    <span className="text-slate-400">نرخ تبدیل:</span>
+                                                    <span className="text-slate-400">🎯 نرخ تبدیل:</span>
                                                     <span className="font-mono text-pink-400 font-black">{data.conversion}٪</span>
                                                 </p>
                                             </div>
@@ -1077,17 +1232,17 @@ ${leaderboardText}
                 </div>
             </div>
 
-            {/* Leaderboard Table (جدول جامع رتبه‌بندی کارشناسان) */}
+            {/* Leaderboard Table (جدول تفصیلی ۵ معیار ارزیابی پرسنل) */}
             <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-sm border border-slate-100 dark:border-slate-700/60 overflow-hidden">
                 {/* Table Header & Search Filter */}
                 <div className="p-6 border-b border-slate-100 dark:border-slate-700/60 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div>
                         <h4 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
                             <Target className="w-5 h-5 text-indigo-500" />
-                            جدول رتبه‌بندی و مقایسه پرسنل فروش
+                            جدول لیدربورد و مقایسه پرسنل بر اساس ۵ معیار CRM
                         </h4>
                         <p className="text-xs text-slate-400 mt-0.5">
-                            نمایش {displayedStaffList.length.toLocaleString('fa-IR')} نفر | برای تغییر ترتیب روی عنوان ستون‌ها کلیک نمایید
+                            نمایش {displayedStaffList.length.toLocaleString('fa-IR')} نفر | برای مرتب‌سازی بر اساس هریک از ۵ معیار روی عناوین ستون‌ها کلیک نمایید
                         </p>
                     </div>
 
@@ -1096,7 +1251,7 @@ ${leaderboardText}
                         <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                         <input 
                             type="text"
-                            placeholder="جستجوی نام یا نشان کارشناس..."
+                            placeholder="جستجوی نام، نام کاربری یا نشان..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pr-10 pl-4 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-500 transition-all"
@@ -1117,59 +1272,88 @@ ${leaderboardText}
                                     className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors"
                                 >
                                     <div className="flex items-center gap-1">
-                                        <span>رتبه و نشان</span>
+                                        <span>رتبه</span>
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
                                 <th className="py-4 px-4">کارشناس</th>
+                                
+                                {/* 1. میزان فعالیت در CRM */}
                                 <th 
                                     onClick={() => {
-                                        if (sortField === 'assignedLeadsCount') setSortAsc(!sortAsc);
-                                        else { setSortField('assignedLeadsCount'); setSortAsc(false); }
+                                        if (sortField === 'totalCrmActivities') setSortAsc(!sortAsc);
+                                        else { setSortField('totalCrmActivities'); setSortAsc(false); }
                                     }}
-                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors"
+                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors bg-indigo-50/30 dark:bg-indigo-950/20"
                                 >
-                                    <div className="flex items-center gap-1">
-                                        <span>سرنخ‌های تحت پوشش</span>
+                                    <div className="flex items-center gap-1 text-indigo-700 dark:text-indigo-300">
+                                        <Zap className="w-3.5 h-3.5" />
+                                        <span>۱. فعالیت در CRM</span>
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
+
+                                {/* 2. تعداد تماس‌های گرفته شده */}
                                 <th 
                                     onClick={() => {
-                                        if (sortField === 'successfulCalls') setSortAsc(!sortAsc);
-                                        else { setSortField('successfulCalls'); setSortAsc(false); }
+                                        if (sortField === 'totalCalls') setSortAsc(!sortAsc);
+                                        else { setSortField('totalCalls'); setSortAsc(false); }
                                     }}
-                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors"
+                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors bg-sky-50/30 dark:bg-sky-950/20"
                                 >
-                                    <div className="flex items-center gap-1">
-                                        <span>تماس‌های موفق</span>
+                                    <div className="flex items-center gap-1 text-sky-700 dark:text-sky-300">
+                                        <PhoneCall className="w-3.5 h-3.5" />
+                                        <span>۲. تماس‌های گرفته شده</span>
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
-                                <th 
-                                    onClick={() => {
-                                        if (sortField === 'completedMeetings') setSortAsc(!sortAsc);
-                                        else { setSortField('completedMeetings'); setSortAsc(false); }
-                                    }}
-                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors"
-                                >
-                                    <div className="flex items-center gap-1">
-                                        <span>جلسات حضوری</span>
-                                        <ArrowUpDown className="w-3 h-3" />
-                                    </div>
-                                </th>
+
+                                {/* 3. تعداد معاملات موفق */}
                                 <th 
                                     onClick={() => {
                                         if (sortField === 'wonLeadsCount') setSortAsc(!sortAsc);
                                         else { setSortField('wonLeadsCount'); setSortAsc(false); }
                                     }}
-                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors"
+                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors bg-emerald-50/30 dark:bg-emerald-950/20"
                                 >
-                                    <div className="flex items-center gap-1">
-                                        <span>معاملات موفق (Won)</span>
+                                    <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                                        <Award className="w-3.5 h-3.5" />
+                                        <span>۳. معاملات موفق</span>
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
+
+                                {/* 4. تعداد گزارشات و تاریخچه‌ای که ثبت کرده است */}
+                                <th 
+                                    onClick={() => {
+                                        if (sortField === 'totalReportsAndHistories') setSortAsc(!sortAsc);
+                                        else { setSortField('totalReportsAndHistories'); setSortAsc(false); }
+                                    }}
+                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors bg-amber-50/30 dark:bg-amber-950/20"
+                                >
+                                    <div className="flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                                        <FileText className="w-3.5 h-3.5" />
+                                        <span>۴. گزارشات و تاریخچه</span>
+                                        <ArrowUpDown className="w-3 h-3" />
+                                    </div>
+                                </th>
+
+                                {/* 5. تعداد قرار ملاقات ثبت شده */}
+                                <th 
+                                    onClick={() => {
+                                        if (sortField === 'totalMeetings') setSortAsc(!sortAsc);
+                                        else { setSortField('totalMeetings'); setSortAsc(false); }
+                                    }}
+                                    className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors bg-purple-50/30 dark:bg-purple-950/20"
+                                >
+                                    <div className="flex items-center gap-1 text-purple-700 dark:text-purple-300">
+                                        <Users className="w-3.5 h-3.5" />
+                                        <span>۵. قرارهای ملاقات</span>
+                                        <ArrowUpDown className="w-3 h-3" />
+                                    </div>
+                                </th>
+
+                                {/* Conversion Rate */}
                                 <th 
                                     onClick={() => {
                                         if (sortField === 'conversionRate') setSortAsc(!sortAsc);
@@ -1182,6 +1366,8 @@ ${leaderboardText}
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
+
+                                {/* Performance Score */}
                                 <th 
                                     onClick={() => {
                                         if (sortField === 'performanceScore') setSortAsc(!sortAsc);
@@ -1190,17 +1376,18 @@ ${leaderboardText}
                                     className="py-4 px-4 cursor-pointer hover:text-indigo-600 transition-colors"
                                 >
                                     <div className="flex items-center gap-1">
-                                        <span>امتیاز عملکرد</span>
+                                        <span>امتیاز نهایی</span>
                                         <ArrowUpDown className="w-3 h-3" />
                                     </div>
                                 </th>
+
                                 <th className="py-4 px-4 text-center">عملیات</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 font-medium">
                             {displayedStaffList.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                                    <td colSpan={10} className="py-12 text-center text-slate-400">
                                         هیچ کارشناسی در این بازه یا فیلتر یافت نشد.
                                     </td>
                                 </tr>
@@ -1254,64 +1441,71 @@ ${leaderboardText}
                                                 </div>
                                             </td>
 
-                                            {/* Assigned Leads */}
-                                            <td className="py-4 px-4">
-                                                <div className="font-mono font-bold text-slate-700 dark:text-slate-200">
-                                                    {staff.assignedLeadsCount.toLocaleString('fa-IR')}
+                                            {/* Criterion 1: CRM Activity */}
+                                            <td className="py-4 px-4 bg-indigo-50/20 dark:bg-indigo-950/10">
+                                                <div className="font-mono font-black text-indigo-700 dark:text-indigo-300 text-sm">
+                                                    {staff.totalCrmActivities.toLocaleString('fa-IR')}
                                                 </div>
-                                                <span className="text-[10px] text-slate-400">
-                                                    {staff.inProgressLeadsCount} در حال پیگیری
+                                                <span className="text-[10px] text-slate-400 block">
+                                                    {staff.assignedLeadsCount} سرنخ ({staff.inProgressLeadsCount} در جریان)
                                                 </span>
                                             </td>
 
-                                            {/* Calls */}
-                                            <td className="py-4 px-4">
+                                            {/* Criterion 2: Calls Made */}
+                                            <td className="py-4 px-4 bg-sky-50/20 dark:bg-sky-950/10">
                                                 <div className="flex items-baseline gap-1">
                                                     <span className="font-black text-sky-600 dark:text-sky-400 font-mono text-sm">
-                                                        {staff.successfulCalls.toLocaleString('fa-IR')}
+                                                        {staff.totalCalls.toLocaleString('fa-IR')}
                                                     </span>
-                                                    <span className="text-[10px] text-slate-400">
-                                                        / {staff.totalCalls.toLocaleString('fa-IR')}
-                                                    </span>
+                                                    <span className="text-[10px] text-slate-400">تماس</span>
                                                 </div>
                                                 <span className="text-[10px] text-slate-400 block font-mono">
-                                                    {staff.totalCallDurationMinutes} دقیقه مکالمه
+                                                    {staff.successfulCalls} موفق | {staff.outboundCalls} خروجی
                                                 </span>
                                             </td>
 
-                                            {/* Meetings */}
-                                            <td className="py-4 px-4">
-                                                <div className="font-black text-slate-800 dark:text-white font-mono text-sm">
-                                                    {staff.completedMeetings.toLocaleString('fa-IR')}
-                                                </div>
-                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                                                    {staff.meetingSuccessRate}٪ نرخ برگزاری
-                                                </span>
-                                            </td>
-
-                                            {/* Won Deals */}
-                                            <td className="py-4 px-4">
+                                            {/* Criterion 3: Won Deals */}
+                                            <td className="py-4 px-4 bg-emerald-50/20 dark:bg-emerald-950/10">
                                                 <div className="font-black text-emerald-600 dark:text-emerald-400 font-mono text-sm flex items-center gap-1">
                                                     <CheckCheck className="w-3.5 h-3.5" />
-                                                    {staff.wonLeadsCount.toLocaleString('fa-IR')}
+                                                    {staff.totalWonDeals.toLocaleString('fa-IR')}
                                                 </div>
-                                                {staff.totalOrders > 0 && (
-                                                    <span className="text-[10px] text-slate-400 block">
-                                                        {staff.totalOrders} پیش‌سفارش
-                                                    </span>
-                                                )}
+                                                <span className="text-[10px] text-slate-400 block">
+                                                    {staff.wonLeadsCount} سرنخ برنده {staff.completedOrders > 0 ? `+ ${staff.completedOrders} قرارداد` : ''}
+                                                </span>
+                                            </td>
+
+                                            {/* Criterion 4: Reports & History Logged */}
+                                            <td className="py-4 px-4 bg-amber-50/20 dark:bg-amber-950/10">
+                                                <div className="font-mono font-black text-amber-600 dark:text-amber-400 text-sm flex items-center gap-1">
+                                                    <FileText className="w-3.5 h-3.5" />
+                                                    {staff.totalReportsAndHistories.toLocaleString('fa-IR')}
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 block">
+                                                    {staff.customerJournalsCount} ژورنال | {staff.notesAndHistoriesCount} شرح تماس
+                                                </span>
+                                            </td>
+
+                                            {/* Criterion 5: Meetings Registered */}
+                                            <td className="py-4 px-4 bg-purple-50/20 dark:bg-purple-950/10">
+                                                <div className="font-black text-purple-700 dark:text-purple-300 font-mono text-sm">
+                                                    {staff.totalMeetings.toLocaleString('fa-IR')}
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 block">
+                                                    {staff.completedMeetings} برگزار شده ({staff.meetingSuccessRate}٪)
+                                                </span>
                                             </td>
 
                                             {/* Conversion Rate */}
                                             <td className="py-4 px-4">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-12 bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                    <div className="w-10 bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                                                         <div 
-                                                            className="bg-purple-600 h-full rounded-full"
+                                                            className="bg-rose-500 h-full rounded-full"
                                                             style={{ width: `${Math.min(100, staff.conversionRate)}%` }}
                                                         />
                                                     </div>
-                                                    <span className="font-mono font-black text-purple-600 dark:text-purple-400">
+                                                    <span className="font-mono font-black text-rose-600 dark:text-rose-400">
                                                         {staff.conversionRate}٪
                                                     </span>
                                                 </div>
@@ -1323,7 +1517,7 @@ ${leaderboardText}
                                                     {staff.performanceScore.toLocaleString('fa-IR')}
                                                 </div>
                                                 <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded font-black mt-0.5 ${staff.badgeColor}`}>
-                                                    {staff.badgeTitle.replace(/🥇|🥈|🥉|📞|🤝|🎯|🚗/g, '').trim()}
+                                                    {staff.badgeTitle.replace(/🥇|🥈|🥉|📞|🤝|🎯|🚗|🏆|📝/g, '').trim()}
                                                 </span>
                                             </td>
 
@@ -1346,7 +1540,7 @@ ${leaderboardText}
                 </div>
             </div>
 
-            {/* Individual Staff Detailed Scorecard Modal (مدال کارنامه تفصیلی و تحلیل انفرادی کارشناس) */}
+            {/* Individual Staff Detailed Scorecard Modal (مدال کارنامه تفصیلی و تحلیل ۵ معیار) */}
             <AnimatePresence>
                 {selectedStaffForModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
@@ -1354,7 +1548,7 @@ ${leaderboardText}
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white dark:bg-slate-800 w-full max-w-3xl rounded-[32px] shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]"
+                            className="bg-white dark:bg-slate-800 w-full max-w-4xl rounded-[32px] shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]"
                         >
                             {/* Modal Header */}
                             <div className="p-6 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white flex items-center justify-between">
@@ -1387,52 +1581,65 @@ ${leaderboardText}
                                 {/* Score & Badge Banner */}
                                 <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between">
                                     <div className="space-y-1">
-                                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">نشان و عنوان کسب‌شده:</span>
+                                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">نشان و وضعیت عملکرد:</span>
                                         <p className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">
                                             <Sparkles className="w-4 h-4 text-amber-500" />
                                             {selectedStaffForModal.badgeTitle}
                                         </p>
                                     </div>
                                     <div className="text-left">
-                                        <span className="text-xs text-slate-400 font-bold block">مجموع امتیاز</span>
+                                        <span className="text-xs text-slate-400 font-bold block">مجموع امتیاز عملکرد</span>
                                         <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
                                             {selectedStaffForModal.performanceScore.toLocaleString('fa-IR')} pts
                                         </span>
                                     </div>
                                 </div>
 
-                                {/* KPI Metrics 4-Box */}
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-                                        <span className="text-[10px] text-slate-400 font-bold block mb-1">سرنخ‌های لید</span>
-                                        <span className="text-xl font-black text-slate-800 dark:text-white font-mono">
-                                            {selectedStaffForModal.assignedLeadsCount.toLocaleString('fa-IR')}
+                                {/* 5-Criteria Core Breakdown Boxes */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                                    {/* 1. فعالیت CRM */}
+                                    <div className="bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-center">
+                                        <span className="text-[10px] text-indigo-600 font-bold block mb-1">۱. کل فعالیت CRM</span>
+                                        <span className="text-lg font-black text-slate-800 dark:text-white font-mono">
+                                            {selectedStaffForModal.totalCrmActivities.toLocaleString('fa-IR')}
                                         </span>
-                                        <span className="text-[9px] text-indigo-500 block mt-1">{selectedStaffForModal.inProgressLeadsCount} در جریان</span>
+                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.assignedLeadsCount} سرنخ</span>
                                     </div>
 
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-                                        <span className="text-[10px] text-slate-400 font-bold block mb-1">تماس‌های موفق</span>
-                                        <span className="text-xl font-black text-sky-600 dark:text-sky-400 font-mono">
-                                            {selectedStaffForModal.successfulCalls.toLocaleString('fa-IR')}
+                                    {/* 2. تماس‌ها */}
+                                    <div className="bg-sky-50/50 dark:bg-sky-950/30 p-3 rounded-2xl border border-sky-100 dark:border-sky-900/40 text-center">
+                                        <span className="text-[10px] text-sky-600 font-bold block mb-1">۲. تماس‌های گرفته شده</span>
+                                        <span className="text-lg font-black text-sky-600 dark:text-sky-400 font-mono">
+                                            {selectedStaffForModal.totalCalls.toLocaleString('fa-IR')}
                                         </span>
-                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.totalCallDurationMinutes} دقیقه</span>
+                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.successfulCalls} موفق</span>
                                     </div>
 
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-                                        <span className="text-[10px] text-slate-400 font-bold block mb-1">جلسات برگزار شده</span>
-                                        <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                                            {selectedStaffForModal.completedMeetings.toLocaleString('fa-IR')}
+                                    {/* 3. معاملات موفق */}
+                                    <div className="bg-emerald-50/50 dark:bg-emerald-950/30 p-3 rounded-2xl border border-emerald-100 dark:border-emerald-900/40 text-center">
+                                        <span className="text-[10px] text-emerald-600 font-bold block mb-1">۳. معاملات موفق</span>
+                                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                                            {selectedStaffForModal.totalWonDeals.toLocaleString('fa-IR')}
                                         </span>
-                                        <span className="text-[9px] text-emerald-600 block mt-1">{selectedStaffForModal.meetingSuccessRate}٪ موفق</span>
+                                        <span className="text-[9px] text-emerald-600 block mt-1">نرخ {selectedStaffForModal.conversionRate}٪</span>
                                     </div>
 
-                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-                                        <span className="text-[10px] text-slate-400 font-bold block mb-1">معاملات نهایی (Won)</span>
-                                        <span className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono">
-                                            {selectedStaffForModal.wonLeadsCount.toLocaleString('fa-IR')}
+                                    {/* 4. گزارشات و تاریخچه */}
+                                    <div className="bg-amber-50/50 dark:bg-amber-950/30 p-3 rounded-2xl border border-amber-100 dark:border-amber-900/40 text-center">
+                                        <span className="text-[10px] text-amber-600 font-bold block mb-1">۴. گزارشات و تاریخچه</span>
+                                        <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
+                                            {selectedStaffForModal.totalReportsAndHistories.toLocaleString('fa-IR')}
                                         </span>
-                                        <span className="text-[9px] text-purple-600 block mt-1">نرخ تبدیل {selectedStaffForModal.conversionRate}٪</span>
+                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.customerJournalsCount} ژورنال</span>
+                                    </div>
+
+                                    {/* 5. جلسات */}
+                                    <div className="bg-purple-50/50 dark:bg-purple-950/30 p-3 rounded-2xl border border-purple-100 dark:border-purple-900/40 text-center col-span-2 sm:col-span-1">
+                                        <span className="text-[10px] text-purple-600 font-bold block mb-1">۵. قرارهای ملاقات</span>
+                                        <span className="text-lg font-black text-purple-600 dark:text-purple-400 font-mono">
+                                            {selectedStaffForModal.totalMeetings.toLocaleString('fa-IR')}
+                                        </span>
+                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.completedMeetings} برگزار شد</span>
                                     </div>
                                 </div>
 
@@ -1442,50 +1649,54 @@ ${leaderboardText}
                                     <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                                         <h5 className="text-xs font-black text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-1.5">
                                             <Phone className="w-4 h-4 text-sky-500" />
-                                            تفکیک وضعیت تماس‌ها
+                                            تفکیک دقیق تماس‌های گرفته شده
                                         </h5>
                                         <div className="space-y-2 text-xs">
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">تماس موفق و پاسخ‌داده:</span>
-                                                <span className="font-black text-emerald-600 font-mono">{selectedStaffForModal.successfulCalls}</span>
+                                                <span className="text-slate-500">تماس‌های خروجی گرفته شده:</span>
+                                                <span className="font-black text-indigo-600 font-mono">{selectedStaffForModal.outboundCalls} تماس</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">بی‌پاسخ / رد شده:</span>
+                                                <span className="text-slate-500">تماس‌های ورودی پاسخ‌داده:</span>
+                                                <span className="font-black text-sky-600 font-mono">{selectedStaffForModal.inboundCalls} تماس</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-500">تماس موفق و موثر:</span>
+                                                <span className="font-black text-emerald-600 font-mono">{selectedStaffForModal.successfulCalls} ({selectedStaffForModal.callSuccessRate}٪)</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-500">بی‌پاسخ / اشغال / رد شده:</span>
                                                 <span className="font-black text-rose-500 font-mono">{selectedStaffForModal.missedOrNoAnswerCalls}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">تماس خروجی (پیگیری):</span>
-                                                <span className="font-black text-indigo-600 font-mono">{selectedStaffForModal.outboundCalls}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">تماس ورودی (پاسخگویی):</span>
-                                                <span className="font-black text-sky-600 font-mono">{selectedStaffForModal.inboundCalls}</span>
+                                                <span className="text-slate-500">مجموع مدت زمان مکالمات:</span>
+                                                <span className="font-black text-slate-800 dark:text-white font-mono">{selectedStaffForModal.totalCallDurationMinutes} دقیقه</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Meetings & Leads Breakdown */}
+                                    {/* Reports, Meetings & Sales Breakdown */}
                                     <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                                         <h5 className="text-xs font-black text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-1.5">
-                                            <Users className="w-4 h-4 text-purple-500" />
-                                            وضعیت پیگیری لیدها و جلسات
+                                            <FileText className="w-4 h-4 text-amber-500" />
+                                            گزارشات، جلسات و معاملات ثبت‌شده
                                         </h5>
                                         <div className="space-y-2 text-xs">
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">جلسات برگزار شده:</span>
-                                                <span className="font-black text-emerald-600 font-mono">{selectedStaffForModal.completedMeetings}</span>
+                                                <span className="text-slate-500">یادداشت‌های ژورنال پرونده مشتری:</span>
+                                                <span className="font-black text-amber-600 font-mono">{selectedStaffForModal.customerJournalsCount} گزارش</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">جلسات در انتظار وقت:</span>
-                                                <span className="font-black text-amber-500 font-mono">{selectedStaffForModal.scheduledMeetings}</span>
+                                                <span className="text-slate-500">ثبت شرح تماس و تاریخچه وضعیت:</span>
+                                                <span className="font-black text-indigo-600 font-mono">{selectedStaffForModal.notesAndHistoriesCount} ثبت</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">خرید نهایی (موفق):</span>
-                                                <span className="font-black text-emerald-600 font-mono">{selectedStaffForModal.wonLeadsCount}</span>
+                                                <span className="text-slate-500">قرارهای ملاقات برگزار شده:</span>
+                                                <span className="font-black text-purple-600 font-mono">{selectedStaffForModal.completedMeetings} از {selectedStaffForModal.totalMeetings}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">لیدهای ناموفق:</span>
-                                                <span className="font-black text-slate-400 font-mono">{selectedStaffForModal.lostLeadsCount}</span>
+                                                <span className="text-slate-500">معاملات موفق قطعی (Won):</span>
+                                                <span className="font-black text-emerald-600 font-mono">{selectedStaffForModal.totalWonDeals} خرید</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1500,9 +1711,11 @@ ${leaderboardText}
                                     <p className="text-xs text-indigo-800/90 dark:text-indigo-300 leading-relaxed">
                                         {selectedStaffForModal.conversionRate >= 20 
                                             ? `کارشناس ${selectedStaffForModal.name} دارای نرخ تبدیل بسیار عالی (${selectedStaffForModal.conversionRate}٪) می‌باشد. پیشنهاد می‌شود لیدهای VIP و داغ بیشتری به ایشان واگذار گردد.`
-                                            : selectedStaffForModal.successfulCalls >= 15
+                                            : selectedStaffForModal.totalReportsAndHistories >= 10
+                                            ? `مستندسازی و ثبت گزارشات تاریخچه CRM توسط این کارشناس در سطح بالایی است که به شفافیت پیگیری‌ها کمک شایانی می‌کند.`
+                                            : selectedStaffForModal.totalCalls >= 15
                                             ? `حجم تماس‌های خروجی و پیگیری کارشناس مناسب است؛ برای ارتقای نرخ تبدیل، تمرکز بر روی دعوت مشتریان به جلسات حضوری نمایندگی توصیه می‌شود.`
-                                            : `نیاز به پیگیری منظم‌تر سرنخ‌های اختصاص‌یافته و افزایش تعداد تماس‌های روزانه جهت دستیابی به تارگت‌های فروش دوره.`
+                                            : `نیاز به پیگیری منظم‌تر سرنخ‌های اختصاص‌یافته، ثبت تاریخچه‌های پیگیری در CRM و افزایش تعداد تماس‌های روزانه جهت دستیابی به تارگت‌های فروش دوره.`
                                         }
                                     </p>
                                 </div>
