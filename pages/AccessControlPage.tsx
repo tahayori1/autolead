@@ -77,8 +77,15 @@ const AccessControlPage: React.FC = () => {
         const handleRefresh = () => {
             fetchUsers();
         };
+        const handleActivityUpdate = () => {
+            fetchUsers();
+        };
         window.addEventListener('app-refresh', handleRefresh);
-        return () => window.removeEventListener('app-refresh', handleRefresh);
+        window.addEventListener('user-activity-updated', handleActivityUpdate);
+        return () => {
+            window.removeEventListener('app-refresh', handleRefresh);
+            window.removeEventListener('user-activity-updated', handleActivityUpdate);
+        };
     }, []);
 
     const fetchUsers = async () => {

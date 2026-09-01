@@ -87,6 +87,14 @@ const MyProfilePage: React.FC = () => {
     useEffect(() => {
         recordUserActivity('مشاهده پروفایل من');
         fetchProfile();
+
+        const handleActivityUpdate = () => {
+            fetchProfile();
+        };
+        window.addEventListener('user-activity-updated', handleActivityUpdate);
+        return () => {
+            window.removeEventListener('user-activity-updated', handleActivityUpdate);
+        };
     }, []);
 
     const fetchProfile = async () => {

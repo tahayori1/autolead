@@ -110,6 +110,10 @@ export const getAllUsersActivityMap = (): Record<string, UserActivityEntry> => {
     }
 };
 
+/**
+ * Specifically records a user login event.
+ * Updates both lastLogin and lastActivity at login time.
+ */
 export const recordUserLogin = (username: string, userId?: number): void => {
     if (!username) return;
     try {
@@ -127,11 +131,21 @@ export const recordUserLogin = (username: string, userId?: number): void => {
         localStorage.setItem(ACTIVITY_MAP_KEY, JSON.stringify(map));
         localStorage.setItem('currentUsername', username.trim());
         sessionStorage.setItem('currentUsername', username.trim());
+        
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('user-activity-updated', { 
+                detail: { username: username.trim(), type: 'login', time: now } 
+            }));
+        }
     } catch (e) {
         console.warn('Could not record user login:', e);
     }
 };
 
+/**
+ * Records user activity (such as dashboard interactions, route changes, or live 10-minute heartbeat).
+ * CRITICAL: This NEVER modifies lastLogin. lastLogin is preserved strictly for authentication events.
+ */
 export const recordUserActivity = (action: string = 'فعالیت در سامانه', specificUsername?: string): void => {
     try {
         const username = specificUsername || localStorage.getItem('currentUsername') || sessionStorage.getItem('currentUsername');
@@ -140,15 +154,30 @@ export const recordUserActivity = (action: string = 'فعالیت در ساما�
         const map = getAllUsersActivityMap();
         const key = username.trim().toLowerCase();
         const existing = map[key] || {};
+        
+        // Preserve existing lastLogin strictly
         map[key] = {
             ...existing,
             lastActivity: now,
             lastActivityAction: action,
         };
         localStorage.setItem(ACTIVITY_MAP_KEY, JSON.stringify(map));
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('user-activity-updated', { 
+                detail: { username: username.trim(), type: 'activity', action, time: now } 
+            }));
+        }
     } catch (e) {
         console.warn('Could not record user activity:', e);
     }
+};
+
+/**
+ * Sends a periodic live heartbeat pulse (every 10 minutes) when the app is open and active.
+ */
+export const sendLiveHeartbeatPulse = (customAction: string = 'پالس زنده فعالیت (هر ۱۰ دقیقه)'): void => {
+    recordUserActivity(customAction);
 };
 
 export const getUserActivityInfo = (username: string): UserActivityEntry | undefined => {
@@ -251,7 +280,7 @@ export const getUserPresenceStatus = (lastActivityIso?: string | null): {
 
         const diffMinutes = (Date.now() - d.getTime()) / (1000 * 60);
 
-        if (diffMinutes <= 8) {
+        if (diffMinutes <= 12) {
             return {
                 status: 'online',
                 label: 'هم‌اکنون آنلاین',

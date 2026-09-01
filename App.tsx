@@ -55,8 +55,9 @@ import { BadgeIcon } from './components/icons/BadgeIcon';
 import { ChatAltIcon } from './components/icons/ChatAltIcon';
 import { RocketIcon } from './components/icons/RocketIcon';
 import { ClipboardListIcon } from './components/icons/ClipboardListIcon';
-import { getMyProfile, recordUserActivity } from './services/api';
+import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './services/api';
 import type { MyProfile } from './types';
+import AutoRefreshWidget from './components/AutoRefreshWidget';
 
 export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
 
@@ -174,6 +175,44 @@ const App: React.FC = () => {
                     if(data && 'id' in data) setCurrentUser(data as MyProfile);
                 })
                 .catch(err => console.error("Failed to load profile", err));
+
+            // 1. Send initial pulse on app open / auth
+            sendLiveHeartbeatPulse('ورود به داشبورد و باز کردن سامانه');
+
+            // 2. Periodic Live Activity Heartbeat every 10 minutes
+            const TEN_MINUTES_MS = 10 * 60 * 1000;
+            const heartbeatTimer = setInterval(() => {
+                sendLiveHeartbeatPulse('پالس فعالیت زنده (هر ۱۰ دقیقه)');
+            }, TEN_MINUTES_MS);
+
+            // 3. User interaction listener (throttled to at most once every 2 minutes)
+            let lastInteractionTime = Date.now();
+            const handleUserActivity = () => {
+                const now = Date.now();
+                if (now - lastInteractionTime > 2 * 60 * 1000) {
+                    lastInteractionTime = now;
+                    recordUserActivity('کار با داشبورد و بخش‌های سامانه');
+                }
+            };
+
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    recordUserActivity('بازگشت به تب داشبورد');
+                }
+            };
+
+            window.addEventListener('click', handleUserActivity, { passive: true });
+            window.addEventListener('keydown', handleUserActivity, { passive: true });
+            window.addEventListener('touchstart', handleUserActivity, { passive: true });
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            return () => {
+                clearInterval(heartbeatTimer);
+                window.removeEventListener('click', handleUserActivity);
+                window.removeEventListener('keydown', handleUserActivity);
+                window.removeEventListener('touchstart', handleUserActivity);
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            };
         } else {
             setCurrentUser(null);
         }
@@ -387,48 +426,15 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Global Auto Refresh Controller */}
-                <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800/80 mb-5 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-1.5">
-                            <Clock className="w-4 h-4 text-sky-500 animate-pulse" />
-                            <span>بروزرسانی خودکار</span>
-                        </div>
-                        {refreshInterval > 0 && countdown !== null && (
-                            <span className="text-[10px] font-mono bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 px-2 py-0.5 rounded-md">
-                                {countdown}ثانیه
-                            </span>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-4 gap-1">
-                        {[
-                            { value: 0, label: 'خاموش' },
-                            { value: 5, label: '۵ ثانیه' },
-                            { value: 60, label: '۱ دقیقه' },
-                            { value: 3600, label: '۱ ساعت' }
-                        ].map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => handleSetRefreshInterval(opt.value)}
-                                className={`text-[10px] py-1.5 px-0.5 rounded-lg font-semibold transition-all ${
-                                    refreshInterval === opt.value
-                                    ? 'bg-sky-600 text-white font-black shadow-sm'
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                }`}
-                            >
-                                {opt.label.split(' ')[0] + (opt.label.split(' ')[1] ? opt.label.split(' ')[1][0] : '')}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        type="button"
-                        onClick={triggerManualRefresh}
-                        disabled={isRefreshing}
-                        className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200/50 dark:border-transparent"
-                    >
-                        <RefreshCw className={`w-3.5 h-3.5 text-sky-500 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        <span>بروزرسانی دستی</span>
-                    </button>
+                <div className="mb-5">
+                    <AutoRefreshWidget
+                        refreshInterval={refreshInterval}
+                        onSetInterval={handleSetRefreshInterval}
+                        onManualRefresh={triggerManualRefresh}
+                        isRefreshing={isRefreshing}
+                        countdown={countdown}
+                        variant="sidebar"
+                    />
                 </div>
 
                 <nav className="flex-1 space-y-1 pr-1">
@@ -530,48 +536,15 @@ const App: React.FC = () => {
                         </div>
 
                         {/* Global Auto Refresh Controller for Mobile */}
-                        <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-750 mb-6 space-y-3">
-                            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                                <div className="flex items-center gap-1.5">
-                                    <Clock className="w-4 h-4 text-sky-500 animate-pulse" />
-                                    <span>بروزرسانی خودکار سیستم</span>
-                                </div>
-                                {refreshInterval > 0 && countdown !== null && (
-                                    <span className="text-[10px] font-mono bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 px-2 py-0.5 rounded-md">
-                                        {countdown}ثانیه
-                                    </span>
-                                )}
-                            </div>
-                            <div className="grid grid-cols-4 gap-1.5">
-                                {[
-                                    { value: 0, label: 'خاموش' },
-                                    { value: 5, label: '۵ ثانیه' },
-                                    { value: 60, label: '۱ دقیقه' },
-                                    { value: 3600, label: '۱ ساعت' }
-                                ].map((opt) => (
-                                    <button
-                                        key={opt.value}
-                                        type="button"
-                                        onClick={() => handleSetRefreshInterval(opt.value)}
-                                        className={`text-[10px] py-2 px-0.5 rounded-xl font-bold transition-all text-center ${
-                                            refreshInterval === opt.value
-                                            ? 'bg-sky-600 text-white shadow-sm'
-                                            : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-650'
-                                        }`}
-                                    >
-                                        {opt.label}
-                                    </button>
-                                ))}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={triggerManualRefresh}
-                                disabled={isRefreshing}
-                                className="w-full flex items-center justify-center gap-1.5 bg-white hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-650 text-slate-700 dark:text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-slate-700"
-                            >
-                                <RefreshCw className={`w-3.5 h-3.5 text-sky-500 ${isRefreshing ? 'animate-spin' : ''}`} />
-                                <span>بروزرسانی دستی کل صفحات</span>
-                            </button>
+                        <div className="mb-6">
+                            <AutoRefreshWidget
+                                refreshInterval={refreshInterval}
+                                onSetInterval={handleSetRefreshInterval}
+                                onManualRefresh={triggerManualRefresh}
+                                isRefreshing={isRefreshing}
+                                countdown={countdown}
+                                variant="sidebar"
+                            />
                         </div>
 
                         <div className="grid grid-cols-3 gap-4">
@@ -620,11 +593,21 @@ const App: React.FC = () => {
                     <img src="/vite.svg" alt="Logo" className="w-7 h-7" />
                     <span className="font-black text-lg text-slate-800 dark:text-white">AutoLead</span>
                 </div>
-                <button onClick={() => setActiveView('my-profile')} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs">
-                        {currentUser?.username?.substring(0, 2).toUpperCase() || <UserIcon className="w-4 h-4"/>}
-                    </div>
-                </button>
+                <div className="flex items-center gap-2">
+                    <AutoRefreshWidget
+                        refreshInterval={refreshInterval}
+                        onSetInterval={handleSetRefreshInterval}
+                        onManualRefresh={triggerManualRefresh}
+                        isRefreshing={isRefreshing}
+                        countdown={countdown}
+                        variant="compact-header"
+                    />
+                    <button onClick={() => setActiveView('my-profile')} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs">
+                            {currentUser?.username?.substring(0, 2).toUpperCase() || <UserIcon className="w-4 h-4"/>}
+                        </div>
+                    </button>
+                </div>
             </div>
 
             {/* Main Content Area */}
