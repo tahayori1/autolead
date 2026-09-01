@@ -446,6 +446,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
                     onSave={handleSave}
                     condition={currentCondition}
                     cars={cars}
+                    onCarCreated={(newCar) => setCars(prev => [newCar, ...prev])}
                 />
             )}
 

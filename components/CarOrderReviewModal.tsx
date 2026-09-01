@@ -11,7 +11,7 @@ interface CarOrderReviewModalProps {
     order: CarOrder | null;
     conditions: CarSaleCondition[];
     priceStats: CarPriceStats[];
-    onApproveClick: (data: { finalPrice: number; adminNotes: string; deliveryDeadline: string }) => void;
+    onApproveClick: (data: { finalPrice: number; adminNotes: string; deliveryDeadline: string; deductFromStock: boolean }) => void;
     onRejectClick: (data: { adminNotes: string }) => void;
 }
 
@@ -43,7 +43,8 @@ const CarOrderReviewModal: React.FC<CarOrderReviewModalProps> = ({
     const [reviewData, setReviewData] = useState({
         finalPrice: 0,
         adminNotes: '',
-        deliveryDeadline: ''
+        deliveryDeadline: '',
+        deductFromStock: true
     });
 
     useEffect(() => {
@@ -51,7 +52,8 @@ const CarOrderReviewModal: React.FC<CarOrderReviewModalProps> = ({
             setReviewData({
                 finalPrice: order.proposedPrice,
                 adminNotes: '',
-                deliveryDeadline: ''
+                deliveryDeadline: '',
+                deductFromStock: order.deductFromStock !== undefined ? order.deductFromStock : true
             });
         }
     }, [isOpen, order]);
@@ -276,6 +278,28 @@ const CarOrderReviewModal: React.FC<CarOrderReviewModalProps> = ({
                                                 </button>
                                             ))}
                                         </div>
+                                    </div>
+
+                                    {/* Stock Deduction Option */}
+                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+                                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox"
+                                                checked={reviewData.deductFromStock}
+                                                onChange={e => setReviewData({...reviewData, deductFromStock: e.target.checked})}
+                                                className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:border-slate-600 dark:bg-slate-700 mt-0.5"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-black text-slate-800 dark:text-white block">
+                                                    کسر این فروش از موجودی انبار
+                                                </span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-1 leading-relaxed">
+                                                    {reviewData.deductFromStock 
+                                                        ? '✓ با تایید نهایی، ۱ واحد از موجودی انبار بخشنامه این خودرو کسر خواهد شد.' 
+                                                        : '✕ سفارش بدون کسر موجودی انبار ثبت و تایید می‌گردد.'}
+                                                </span>
+                                            </div>
+                                        </label>
                                     </div>
 
                                     {/* Admin Notes */}

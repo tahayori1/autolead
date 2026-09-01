@@ -21,10 +21,21 @@ interface ApproveModalProps extends BaseModalProps {
     order: CarOrder | null;
     finalPrice: number;
     deliveryDeadline: string;
-    onConfirm: () => void;
+    deductFromStockDefault?: boolean;
+    onConfirm: (deductFromStock: boolean) => void;
 }
 
-export const CarOrderApproveModal: React.FC<ApproveModalProps> = ({ isOpen, onClose, order, finalPrice, deliveryDeadline, onConfirm }) => {
+export const CarOrderApproveModal: React.FC<ApproveModalProps> = ({ 
+    isOpen, onClose, order, finalPrice, deliveryDeadline, deductFromStockDefault = true, onConfirm 
+}) => {
+    const [deductFromStock, setDeductFromStock] = useState(deductFromStockDefault);
+
+    useEffect(() => {
+        if (isOpen) {
+            setDeductFromStock(deductFromStockDefault);
+        }
+    }, [isOpen, deductFromStockDefault]);
+
     if (!isOpen || !order) return null;
 
     return (
@@ -32,7 +43,7 @@ export const CarOrderApproveModal: React.FC<ApproveModalProps> = ({ isOpen, onCl
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 border-t-4 border-emerald-500" onClick={e => e.stopPropagation()}>
                 <h3 className="font-black text-xl text-slate-800 dark:text-white mb-6 text-center">تایید نهایی سفارش</h3>
                 
-                <div className="space-y-4 mb-8">
+                <div className="space-y-4 mb-6">
                     <div className="flex justify-between border-b border-dashed border-slate-200 dark:border-slate-700 pb-2">
                         <span className="text-slate-500 dark:text-slate-400 text-sm">خریدار:</span>
                         <span className="font-bold text-slate-800 dark:text-white">{order.buyerName}</span>
@@ -58,10 +69,32 @@ export const CarOrderApproveModal: React.FC<ApproveModalProps> = ({ isOpen, onCl
                             <span className="font-bold text-slate-800 dark:text-white">{deliveryDeadline}</span>
                         </div>
                     )}
+
+                    {/* Checkbox for deducting stock */}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                            <input 
+                                type="checkbox"
+                                checked={deductFromStock}
+                                onChange={e => setDeductFromStock(e.target.checked)}
+                                className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:border-slate-600 dark:bg-slate-700 mt-0.5"
+                            />
+                            <div>
+                                <span className="text-sm font-black text-slate-800 dark:text-white block">
+                                    کسر این فروش از موجودی انبار
+                                </span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5 leading-relaxed">
+                                    {deductFromStock 
+                                        ? '✓ یک عدد از موجودی انبار بخشنامه این خودرو کسر خواهد شد.' 
+                                        : '✕ سفارش بدون کسر موجودی انبار تایید می‌شود.'}
+                                </span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
 
                 <p className="text-center text-sm font-bold text-slate-600 dark:text-slate-300 mb-6">
-                    آیا از تایید نهایی و اجازه فروش اطمینان دارید؟
+                    آیا از تایید نهایی و صدور اجازه فروش اطمینان دارید؟
                 </p>
 
                 <div className="flex justify-center gap-3">
@@ -69,7 +102,7 @@ export const CarOrderApproveModal: React.FC<ApproveModalProps> = ({ isOpen, onCl
                         خیر
                     </button>
                     <button 
-                        onClick={onConfirm} 
+                        onClick={() => onConfirm(deductFromStock)} 
                         className="px-6 py-3 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-200 dark:shadow-none transition-transform active:scale-95 w-2/3"
                     >
                         بله، تایید نهایی

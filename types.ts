@@ -259,6 +259,7 @@ export interface CarOrder {
     adminNotes?: string;
     finalPrice?: number;
     deliveryDeadline?: string;
+    deductFromStock?: boolean;
     // System
     status: OrderStatus;
     createdBy: string; // username

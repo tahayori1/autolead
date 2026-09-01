@@ -135,6 +135,7 @@ const App: React.FC = () => {
     const [openCategories, setOpenCategories] = useState<{ [key: string]: boolean }>({
         sales: true,
         crm: true,
+        'advertising-group': false,
         ops: true,
         stats: false,
         hr: false,
@@ -238,7 +239,7 @@ const App: React.FC = () => {
         { view: 'home' as ActiveView, label: 'داشبورد', icon: <HomeIcon className="w-5 h-5" /> },
         { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
         { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
-        { view: 'conditions' as ActiveView, label: 'بخشنامه‌های فروش (شرایط)', icon: <ConditionsIcon className="w-5 h-5" /> },
+        { view: 'conditions' as ActiveView, label: 'بخشنامه‌ها فروش', icon: <ConditionsIcon className="w-5 h-5" /> },
         { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
         { view: 'car-prices' as ActiveView, label: 'قیمت روز خودرو', icon: <PriceIcon className="w-5 h-5" /> },
         { view: 'users' as ActiveView, label: 'مدیریت مشتریان (CRM)', icon: <UsersIcon className="w-5 h-5" /> },
@@ -286,9 +287,8 @@ const App: React.FC = () => {
             icon: <ClipboardListIcon className="w-5 h-5" />,
             items: [
                 { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
-                { view: 'conditions' as ActiveView, label: 'بخشنامه‌های فروش (شرایط)', icon: <ConditionsIcon className="w-5 h-5" /> },
+                { view: 'conditions' as ActiveView, label: 'بخشنامه‌ها فروش', icon: <ConditionsIcon className="w-5 h-5" /> },
                 { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
-                { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
                 { view: 'car-prices' as ActiveView, label: 'قیمت روز خودروها', icon: <PriceIcon className="w-5 h-5" /> },
             ]
         },
@@ -299,7 +299,6 @@ const App: React.FC = () => {
             icon: <UsersIcon className="w-5 h-5" />,
             items: [
                 { view: 'users' as ActiveView, label: 'مدیریت مشتریان (CRM)', icon: <UsersIcon className="w-5 h-5" /> },
-                { view: 'notification-center' as ActiveView, label: 'پیام‌رسان هوشمند', icon: <ChatAltIcon className="w-5 h-5" /> },
             ]
         },
         {
@@ -308,6 +307,7 @@ const App: React.FC = () => {
             isCollapsible: true,
             icon: <SpeakerphoneIcon className="w-5 h-5" />,
             items: [
+                { view: 'notification-center' as ActiveView, label: 'پیام‌رسان هوشمند', icon: <ChatAltIcon className="w-5 h-5" /> },
                 { view: 'advertising-report' as ActiveView, label: 'گزارش عملکرد تبلیغات', icon: <FileText className="w-5 h-5 text-indigo-500" /> },
                 ...(currentUser?.isAdmin === 1 ? [
                     { view: 'advertising-campaigns' as ActiveView, label: 'آنالیز کمپین‌ها', icon: <RocketIcon className="w-5 h-5 text-emerald-500" /> }
@@ -348,6 +348,7 @@ const App: React.FC = () => {
             isCollapsible: true,
             icon: <CalendarIcon className="w-5 h-5" />,
             items: [
+                { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
                 { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
                 { view: 'meeting-minutes' as ActiveView, label: 'صورت‌جلسات اداری', icon: <CalendarIcon className="w-5 h-5" /> },
                 { view: 'leave-requests' as ActiveView, label: 'درخواست‌های مرخصی', icon: <UserMinusIcon className="w-5 h-5" /> },
@@ -433,7 +434,7 @@ const App: React.FC = () => {
                     {menuGroups.map((group) => {
                         if (group.items.length === 0) return null;
 
-                        const isOpen = openCategories[group.id] !== false;
+                        const isOpen = Boolean(openCategories[group.id]);
                         const hasActiveChild = group.items.some(child => child.view === activeView);
 
                         return (

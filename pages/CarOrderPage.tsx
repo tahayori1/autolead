@@ -27,8 +27,6 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
     const [loading, setLoading] = useState(true);
     
     // Auto Refresh State
-    const [autoRefresh, setAutoRefresh] = useState(false);
-    
     // Filters State
     const [filters, setFilters] = useState({
         search: '',
@@ -57,7 +55,8 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
     const [reviewData, setReviewData] = useState({
         finalPrice: 0,
         adminNotes: '',
-        deliveryDeadline: ''
+        deliveryDeadline: '',
+        deductFromStock: true
     });
 
     const fetchData = useCallback(async (isAutoRefresh = false) => {
@@ -92,17 +91,6 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
         window.addEventListener('app-refresh', handleRefresh);
         return () => window.removeEventListener('app-refresh', handleRefresh);
     }, [fetchData]);
-
-    // Auto Refresh Effect
-    useEffect(() => {
-        let interval: any;
-        if (autoRefresh) {
-            interval = setInterval(() => {
-                fetchData(true);
-            }, 10000); // 10 seconds
-        }
-        return () => clearInterval(interval);
-    }, [autoRefresh, fetchData]);
 
     // Filter Helpers
     const carNames = useMemo(() => Array.from(new Set(orders.map(o => o.carName))).sort(), [orders]);
@@ -190,7 +178,8 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
 
     const returnStockIfNecessary = async (order: CarOrder) => {
         const activeStatuses = [OrderStatus.PENDING_PAYMENT, OrderStatus.PENDING_FINANCE, OrderStatus.READY_FOR_DELIVERY, OrderStatus.EXIT_PROCESS, OrderStatus.COMPLETED];
-        if (activeStatuses.includes(order.status)) {
+        // Only return stock if it was actually deducted during approval
+        if (activeStatuses.includes(order.status) && order.deductFromStock !== false) {
             try {
                 const allConditions = await getConditions();
                 const cond = allConditions.find(c => c.id === order.conditionId);
@@ -244,32 +233,36 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
         }
     };
 
-    const executeApprove = async () => {
+    const executeApprove = async (deductStockOverride?: boolean) => {
         if (!selectedOrder) return;
         const now = moment().format('YYYY-MM-DD HH:mm:ss');
+        const shouldDeduct = deductStockOverride !== undefined ? deductStockOverride : reviewData.deductFromStock;
         
         try {
-            const allConditions = await getConditions();
-            const associatedCondition = allConditions.find(c => c.id === selectedOrder.conditionId);
-            
-            if (associatedCondition) {
-                if (associatedCondition.stock_quantity <= 0) {
-                    setToast({ message: 'موجودی انبار تمام شده است.', type: 'error' });
-                    return;
+            if (shouldDeduct) {
+                const allConditions = await getConditions();
+                const associatedCondition = allConditions.find(c => c.id === selectedOrder.conditionId);
+                
+                if (associatedCondition) {
+                    if (associatedCondition.stock_quantity <= 0) {
+                        setToast({ message: 'موجودی انبار این بخشنامه صفر است اما سفارش تایید شد.', type: 'error' });
+                    } else {
+                        await updateCondition(associatedCondition.id, { ...associatedCondition, stock_quantity: associatedCondition.stock_quantity - 1 });
+                    }
                 }
-                await updateCondition(associatedCondition.id, { ...associatedCondition, stock_quantity: associatedCondition.stock_quantity - 1 });
             }
 
-            const trackingCode = `ACL-${Math.floor(100000 + Math.random() * 900000)}`;
+            const trackingCode = selectedOrder.trackingCode || `ACL-${Math.floor(100000 + Math.random() * 900000)}`;
             await carOrdersService.update({
                 ...selectedOrder,
                 ...reviewData,
+                deductFromStock: shouldDeduct,
                 trackingCode,
                 status: OrderStatus.PENDING_PAYMENT,
                 updatedAt: now,
             });
 
-            setToast({ message: `سفارش تایید و کد رهگیری ${trackingCode} صادر شد.`, type: 'success' });
+            setToast({ message: `سفارش تایید و کد رهگیری ${trackingCode} صادر شد.${shouldDeduct ? ' (از انبار کسر گردید)' : ''}`, type: 'success' });
             setIsReviewModalOpen(false);
             setIsApproveConfirmModalOpen(false);
             fetchData();
@@ -382,28 +375,15 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
-                    {/* Refresh Controls */}
-                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1.5 rounded-xl">
-                        <button 
-                            onClick={() => fetchData(false)} 
-                            className="p-2.5 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-600 rounded-lg transition-all shadow-sm active:scale-95"
-                            title="بروزرسانی لیست"
-                        >
-                            <RefreshIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                        </button>
-                        <div className="h-6 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                        <button
-                            onClick={() => setAutoRefresh(!autoRefresh)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
-                                autoRefresh 
-                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-inner' 
-                                : 'text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-600'
-                            }`}
-                        >
-                            <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
-                            {autoRefresh ? 'بروزرسانی خودکار: روشن' : 'بروزرسانی خودکار: خاموش'}
-                        </button>
-                    </div>
+                    {/* Manual Refresh Button */}
+                    <button 
+                        onClick={() => fetchData(false)} 
+                        className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-600 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-2 text-xs font-bold border border-slate-200/60 dark:border-slate-650"
+                        title="بروزرسانی لیست"
+                    >
+                        <RefreshIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        <span>بروزرسانی</span>
+                    </button>
 
                     <button 
                         onClick={() => { setSelectedOrder(null); setIsCreateModalOpen(true); }} 
@@ -480,6 +460,7 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
                 order={selectedOrder}
                 finalPrice={reviewData.finalPrice}
                 deliveryDeadline={reviewData.deliveryDeadline}
+                deductFromStockDefault={reviewData.deductFromStock}
                 onConfirm={executeApprove}
             />
 
