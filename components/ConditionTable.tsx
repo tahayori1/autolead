@@ -7,7 +7,7 @@ import { TrashIcon } from './icons/TrashIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { SortIcon } from './icons/SortIcon';
 import { CopyIcon } from './icons/CopyIcon';
-import { Clock } from 'lucide-react';
+import { Clock, User, UserCheck } from 'lucide-react';
 import { formatConditionDateTime } from '../services/api';
 
 interface ConditionTableProps {
@@ -114,6 +114,25 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                                 {formatConditionDateTime(condition)}
                                             </span>
                                         </div>
+                                        {/* Creator & Editor info */}
+                                        {(condition.created_by_name || condition.created_by || condition.createdBy || condition.updated_by_name || condition.updated_by) && (
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                                {(condition.created_by_name || condition.created_by || condition.createdBy) && (
+                                                    <span className="flex items-center gap-0.5" title="کاربر ثبت‌کننده">
+                                                        <User className="w-2.5 h-2.5 text-slate-400" />
+                                                        <span>ثبت:</span>
+                                                        <span className="font-bold text-slate-600 dark:text-slate-300">{condition.created_by_name || condition.created_by || condition.createdBy}</span>
+                                                    </span>
+                                                )}
+                                                {(condition.updated_by_name || condition.updated_by) && (
+                                                    <span className="flex items-center gap-0.5" title="کاربر آخرین ویرایش‌کننده">
+                                                        <UserCheck className="w-2.5 h-2.5 text-indigo-400" />
+                                                        <span>ویرایش:</span>
+                                                        <span className="font-bold text-indigo-600 dark:text-indigo-300">{condition.updated_by_name || condition.updated_by}</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </td>
                                 <td className="px-6 py-4">{condition.sale_type}</td>
@@ -180,6 +199,24 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                         {formatConditionDateTime(condition)}
                                     </span>
                                 </div>
+                                {(condition.created_by_name || condition.created_by || condition.createdBy || condition.updated_by_name || condition.updated_by) && (
+                                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-1.5 pt-1.5 border-t border-slate-200/40 dark:border-slate-600/40 text-[10px] text-slate-500 dark:text-slate-400">
+                                        {(condition.created_by_name || condition.created_by || condition.createdBy) && (
+                                            <span className="flex items-center gap-1">
+                                                <User className="w-3 h-3 text-slate-400" />
+                                                <span>ثبت:</span>
+                                                <span className="font-bold text-slate-700 dark:text-slate-200">{condition.created_by_name || condition.created_by || condition.createdBy}</span>
+                                            </span>
+                                        )}
+                                        {(condition.updated_by_name || condition.updated_by) && (
+                                            <span className="flex items-center gap-1">
+                                                <UserCheck className="w-3 h-3 text-indigo-400" />
+                                                <span>ویرایش:</span>
+                                                <span className="font-bold text-indigo-600 dark:text-indigo-300">{condition.updated_by_name || condition.updated_by}</span>
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-slate-600 dark:text-slate-300">
                                 <div className="flex flex-col">

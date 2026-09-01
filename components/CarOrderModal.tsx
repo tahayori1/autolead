@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { CarOrder, Car, CarSaleCondition, CarPriceStats, ScrapedCarPrice, User } from '../types';
+import type { CarOrder, Car, CarSaleCondition, CarPriceStats, ScrapedCarPrice, User, StaffUser } from '../types';
 import { OrderStatus, SaleType, PayType } from '../types';
 import { 
     Search, 
@@ -34,7 +34,7 @@ import {
     UserCheck
 } from 'lucide-react';
 import { CloseIcon } from './icons/CloseIcon';
-import { getCars, getConditions, getCarPriceStats, getScrapedCarPrices, getUsers, createCondition, createUser, createCallLog, createCustomerJournal } from '../services/api';
+import { getCars, getConditions, getCarPriceStats, getScrapedCarPrices, getUsers, getStaffUsers, createCondition, createUser, createCallLog, createCustomerJournal } from '../services/api';
 import Spinner from './Spinner';
 import ConditionModal from './ConditionModal';
 
@@ -149,6 +149,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
     const [priceStats, setPriceStats] = useState<CarPriceStats[]>([]);
     const [scrapedPrices, setScrapedPrices] = useState<ScrapedCarPrice[]>([]);
     const [crmUsers, setCrmUsers] = useState<User[]>([]);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+    const [expertSearchQuery, setExpertSearchQuery] = useState('');
     const [selectedPriceYear, setSelectedPriceYear] = useState<string | null>(null);
     const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -178,7 +180,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         conditionSummary: '',
         selectedColor: '',
         proposedPrice: 0,
-        userNotes: ''
+        userNotes: '',
+        carExperts: [] as string[]
     });
 
     useEffect(() => {
@@ -186,6 +189,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
             setLoading(true);
             setStep(1);
             setSelectedPriceYear(null);
+            setExpertSearchQuery('');
             
             if (editOrder) {
                 setFormData({
@@ -200,7 +204,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     conditionSummary: editOrder.conditionSummary || '',
                     selectedColor: editOrder.selectedColor || '',
                     proposedPrice: editOrder.proposedPrice || 0,
-                    userNotes: editOrder.userNotes || ''
+                    userNotes: editOrder.userNotes || '',
+                    carExperts: editOrder.carExperts || []
                 });
             } else if (initialBuyerData) {
                 setFormData(prev => ({
@@ -211,6 +216,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     buyerNationalId: initialBuyerData.nationalId || prev.buyerNationalId,
                     buyerAddress: initialBuyerData.address || prev.buyerAddress,
                     buyerPostalCode: initialBuyerData.postalCode || prev.buyerPostalCode,
+                    carExperts: []
                 }));
             } else {
                 setFormData({
@@ -225,17 +231,26 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     conditionSummary: '',
                     selectedColor: '',
                     proposedPrice: 0,
-                    userNotes: ''
+                    userNotes: '',
+                    carExperts: []
                 });
             }
 
-            Promise.all([getCars(), getConditions(), getCarPriceStats(), getScrapedCarPrices(), getUsers()])
-                .then(([carsData, conditionsData, statsData, scrapedData, usersData]) => {
+            Promise.all([
+                getCars(), 
+                getConditions(), 
+                getCarPriceStats(), 
+                getScrapedCarPrices(), 
+                getUsers(),
+                getStaffUsers().catch(() => [])
+            ])
+                .then(([carsData, conditionsData, statsData, scrapedData, usersData, staffData]) => {
                     setCars(carsData);
                     setConditions(conditionsData);
                     setPriceStats(statsData);
                     setScrapedPrices(scrapedData || []);
                     setCrmUsers(usersData);
+                    setStaffUsers(staffData || []);
                     
                     if (editOrder) {
                         const cond = conditionsData.find(c => c.id === editOrder.conditionId);
@@ -792,6 +807,40 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         setStep(prev => Math.max(1, prev - 1));
     };
 
+    // Expert Selection Handlers (Max 4 Experts)
+    const handleToggleExpert = (expertName: string) => {
+        const trimmed = expertName.trim();
+        if (!trimmed) return;
+        setFormData(prev => {
+            const current = prev.carExperts || [];
+            if (current.includes(trimmed)) {
+                return { ...prev, carExperts: current.filter(e => e !== trimmed) };
+            }
+            if (current.length >= 4) {
+                return prev; // Maximum 4 experts
+            }
+            return { ...prev, carExperts: [...current, trimmed] };
+        });
+    };
+
+    const handleRemoveExpert = (expertName: string) => {
+        setFormData(prev => ({
+            ...prev,
+            carExperts: (prev.carExperts || []).filter(e => e !== expertName)
+        }));
+    };
+
+    // Filter staff users by search query
+    const filteredStaffUsers = useMemo(() => {
+        if (!expertSearchQuery.trim()) return staffUsers;
+        const q = expertSearchQuery.toLowerCase();
+        return staffUsers.filter(u => 
+            (u.fullName && u.fullName.toLowerCase().includes(q)) ||
+            (u.username && u.username.toLowerCase().includes(q)) ||
+            (u.role && u.role.toLowerCase().includes(q))
+        );
+    }, [staffUsers, expertSearchQuery]);
+
     // CRM Search Handlers
     const handleCrmSearch = (query: string) => {
         setCrmSearchQuery(query);
@@ -901,7 +950,11 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 return false;
             });
 
-            const orderDescription = `ثبت سفارش خودرو ${formData.carName} (${selectedConditionObj?.sale_type || ''} - ${selectedConditionObj?.pay_type || ''})\nقیمت معامله پیشنهادی: ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nکد ملی: ${formData.buyerNationalId || '-'}\nکد پستی: ${formData.buyerPostalCode || '-'}\nآدرس: ${formData.buyerAddress || formData.buyerCity || '-'}\nرنگ انتخابی: ${formData.selectedColor || '-'}${formData.userNotes ? `\nتوضیحات: ${formData.userNotes}` : ''}`;
+            const expertsStr = (formData.carExperts && formData.carExperts.length > 0)
+                ? `\nکارشناسان خودرو دخیل در معامله: ${formData.carExperts.join('، ')}`
+                : '';
+
+            const orderDescription = `ثبت سفارش خودرو ${formData.carName} (${selectedConditionObj?.sale_type || ''} - ${selectedConditionObj?.pay_type || ''})\nقیمت معامله پیشنهادی: ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nکد ملی: ${formData.buyerNationalId || '-'}\nکد پستی: ${formData.buyerPostalCode || '-'}\nآدرس: ${formData.buyerAddress || formData.buyerCity || '-'}\nرنگ انتخابی: ${formData.selectedColor || '-'}${expertsStr}${formData.userNotes ? `\nتوضیحات: ${formData.userNotes}` : ''}`;
 
             if (!existingUser) {
                 // Customer is NOT in CRM -> Create in CRM with descriptions
@@ -929,7 +982,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                         // Journal entry
                         await createCustomerJournal({
                             userId: targetId,
-                            content: `🚗 ثبت مشتری جدید و سفارش خودرو در سیستم\nخودرو: ${formData.carName}\nنوع فروش: ${selectedConditionObj?.sale_type || '-'}\nشیوه پرداخت: ${selectedConditionObj?.pay_type || '-'}\nقیمت معامله پیشنهادی: ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nرنگ: ${formData.selectedColor || '-'}\nکد ملی: ${formData.buyerNationalId || '-'}\nآدرس: ${formData.buyerAddress || formData.buyerCity || '-'}${formData.userNotes ? `\nتوضیحات خریدار: ${formData.userNotes}` : ''}`,
+                            content: `🚗 ثبت مشتری جدید و سفارش خودرو در سیستم\nخودرو: ${formData.carName}\nنوع فروش: ${selectedConditionObj?.sale_type || '-'}\nشیوه پرداخت: ${selectedConditionObj?.pay_type || '-'}\nقیمت معامله پیشنهادی: ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nرنگ: ${formData.selectedColor || '-'}\nکد ملی: ${formData.buyerNationalId || '-'}\nآدرس: ${formData.buyerAddress || formData.buyerCity || '-'}${expertsStr}${formData.userNotes ? `\nتوضیحات خریدار: ${formData.userNotes}` : ''}`,
                             author: username || 'کاربر سیستم'
                         }).catch(e => console.warn("Failed to create customer journal:", e));
 
@@ -942,7 +995,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                             callStatus: 'SUCCESSFUL',
                             duration: 0,
                             agentName: username || 'کاربر سیستم',
-                            notes: `📋 ثبت سفارش خودرو ${formData.carName} (ثبت نام مخاطب جدید در CRM) با قیمت پیشنهادی ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان`,
+                            notes: `📋 ثبت سفارش خودرو ${formData.carName} (ثبت نام مخاطب جدید در CRM) با قیمت پیشنهادی ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان${(formData.carExperts && formData.carExperts.length > 0) ? ` | کارشناسان: ${formData.carExperts.join('، ')}` : ''}`,
                             timestamp: new Date().toLocaleString('fa-IR')
                         }).catch(e => console.warn("Failed to create call log:", e));
                     }
@@ -962,13 +1015,13 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                             callStatus: 'SUCCESSFUL',
                             duration: 0,
                             agentName: username || 'کاربر سیستم',
-                            notes: `📋 ثبت گزارش فعالیت / ثبت سفارش خودرو: ${formData.carName} (${selectedConditionObj?.sale_type || ''}) با قیمت پیشنهادی ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nرنگ: ${formData.selectedColor || '-'}${formData.userNotes ? ` | توضیحات: ${formData.userNotes}` : ''}`,
+                            notes: `📋 ثبت گزارش فعالیت / ثبت سفارش خودرو: ${formData.carName} (${selectedConditionObj?.sale_type || ''}) با قیمت پیشنهادی ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nرنگ: ${formData.selectedColor || '-'}${(formData.carExperts && formData.carExperts.length > 0) ? ` | کارشناسان: ${formData.carExperts.join('، ')}` : ''}${formData.userNotes ? ` | توضیحات: ${formData.userNotes}` : ''}`,
                             timestamp: new Date().toLocaleString('fa-IR')
                         }).catch(e => console.warn("Failed to create call log for existing user:", e));
 
                         await createCustomerJournal({
                             userId: targetId,
-                            content: `🚗 ثبت سفارش جدید خودرو برای این مشتری در CRM\nخودرو: ${formData.carName}\nنوع فروش: ${selectedConditionObj?.sale_type || '-'}\nشیوه پرداخت: ${selectedConditionObj?.pay_type || '-'}\nقیمت معامله پیشنهادی: ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nرنگ: ${formData.selectedColor || '-'}${formData.userNotes ? `\nتوضیحات: ${formData.userNotes}` : ''}`,
+                            content: `🚗 ثبت سفارش جدید خودرو برای این مشتری در CRM\nخودرو: ${formData.carName}\nنوع فروش: ${selectedConditionObj?.sale_type || '-'}\nشیوه پرداخت: ${selectedConditionObj?.pay_type || '-'}\nقیمت معامله پیشنهادی: ${(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان\nرنگ: ${formData.selectedColor || '-'}${expertsStr}${formData.userNotes ? `\nتوضیحات: ${formData.userNotes}` : ''}`,
                             author: username || 'کاربر سیستم'
                         }).catch(e => console.warn("Failed to create customer journal:", e));
                     }
@@ -2057,6 +2110,106 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                         + {note}
                                                     </button>
                                                 ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Car Experts Selection (Max 4 Experts) */}
+                                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-2.5">
+                                            <h4 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                                                <UserCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                                                <span>کارشناسان خودرو دخیل در خرید و معامله خودرو</span>
+                                            </h4>
+                                            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold transition-all ${
+                                                (formData.carExperts || []).length === 4 
+                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-black'
+                                                    : 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300'
+                                            }`}>
+                                                {(formData.carExperts || []).length} از ۴ کارشناس انتخاب شده
+                                            </span>
+                                        </div>
+
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                                            نام کارشناس یا کارشناسان خودرو دخیل در این خرید و معامله را از بین کاربران و کارشناسان سیستم انتخاب فرمایید (حداکثر ۴ کارشناس).
+                                        </p>
+
+                                        {/* Selected Expert Badges */}
+                                        {(formData.carExperts || []).length > 0 ? (
+                                            <div className="flex flex-wrap gap-2 p-3 bg-teal-50/60 dark:bg-teal-950/30 rounded-xl border border-teal-100 dark:border-teal-900/50">
+                                                {(formData.carExperts || []).map((expert, idx) => (
+                                                    <div 
+                                                        key={idx} 
+                                                        className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-teal-800 rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm transition-all"
+                                                    >
+                                                        <div className="w-5 h-5 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center text-[10px] text-teal-700 dark:text-teal-300 font-mono font-bold">
+                                                            {idx + 1}
+                                                        </div>
+                                                        <span>{expert}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveExpert(expert)}
+                                                            className="text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 p-0.5 rounded-md transition-colors"
+                                                            title="حذف کارشناس"
+                                                        >
+                                                            <XCircle className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-center text-xs text-slate-400">
+                                                هنوز کارشناسی برای این سفارش انتخاب نشده است. از لیست کارشناسان زیر انتخاب نمایید.
+                                            </div>
+                                        )}
+
+                                        {/* Search & Staff User Chips Selection */}
+                                        <div className="space-y-2">
+                                            <div className="relative">
+                                                <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="جستجو در نام، نام خانوادگی یا سمت کارشناسان..." 
+                                                    className="w-full pr-8 pl-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                                                    value={expertSearchQuery}
+                                                    onChange={e => setExpertSearchQuery(e.target.value)}
+                                                />
+                                            </div>
+
+                                            {/* Staff User Chips Grid */}
+                                            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 border border-slate-100 dark:border-slate-700/60 rounded-xl bg-slate-50/40 dark:bg-slate-900/20">
+                                                {filteredStaffUsers.length > 0 ? (
+                                                    filteredStaffUsers.map(staff => {
+                                                        const displayName = staff.fullName || staff.username;
+                                                        const isSelected = (formData.carExperts || []).includes(displayName);
+                                                        const isMaxReached = (formData.carExperts || []).length >= 4 && !isSelected;
+
+                                                        return (
+                                                            <button
+                                                                key={staff.id}
+                                                                type="button"
+                                                                disabled={isMaxReached}
+                                                                onClick={() => handleToggleExpert(displayName)}
+                                                                className={`text-xs px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all ${
+                                                                    isSelected
+                                                                        ? 'bg-teal-600 text-white shadow-sm shadow-teal-500/20'
+                                                                        : isMaxReached
+                                                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-40'
+                                                                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-teal-950/50 dark:hover:text-teal-300 border border-slate-200 dark:border-slate-700 shadow-2xs'
+                                                                }`}
+                                                            >
+                                                                <UserIcon className="w-3 h-3 text-slate-400" />
+                                                                <span>{displayName}</span>
+                                                                {staff.role && <span className="text-[10px] opacity-75 font-normal">({staff.role})</span>}
+                                                                {isSelected && <Check className="w-3 h-3" />}
+                                                            </button>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <div className="w-full py-3 text-center text-xs text-slate-400">
+                                                        کاربری با این مشخصات یافت نشد
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

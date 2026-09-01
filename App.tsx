@@ -55,7 +55,7 @@ import { BadgeIcon } from './components/icons/BadgeIcon';
 import { ChatAltIcon } from './components/icons/ChatAltIcon';
 import { RocketIcon } from './components/icons/RocketIcon';
 import { ClipboardListIcon } from './components/icons/ClipboardListIcon';
-import { getMyProfile } from './services/api';
+import { getMyProfile, recordUserActivity } from './services/api';
 import type { MyProfile } from './types';
 
 export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
@@ -203,6 +203,7 @@ const App: React.FC = () => {
     const handleNavigate = (view: ActiveView) => {
         setActiveView(view);
         setIsMoreMenuOpen(false);
+        recordUserActivity(`مشاهده صفحه ${view}`);
     };
 
     const handleNavigateToLeads = (carModel: string) => {

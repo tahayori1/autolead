@@ -36,8 +36,11 @@ import {
     Eye,
     Printer,
     Copy,
-    ArrowRight
+    ArrowRight,
+    BarChart3,
+    FileSpreadsheet
 } from 'lucide-react';
+import { CorrectiveActionsAnalyticsView } from '../components/corrective-actions/CorrectiveActionsAnalyticsView';
 
 declare const moment: any;
 
@@ -234,6 +237,7 @@ const CorrectiveActionsPage: React.FC = () => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     // Filters and search
+    const [activeViewTab, setActiveViewTab] = useState<'LIST' | 'REPORTS'>('LIST');
     const [filterTab, setFilterTab] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CRITICAL'>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
@@ -310,6 +314,11 @@ const CorrectiveActionsPage: React.FC = () => {
         });
         setModalStep(1);
         setIsModalOpen(true);
+    };
+
+    const openDetailModal = (action: CorrectiveAction) => {
+        setSelectedActionForDetail(action);
+        setIsDetailModalOpen(true);
     };
 
     const handleSave = async () => {
@@ -576,11 +585,11 @@ const CorrectiveActionsPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                             <h2 className="text-xl font-black text-slate-800 dark:text-white">سامانه مدیریت اقدامات اصلاحی (CAPA)</h2>
                             <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                                چند بخشی و چند مرحله‌ای
+                                نسخه جامع با سیستم گزارش‌گیری
                             </span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            شناسایی عدم انطباق‌ها، ریشه‌یابی، تعریف برنامه اصلاحی، و پایش سه‌گانه زمان ثبت، مهلت و تاریخ اجرا
+                            شناسایی عدم انطباق‌ها، ریشه‌یابی، تعریف برنامه اصلاحی، پایش زمان‌بندی و مرکز گزارش‌گیری تحلیلی
                         </p>
                     </div>
                 </div>
@@ -595,7 +604,52 @@ const CorrectiveActionsPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Top Metrics Cards */}
+            {/* View Mode Navigation Switcher Tabs */}
+            <div className="flex bg-slate-200/70 dark:bg-slate-800/80 p-1.5 rounded-2xl gap-1.5 border border-slate-200 dark:border-slate-700">
+                <button
+                    type="button"
+                    onClick={() => setActiveViewTab('LIST')}
+                    className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                        activeViewTab === 'LIST'
+                            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/60 dark:border-slate-800'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                    <ClipboardCheckIcon className="w-4 h-4" />
+                    <span>لیست و مدیریت اقدامات اصلاحی</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">
+                        {stats.total}
+                    </span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveViewTab('REPORTS')}
+                    className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                        activeViewTab === 'REPORTS'
+                            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/60 dark:border-slate-800'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                    <BarChart3 className="w-4 h-4" />
+                    <span>داشبورد و مرکز گزارش‌گیری جامع (CAPA Reports & Analytics)</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold">
+                        اکسل و پرینت
+                    </span>
+                </button>
+            </div>
+
+            {/* TAB CONTENT */}
+            {activeViewTab === 'REPORTS' ? (
+                <CorrectiveActionsAnalyticsView
+                    actions={actions}
+                    onOpenCreateModal={openCreateModal}
+                    onViewDetail={openDetailModal}
+                    onSetToast={setToast}
+                />
+            ) : (
+                <>
+                    {/* Top Metrics Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                 <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
                     <div>
@@ -999,6 +1053,8 @@ const CorrectiveActionsPage: React.FC = () => {
                         </div>
                     )}
                 </div>
+            )}
+            </>
             )}
 
             {/* MULTI-SECTION CREATE / EDIT MODAL */}

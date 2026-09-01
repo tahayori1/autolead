@@ -79,7 +79,7 @@ const CarOrderList: React.FC<CarOrderListProps> = ({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
                                 <div>
                                     <span className="block text-xs text-slate-400 mb-1">خریدار:</span>
                                     <span className="font-bold">{order.buyerName}</span>
@@ -94,6 +94,23 @@ const CarOrderList: React.FC<CarOrderListProps> = ({
                                     <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{order.finalPrice ? order.finalPrice.toLocaleString('fa-IR') : '---'}</span>
                                 </div>
                             </div>
+
+                            {/* Car Experts Involved */}
+                            {order.carExperts && order.carExperts.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 mb-4 px-3 py-2 bg-teal-50/50 dark:bg-teal-950/20 rounded-xl border border-teal-100/70 dark:border-teal-900/40 text-xs">
+                                    <span className="font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1 text-[11px]">
+                                        <span>🧑‍💼</span>
+                                        کارشناسان دخیل:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {order.carExperts.map((exp, idx) => (
+                                            <span key={idx} className="bg-white dark:bg-slate-800 text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-teal-800 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                                {exp}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Action Buttons */}
                             <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">

@@ -180,6 +180,26 @@ const CarOrderReviewModal: React.FC<CarOrderReviewModalProps> = ({
                                     </p>
                                 </div>
                             )}
+
+                            {/* 3.5 Car Experts Involved */}
+                            {order.carExperts && order.carExperts.length > 0 && (
+                                <div className="bg-teal-50/70 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/50 rounded-2xl p-4">
+                                    <h4 className="text-xs font-bold text-teal-800 dark:text-teal-300 mb-2.5 flex items-center gap-2">
+                                        <span>🧑‍💼</span>
+                                        کارشناسان خودرو دخیل در معامله ({order.carExperts.length} نفر):
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {order.carExperts.map((exp, idx) => (
+                                            <span key={idx} className="bg-white dark:bg-slate-800 text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-teal-800/80 px-2.5 py-1 rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5">
+                                                <span className="w-4 h-4 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[10px] font-mono">
+                                                    {idx + 1}
+                                                </span>
+                                                {exp}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             
                             {/* 4. Market Analysis */}
                             {reviewPriceAnalysis && reviewPriceAnalysis.info && (

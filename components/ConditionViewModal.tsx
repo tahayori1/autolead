@@ -1,7 +1,7 @@
 import React from 'react';
 import type { CarSaleCondition } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
-import { User, ClipboardCheck, Info, Sparkles, Clock } from 'lucide-react';
+import { User, ClipboardCheck, Info, Sparkles, Clock, UserCheck, ShieldCheck } from 'lucide-react';
 import { formatConditionDateTime } from '../services/api';
 
 interface ConditionViewModalProps {
@@ -24,6 +24,9 @@ const ConditionViewModal: React.FC<ConditionViewModalProps> = ({ isOpen, onClose
         window.print();
     };
 
+    const creator = condition.created_by_name || condition.created_by || condition.createdBy;
+    const editor = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 print:bg-transparent print:p-0" onClick={onClose}>
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col print:shadow-none print:max-h-full print:rounded-none" onClick={(e) => e.stopPropagation()}>
@@ -43,6 +46,34 @@ const ConditionViewModal: React.FC<ConditionViewModalProps> = ({ isOpen, onClose
                             </span>
                         </div>
                     </div>
+
+                    {/* Audit Trail: Creator & Editor Information */}
+                    {(creator || editor) && (
+                        <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-slate-50/80 dark:bg-slate-900/40 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            {creator && (
+                                <div className="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/50">
+                                    <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                                        <User className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-400 block">کاربر ثبت‌کننده اولیه:</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">{creator}</span>
+                                    </div>
+                                </div>
+                            )}
+                            {editor && (
+                                <div className="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/50">
+                                    <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                        <UserCheck className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-400 block">آخرین ویرایش توسط:</span>
+                                        <span className="font-bold text-indigo-700 dark:text-indigo-300">{editor}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Integrated Used Car Appraisal Section */}
                     {condition.expert_report_id && (

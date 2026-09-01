@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getConditions, createCondition, updateCondition, deleteCondition, getCars } from '../services/api';
+import { getConditions, createCondition, updateCondition, deleteCondition, getCars, getMyProfile } from '../services/api';
 import { SaleType, ConditionStatus } from '../types';
-import type { CarSaleCondition, Car } from '../types';
+import type { CarSaleCondition, Car, MyProfile } from '../types';
 import ConditionTable from '../components/ConditionTable';
 import FilterPanel from '../components/FilterPanel';
 import ConditionModal from '../components/ConditionModal';
@@ -113,11 +113,39 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
     
     const handleSave = async (conditionData: Omit<CarSaleCondition, 'id'>) => {
         try {
+            // Retrieve current user info for audit tracking
+            let userProfile: any = null;
+            try {
+                userProfile = await getMyProfile();
+            } catch (pErr) {
+                console.warn("Could not retrieve profile during condition save:", pErr);
+            }
+            const currentDisplayName = userProfile?.full_name || userProfile?.fullName || userProfile?.username || localStorage.getItem('username') || 'کاربر سیستم';
+            const currentUsername = userProfile?.username || localStorage.getItem('username') || currentDisplayName;
+
             if (currentCondition && currentCondition.id !== 0) {
-                await updateCondition(currentCondition.id, { ...conditionData, id: currentCondition.id });
+                const updatedPayload = {
+                    ...conditionData,
+                    id: currentCondition.id,
+                    created_by: currentCondition.created_by || currentCondition.createdBy || currentDisplayName,
+                    created_by_name: currentCondition.created_by_name || currentCondition.created_by || currentCondition.createdBy || currentDisplayName,
+                    updated_by: currentUsername,
+                    updated_by_name: currentDisplayName,
+                    updatedAt: new Date().toISOString()
+                };
+                await updateCondition(currentCondition.id, updatedPayload);
                 showToast('شرط با موفقیت ویرایش شد', 'success');
             } else {
-                await createCondition(conditionData);
+                const newPayload = {
+                    ...conditionData,
+                    created_by: currentUsername,
+                    created_by_name: currentDisplayName,
+                    updated_by: currentUsername,
+                    updated_by_name: currentDisplayName,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                await createCondition(newPayload);
                 showToast('شرط جدید با موفقیت اضافه شد', 'success');
             }
             setIsModalOpen(false);
@@ -238,11 +266,26 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
     const handleBulkSave = async (updates: Partial<CarSaleCondition>) => {
         try {
             setLoading(true);
+            let userProfile: any = null;
+            try {
+                userProfile = await getMyProfile();
+            } catch (pErr) {
+                console.warn("Could not retrieve profile during bulk save:", pErr);
+            }
+            const currentDisplayName = userProfile?.full_name || userProfile?.fullName || userProfile?.username || localStorage.getItem('username') || 'کاربر سیستم';
+            const currentUsername = userProfile?.username || localStorage.getItem('username') || currentDisplayName;
+
             const selectedConditions = conditions.filter(c => selectedIds.has(c.id));
             
             // Sequential updates to the API
             for (const condition of selectedConditions) {
-                await updateCondition(condition.id, { ...condition, ...updates });
+                await updateCondition(condition.id, { 
+                    ...condition, 
+                    ...updates,
+                    updated_by: currentUsername,
+                    updated_by_name: currentDisplayName,
+                    updatedAt: new Date().toISOString()
+                });
             }
 
             showToast('تغییرات گروهی با موفقیت اعمال شد', 'success');

@@ -81,6 +81,12 @@ export interface CarSaleCondition {
     owner_phone?: string | null;
     expert_report_id?: number | null;
     expert_report_title?: string | null;
+    created_by?: string | null;
+    createdBy?: string | null;
+    created_by_name?: string | null;
+    updated_by?: string | null;
+    updatedBy?: string | null;
+    updated_by_name?: string | null;
     updatedAt?: string | null;
     updated_at?: string | null;
     last_update?: string | null;
@@ -255,6 +261,9 @@ export interface CarOrder {
     selectedColor: string;
     proposedPrice: number;
     userNotes: string;
+    // Car Experts (Max 4 experts involved in the purchase/deal)
+    carExperts?: string[];
+    expertIds?: number[];
     // Admin Review
     adminNotes?: string;
     finalPrice?: number;
@@ -286,6 +295,9 @@ export interface ApiSystemUser {
     isAdmin: number; // 0 or 1
     register_time: string;
     last_update: string;
+    last_login?: string | null;
+    last_activity?: string | null;
+    last_activity_action?: string | null;
     mobile: string | null;
     email: string | null;
     password?: string; // Optional for request payloads
@@ -311,6 +323,8 @@ export interface MyProfile {
     mbti: string | null;
     description: string | null;
     last_login: string | null;
+    last_activity?: string | null;
+    last_activity_action?: string | null;
     birth_date: string | null;
 }
 
@@ -319,9 +333,19 @@ export interface StaffUser {
     username: string;
     password?: string; // Optional, used only for creation
     fullName: string;
+    full_name?: string;
     role: 'ADMIN' | 'STAFF';
     permissions: Permission[];
+    registerTime?: string;
+    register_time?: string;
+    createdAt?: string;
     lastLogin?: string;
+    last_login?: string;
+    lastActivity?: string;
+    last_activity?: string;
+    lastActivityAction?: string;
+    mobile?: string | null;
+    email?: string | null;
     isActive: boolean;
 }
 

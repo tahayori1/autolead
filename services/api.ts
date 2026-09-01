@@ -90,6 +90,199 @@ export const hashPassword = async (password: string): Promise<string> => {
     return hashHex;
 };
 
+// --- User Activity & Presence Tracking ---
+
+export interface UserActivityEntry {
+    lastLogin?: string;
+    lastActivity?: string;
+    lastActivityAction?: string;
+    userAgent?: string;
+}
+
+const ACTIVITY_MAP_KEY = 'autolead_users_activity_map';
+
+export const getAllUsersActivityMap = (): Record<string, UserActivityEntry> => {
+    try {
+        const raw = localStorage.getItem(ACTIVITY_MAP_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+};
+
+export const recordUserLogin = (username: string, userId?: number): void => {
+    if (!username) return;
+    try {
+        const now = new Date().toISOString();
+        const map = getAllUsersActivityMap();
+        const key = username.trim().toLowerCase();
+        const existing = map[key] || {};
+        map[key] = {
+            ...existing,
+            lastLogin: now,
+            lastActivity: now,
+            lastActivityAction: 'ورود موفق به حساب کاربری',
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined
+        };
+        localStorage.setItem(ACTIVITY_MAP_KEY, JSON.stringify(map));
+        localStorage.setItem('currentUsername', username.trim());
+        sessionStorage.setItem('currentUsername', username.trim());
+    } catch (e) {
+        console.warn('Could not record user login:', e);
+    }
+};
+
+export const recordUserActivity = (action: string = 'فعالیت در سامانه', specificUsername?: string): void => {
+    try {
+        const username = specificUsername || localStorage.getItem('currentUsername') || sessionStorage.getItem('currentUsername');
+        if (!username) return;
+        const now = new Date().toISOString();
+        const map = getAllUsersActivityMap();
+        const key = username.trim().toLowerCase();
+        const existing = map[key] || {};
+        map[key] = {
+            ...existing,
+            lastActivity: now,
+            lastActivityAction: action,
+        };
+        localStorage.setItem(ACTIVITY_MAP_KEY, JSON.stringify(map));
+    } catch (e) {
+        console.warn('Could not record user activity:', e);
+    }
+};
+
+export const getUserActivityInfo = (username: string): UserActivityEntry | undefined => {
+    if (!username) return undefined;
+    const map = getAllUsersActivityMap();
+    return map[username.trim().toLowerCase()];
+};
+
+export const formatJalaliDateTime = (dateStr?: string | null): string => {
+    if (!dateStr) return '-';
+    try {
+        const cleaned = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
+        const d = new Date(cleaned);
+        if (isNaN(d.getTime())) return dateStr;
+        return new Intl.DateTimeFormat('fa-IR', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(d);
+    } catch {
+        return dateStr;
+    }
+};
+
+export const formatJalaliDateOnly = (dateStr?: string | null): string => {
+    if (!dateStr) return '-';
+    try {
+        const cleaned = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
+        const d = new Date(cleaned);
+        if (isNaN(d.getTime())) return dateStr;
+        return new Intl.DateTimeFormat('fa-IR', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+        }).format(d);
+    } catch {
+        return dateStr;
+    }
+};
+
+export const getRelativeTimeAgo = (dateStr?: string | null): string => {
+    if (!dateStr) return 'نامشخص';
+    try {
+        const cleaned = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
+        const d = new Date(cleaned);
+        if (isNaN(d.getTime())) return dateStr;
+        const now = Date.now();
+        const diffMs = now - d.getTime();
+        if (diffMs < 0) return 'هم‌اکنون';
+        
+        const diffSecs = Math.floor(diffMs / 1000);
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffMins < 1) return 'هم‌اکنون';
+        if (diffMins < 60) return `${diffMins.toLocaleString('fa-IR')} دقیقه پیش`;
+        if (diffHours < 24) return `${diffHours.toLocaleString('fa-IR')} ساعت پیش`;
+        if (diffDays === 1) return 'دیروز';
+        if (diffDays < 30) return `${diffDays.toLocaleString('fa-IR')} روز پیش`;
+        const diffMonths = Math.floor(diffDays / 30);
+        if (diffMonths < 12) return `${diffMonths.toLocaleString('fa-IR')} ماه پیش`;
+        return `${Math.floor(diffMonths / 12).toLocaleString('fa-IR')} سال پیش`;
+    } catch {
+        return dateStr;
+    }
+};
+
+export type UserOnlineStatus = 'online' | 'recent' | 'offline';
+
+export const getUserPresenceStatus = (lastActivityIso?: string | null): {
+    status: UserOnlineStatus;
+    label: string;
+    colorClass: string;
+    dotClass: string;
+} => {
+    if (!lastActivityIso) {
+        return {
+            status: 'offline',
+            label: 'آفلاین',
+            colorClass: 'bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-400',
+            dotClass: 'bg-slate-400'
+        };
+    }
+
+    try {
+        const cleaned = lastActivityIso.includes('T') ? lastActivityIso : lastActivityIso.replace(' ', 'T');
+        const d = new Date(cleaned);
+        if (isNaN(d.getTime())) {
+            return {
+                status: 'offline',
+                label: 'آفلاین',
+                colorClass: 'bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-400',
+                dotClass: 'bg-slate-400'
+            };
+        }
+
+        const diffMinutes = (Date.now() - d.getTime()) / (1000 * 60);
+
+        if (diffMinutes <= 8) {
+            return {
+                status: 'online',
+                label: 'هم‌اکنون آنلاین',
+                colorClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60',
+                dotClass: 'bg-emerald-500 animate-pulse'
+            };
+        } else if (diffMinutes <= 60) {
+            return {
+                status: 'recent',
+                label: 'اخیراً فعال',
+                colorClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60',
+                dotClass: 'bg-amber-500'
+            };
+        } else {
+            return {
+                status: 'offline',
+                label: 'آفلاین',
+                colorClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+                dotClass: 'bg-slate-400'
+            };
+        }
+    } catch {
+        return {
+            status: 'offline',
+            label: 'آفلاین',
+            colorClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+            dotClass: 'bg-slate-400'
+        };
+    }
+};
+
 export const login = async (username: string, password: string): Promise<{ token: string; id: number }> => {
     ensureOnline();
     const response = await fetch(`${API_BASE_URL}/auth`, {
@@ -102,11 +295,16 @@ export const login = async (username: string, password: string): Promise<{ token
 
     if (response.ok) {
         const data = await response.json();
+        let result: { token: string; id: number } | null = null;
         if (Array.isArray(data) && data.length > 0) {
-            return data[0];
+            result = data[0];
+        } else if (data && typeof data === 'object' && !Array.isArray(data) && data.token && data.id) {
+            result = data;
         }
-        if (data && typeof data === 'object' && !Array.isArray(data) && data.token && data.id) {
-            return data;
+        if (result) {
+            recordUserLogin(username, result.id);
+            recordUserActivity('ورود به سیستم', username);
+            return result;
         }
         throw new Error('فرمت پاسخ ورود نامعتبر است.');
     } else {
@@ -190,20 +388,40 @@ export const getStaffUsers = async (): Promise<StaffUser[]> => {
         return [];
     }
 
+    const activityMap = getAllUsersActivityMap();
+
     return usersArray.map(user => {
         const isAdmin = user.isAdmin === 1;
+        const usernameKey = (user.username || '').trim().toLowerCase();
+        const activity = activityMap[usernameKey];
+        
         // Find permission record for this user (assuming username match)
         const permRecord = (allPermissions as any[]).find((p: any) => p.username === user.username);
         // If user is admin, they have implicit full permissions. Otherwise, use stored permissions.
         const permissions = isAdmin ? [] : (permRecord?.permissions || []);
         
+        const registerTime = user.register_time || user.last_update || new Date().toISOString();
+        const lastLogin = activity?.lastLogin || user.last_login || user.last_update || user.register_time;
+        const lastActivity = activity?.lastActivity || user.last_activity || user.last_update || lastLogin;
+        const lastActivityAction = activity?.lastActivityAction || (activity?.lastActivity ? 'فعالیت در سیستم' : 'حضور در سامانه');
+
         return {
             id: user.id,
             username: user.username,
             fullName: user.full_name || user.username,
+            full_name: user.full_name || user.username,
             role: isAdmin ? 'ADMIN' : 'STAFF',
             permissions: permissions,
-            lastLogin: user.last_update || user.register_time,
+            registerTime: registerTime,
+            register_time: registerTime,
+            createdAt: registerTime,
+            lastLogin: lastLogin,
+            last_login: lastLogin,
+            lastActivity: lastActivity,
+            last_activity: lastActivity,
+            lastActivityAction: lastActivityAction,
+            mobile: user.mobile || null,
+            email: user.email || null,
             isActive: true 
         };
     });
@@ -242,13 +460,16 @@ const deleteApiUser = async (id: number) => {
 export const saveStaffUser = async (user: Omit<Partial<StaffUser & MyProfile>, 'id'> & { id?: number | string }): Promise<ApiSystemUser | void> => {
     ensureOnline();
     
+    const fullNameValue = (user.fullName || user.full_name || '').trim();
+    const usernameValue = (user.username || '').trim();
+
     // Prepare a comprehensive payload for the API
     const apiPayload: any = {
         // Core fields
-        username: user.username,
-        full_name: user.fullName || user.full_name,
+        username: usernameValue,
+        full_name: fullNameValue,
         isAdmin: user.role === 'ADMIN' ? 1 : 0,
-        permission_level: 1, // Default permission level
+        permission_level: user.role === 'ADMIN' ? 0 : 1,
         
         // Profile fields
         mobile: user.mobile ?? null,
@@ -265,37 +486,105 @@ export const saveStaffUser = async (user: Omit<Partial<StaffUser & MyProfile>, '
 
     let createdUser: ApiSystemUser | undefined;
     if (typeof user.id === 'number') {
-        // This is an update. Add the id to the payload.
+        // This is an update.
         apiPayload.id = user.id;
-        await updateApiUser(apiPayload);
+
+        // 1. Update profile via MyProfile endpoint (standard profile endpoint)
+        let profileSaved = false;
+        try {
+            await updateUserProfileAsAdmin(user.id, {
+                full_name: fullNameValue,
+                mobile: user.mobile ?? null,
+                email: user.email ?? null,
+                birth_date: user.birth_date ?? null,
+                mbti: user.mbti ?? null,
+                description: user.description ?? null,
+                whatsapp_apikey: user.whatsapp_apikey ?? null,
+                isAdmin: (user.role === 'ADMIN' ? 1 : 0) as (0 | 1),
+                permission_level: user.role === 'ADMIN' ? 0 : 1,
+                username: usernameValue
+            });
+            profileSaved = true;
+        } catch (profileError) {
+            console.warn("MyProfile update warning:", profileError);
+        }
+
+        // 2. Also attempt update via auth/user endpoint
+        try {
+            await updateApiUser(apiPayload);
+            profileSaved = true;
+        } catch (authError) {
+            console.warn("auth/user update warning:", authError);
+            if (!profileSaved) {
+                // If both failed, try one more fallback via PUT /auth
+                try {
+                    const fallbackPayload: any = {
+                        id: user.id,
+                        username: usernameValue,
+                        full_name: fullNameValue
+                    };
+                    const resp = await fetch(`${API_BASE_URL}/auth`, {
+                        method: 'PUT',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify(fallbackPayload)
+                    });
+                    if (resp.ok) {
+                        profileSaved = true;
+                    }
+                } catch (fallbackErr) {
+                    console.warn("auth fallback warning:", fallbackErr);
+                }
+            }
+        }
     } else {
-        // This is a create. The temporary string id should not be sent.
-        createdUser = await addApiUser(apiPayload);
+        // This is a create.
+        try {
+            createdUser = await addApiUser(apiPayload);
+        } catch (addError) {
+            console.warn("addApiUser warning, attempting createUserAccount fallback:", addError);
+            if (usernameValue && user.password) {
+                await createUserAccount(usernameValue, user.password);
+            } else {
+                throw addError;
+            }
+        }
     }
 
     // Sync password to webhook if password is set or changed
-    if (user.password && user.username) {
-        await syncPasswordChangeToWebhook(user.username, user.password);
+    if (user.password && usernameValue) {
+        try {
+            await syncPasswordChangeToWebhook(usernameValue, user.password);
+        } catch (pwdErr) {
+            console.warn("Password sync warning:", pwdErr);
+        }
     }
     
-    // The permissions logic is separate and seems to work correctly.
-    // It uses a different endpoint (/Permissions) so it should remain separate.
-    const usernameForPerms = createdUser ? createdUser.username : user.username;
-    if (usernameForPerms && user.role === 'STAFF' && user.permissions) {
-        const allPermissions = await permissionsService.getAll();
-        const existingRecord = allPermissions.find((p: any) => p.username === usernameForPerms);
+    // The permissions logic
+    const usernameForPerms = createdUser ? createdUser.username : usernameValue;
+    if (usernameForPerms) {
+        try {
+            const allPermissions = await permissionsService.getAll();
+            const existingRecord = allPermissions.find((p: any) => p.username === usernameForPerms);
 
-        if (existingRecord) {
-            await permissionsService.update({
-                id: existingRecord.id,
-                username: usernameForPerms,
-                permissions: user.permissions
-            });
-        } else {
-            await permissionsService.create({
-                username: usernameForPerms,
-                permissions: user.permissions
-            });
+            if (user.role === 'STAFF' && user.permissions) {
+                if (existingRecord) {
+                    await permissionsService.update({
+                        id: existingRecord.id,
+                        username: usernameForPerms,
+                        permissions: user.permissions
+                    });
+                } else {
+                    await permissionsService.create({
+                        username: usernameForPerms,
+                        permissions: user.permissions
+                    });
+                }
+            } else if (user.role === 'ADMIN' && existingRecord) {
+                // Admin has full access, remove restricted permissions record
+                await permissionsService.delete(existingRecord.id);
+            }
+        } catch (permError) {
+            console.warn("Permissions update warning:", permError);
         }
     }
     
@@ -379,6 +668,14 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
         last_updated,
         createdAt,
         created_at,
+        created_by,
+        createdBy,
+        created_by_name,
+        createdByName,
+        updated_by,
+        updatedBy,
+        updated_by_name,
+        updatedByName,
         ...restOfApiData 
     } = condition;
     
@@ -397,6 +694,8 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
 
     const updateStamp = updatedAt || updated_at || last_update || last_updated || createdAt || created_at || null;
     const createStamp = createdAt || created_at || null;
+    const creatorVal = created_by || createdBy || created_by_name || createdByName || restOfApiData.author || null;
+    const updaterVal = updated_by || updatedBy || updated_by_name || updatedByName || null;
             
     return { 
         ...restOfApiData, 
@@ -404,6 +703,12 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
         colors: colorsArray,
         is_public: !!is_public,
         stock_quantity: parseInt(rawStock, 10) || 0,
+        created_by: creatorVal,
+        createdBy: creatorVal,
+        created_by_name: creatorVal,
+        updated_by: updaterVal,
+        updatedBy: updaterVal,
+        updated_by_name: updaterVal,
         updatedAt: updateStamp,
         updated_at: updateStamp,
         createdAt: createStamp,
@@ -417,12 +722,23 @@ const denormalizeCondition = (condition: Omit<CarSaleCondition, 'id'> | CarSaleC
         ? condition.stock_quantity 
         : parseInt(condition.stock_quantity as any, 10) || 0;
 
+    const creatorVal = condition.created_by || condition.createdBy || condition.created_by_name || null;
+    const updaterVal = condition.updated_by || condition.updatedBy || condition.updated_by_name || null;
+
     return {
         ...restOfAppData,
         indeed_status: document_status,
         colors: Array.isArray(condition.colors) ? condition.colors.join(',') : '',
         is_public: condition.is_public ? 1 : 0,
         stock_quantity: stockQtyVal,
+        created_by: creatorVal,
+        createdBy: creatorVal,
+        created_by_name: creatorVal,
+        createdByName: creatorVal,
+        updated_by: updaterVal,
+        updatedBy: updaterVal,
+        updated_by_name: updaterVal,
+        updatedByName: updaterVal,
         stock: stockQtyVal,
         stock_qty: stockQtyVal,
         qty: stockQtyVal,
@@ -1171,11 +1487,30 @@ export const getMyProfile = async (): Promise<MyProfile | {}> => {
         
         if (!data) return {};
         
-        if (Array.isArray(data)) {
-            return data.length > 0 ? data[0] : {};
+        const profileObj: MyProfile = Array.isArray(data) ? (data.length > 0 ? data[0] : {}) : data;
+        
+        if (profileObj && profileObj.username) {
+            const usernameKey = profileObj.username.trim().toLowerCase();
+            const activity = getUserActivityInfo(usernameKey);
+            if (activity) {
+                if (!profileObj.last_login && activity.lastLogin) {
+                    profileObj.last_login = activity.lastLogin;
+                }
+                profileObj.last_activity = activity.lastActivity || new Date().toISOString();
+                profileObj.last_activity_action = activity.lastActivityAction || 'مشاهده پروفایل';
+            } else {
+                profileObj.last_activity = new Date().toISOString();
+                profileObj.last_activity_action = 'مشاهده پروفایل';
+            }
+            if (!profileObj.last_login) {
+                profileObj.last_login = profileObj.last_update || profileObj.register_time || new Date().toISOString();
+            }
+            if (!profileObj.register_time) {
+                profileObj.register_time = profileObj.last_update || new Date().toISOString();
+            }
         }
         
-        return data;
+        return profileObj;
     } catch (error) {
         console.warn("Could not fetch user profile, proceeding without it:", error);
         return {};
@@ -1196,6 +1531,7 @@ export const updateMyProfile = async (profile: Partial<MyProfile>): Promise<MyPr
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
     });
+    recordUserActivity('بروزرسانی مشخصات پروفایل');
     return handleResponse(response);
 };
 
@@ -1207,9 +1543,22 @@ export const getUserProfileById = async (userId: number): Promise<MyProfile | nu
             body: JSON.stringify({ id: userId })
         });
         const data = await handleResponse(response);
-        if (Array.isArray(data) && data.length > 0) return data[0];
-        if (data && typeof data === 'object') return data as MyProfile;
-        return null;
+        let profileObj: MyProfile | null = null;
+        if (Array.isArray(data) && data.length > 0) profileObj = data[0];
+        else if (data && typeof data === 'object') profileObj = data as MyProfile;
+
+        if (profileObj && profileObj.username) {
+            const usernameKey = profileObj.username.trim().toLowerCase();
+            const activity = getUserActivityInfo(usernameKey);
+            if (activity) {
+                if (!profileObj.last_login && activity.lastLogin) {
+                    profileObj.last_login = activity.lastLogin;
+                }
+                profileObj.last_activity = activity.lastActivity || profileObj.last_update;
+                profileObj.last_activity_action = activity.lastActivityAction;
+            }
+        }
+        return profileObj;
     } catch (error) {
         console.error(`Failed to fetch profile for user ${userId}:`, error);
         return null;
