@@ -29,6 +29,7 @@ import type {
     UsedCar,
     CarOrder,
     CustomerJournal,
+    Announcement,
     OvertimeRequest,
     CrmCallLog,
     SalaryAdvanceRequest,
@@ -916,45 +917,188 @@ export const deleteUser = async (id: number): Promise<void> => {
     return handleResponse(response);
 };
 
-// --- Announcements ---
-const ANNOUNCEMENTS_URL = `${API_BASE_URL}/announcements`;
+// --- Announcements (CRM Organizational Announcements) ---
+const ANNOUNCEMENTS_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/crm/anouncement';
 
-export const getAnnouncements = async (): Promise<any[]> => {
-    try {
-        const response = await fetch(ANNOUNCEMENTS_URL, { headers: getAuthHeaders() });
-        const data = await handleResponse(response);
-        if (Array.isArray(data)) {
-            return data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+/**
+ * Formats a Date, timestamp or date string to standard MySQL DATETIME format (YYYY-MM-DD HH:MM:SS)
+ * Example: '2026-09-05 03:05:42'
+ */
+export const toMySQLDateTime = (input?: Date | string | number | null): string => {
+    let date: Date;
+    if (!input) {
+        date = new Date();
+    } else if (input instanceof Date) {
+        date = input;
+    } else if (typeof input === 'string') {
+        const trimmed = input.trim();
+        // Return directly if already in standard MySQL DATETIME format: YYYY-MM-DD HH:MM:SS
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+            return trimmed;
         }
-        return [];
-    } catch (e) {
-        // Fallback if endpoint doesn't exist
-        return [];
+        // If ISO format like '2026-09-05T03:05:42.000Z'
+        if (trimmed.includes('T')) {
+            const clean = trimmed.replace('T', ' ').split('.')[0].replace('Z', '').trim();
+            if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(clean)) {
+                return clean;
+            }
+        }
+        date = new Date(trimmed);
+    } else {
+        date = new Date(input);
     }
+
+    if (isNaN(date.getTime())) {
+        date = new Date();
+    }
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    const seconds = pad(date.getSeconds());
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
-export const createAnnouncement = async (announcement: Omit<any, 'id' | 'createdAt'>): Promise<any> => {
+// Ensure no legacy persistent browser data remains
+try {
+    if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('crm_org_announcements_store_v1');
+    }
+} catch (_) {}
+
+export const getAnnouncements = async (): Promise<Announcement[]> => {
     ensureOnline();
-    const payload = {
+    const response = await fetch(ANNOUNCEMENTS_URL, { 
+        method: 'GET',
+        headers: getAuthHeaders(),
+    });
+    const data = await handleResponse(response);
+    let items: any[] = [];
+    if (Array.isArray(data)) {
+        items = data;
+    } else if (data && Array.isArray(data.data)) {
+        items = data.data;
+    } else if (data && Array.isArray(data.announcements)) {
+        items = data.announcements;
+    } else if (data && typeof data === 'object') {
+        items = [data];
+    }
+    return items.map((item: any) => {
+        const rawCreated = item.createdAt || item.created_at;
+        const rawUpdated = item.updatedAt || item.updated_at;
+        const mysqlCreated = rawCreated ? toMySQLDateTime(rawCreated) : toMySQLDateTime();
+        const mysqlUpdated = rawUpdated ? toMySQLDateTime(rawUpdated) : undefined;
+
+        // Parse tags safely
+        let tags: string[] = [];
+        if (Array.isArray(item.tags)) {
+            tags = item.tags;
+        } else if (typeof item.tags === 'string' && item.tags.trim()) {
+            try {
+                const parsed = JSON.parse(item.tags);
+                tags = Array.isArray(parsed) ? parsed : [item.tags];
+            } catch {
+                tags = item.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+            }
+        }
+
+        // Strictly convert isUrgent and isFromEmail to boolean to avoid 0 rendering in JSX
+        const isUrgent = Boolean(item.isUrgent === 1 || item.isUrgent === true || item.isUrgent === '1' || item.isUrgent === 'true');
+        const isFromEmail = Boolean(item.isFromEmail === 1 || item.isFromEmail === true || item.isFromEmail === '1' || item.isFromEmail === 'true');
+
+        // Extract and normalize title and content/summary
+        const title = (item.title !== undefined && item.title !== null && String(item.title).trim() !== '')
+            ? String(item.title)
+            : (item.Title || item.subject || item.Subject || item.name || 'بدون عنوان');
+        
+        const content = (item.content !== undefined && item.content !== null)
+            ? String(item.content)
+            : (item.Content || item.summary || item.Summary || item.description || item.Description || item.body || item.text || '');
+
+        const mapped: any = {
+            ...item,
+            id: Number(item.id) || item.id,
+            title,
+            content,
+            tags,
+            isUrgent,
+            isFromEmail,
+            createdAt: mysqlCreated,
+            ...(mysqlUpdated ? { updatedAt: mysqlUpdated } : {}),
+        };
+        delete mapped.created_at;
+        delete mapped.updated_at;
+        return mapped as Announcement;
+    });
+};
+
+export const createAnnouncement = async (announcement: Partial<Announcement>): Promise<Announcement> => {
+    ensureOnline();
+    const mysqlDateTime = toMySQLDateTime(announcement.createdAt);
+    const payload: any = {
         ...announcement,
-        createdAt: new Date().toLocaleString('fa-IR'),
+        createdAt: mysqlDateTime,
     };
+    delete payload.created_at;
+    delete payload.updated_at;
+
     const response = await fetch(ANNOUNCEMENTS_URL, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
     });
-    return handleResponse(response);
+    const result = await handleResponse(response);
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('app-refresh'));
+    }
+
+    return result || (payload as Announcement);
+};
+
+export const updateAnnouncement = async (announcement: Announcement): Promise<Announcement> => {
+    ensureOnline();
+    const updatedMysql = toMySQLDateTime();
+    const payload: any = {
+        ...announcement,
+        updatedAt: updatedMysql,
+    };
+    if (announcement.createdAt) {
+        payload.createdAt = toMySQLDateTime(announcement.createdAt);
+    }
+    delete payload.created_at;
+    delete payload.updated_at;
+
+    const response = await fetch(ANNOUNCEMENTS_URL, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+    });
+    const result = await handleResponse(response);
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('app-refresh'));
+    }
+
+    return result || payload;
 };
 
 export const deleteAnnouncement = async (id: number): Promise<void> => {
     ensureOnline();
-    const response = await fetch(`${ANNOUNCEMENTS_URL}`, {
+    const response = await fetch(ANNOUNCEMENTS_URL, {
         method: 'DELETE',
         headers: getAuthHeaders(),
         body: JSON.stringify({ id }),
     });
-    return handleResponse(response);
+    await handleResponse(response);
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('app-refresh'));
+    }
 };
 
 // --- Customer Journals (CRM Reports) ---

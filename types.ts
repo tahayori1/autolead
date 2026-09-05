@@ -44,14 +44,34 @@ export enum LeadStatus {
     NO_ANSWER = 'پاسخ نداد',
 }
 
+export type AnnouncementCategory = 'CIRCULAR' | 'NEWS' | 'ALERT' | 'SYSTEM' | 'EVENT';
+export type AnnouncementAudience = 'ALL' | 'ADMIN' | 'MANAGERS' | 'SALES' | 'FINANCE' | 'HR' | 'STAFF' | string;
+
+export interface AnnouncementEmailMetadata {
+    sender?: string;
+    senderEmail?: string;
+    subject?: string;
+    date?: string;
+    receiver?: string;
+    organization?: string;
+}
+
 export interface Announcement {
     id: number;
     title: string;
     content: string;
-    category: 'NEWS' | 'ALERT' | 'SYSTEM';
+    htmlContent?: string;
+    category: AnnouncementCategory;
     isUrgent: boolean;
     author: string;
     createdAt: string;
+    updatedAt?: string;
+    tags?: string[];
+    targetAudience?: AnnouncementAudience;
+    targetRoles?: string[];
+    minPermissionLevel?: number;
+    isFromEmail?: boolean;
+    emailMetadata?: AnnouncementEmailMetadata;
 }
 
 export interface CustomerJournal {
@@ -278,12 +298,50 @@ export interface CarOrder {
 
 // --- Access Control Types ---
 
-export type AppModule = 'users' | 'conditions' | 'cars' | 'prices' | 'vehicle-exit' | 'settings' | 'orders';
+export type AppModule = 
+    | 'users' 
+    | 'conditions' 
+    | 'cars' 
+    | 'prices' 
+    | 'vehicle-exit' 
+    | 'settings' 
+    | 'orders'
+    | 'announcements'
+    | 'inventory'
+    | 'reports'
+    | 'commission'
+    | 'corrective-actions'
+    | 'meeting-minutes'
+    | 'leave-requests'
+    | 'anonymous-feedback'
+    | 'zero-car-delivery'
+    | 'customer-club'
+    | 'notification-center'
+    | 'used-cars'
+    | 'salary-advance'
+    | 'overtime'
+    | 'advertising-report'
+    | 'poll'
+    | 'access-control';
+
 export type ActionType = 'view' | 'add' | 'edit' | 'delete';
 
 export interface Permission {
     module: AppModule;
     actions: ActionType[];
+}
+
+export interface UserRoleDefinition {
+    id: string; // e.g. 'super-admin', 'sales-manager', 'sales-staff', 'hr-manager', 'custom-xxx'
+    name: string; // Persian name, e.g. 'مدیر فروش'
+    code: string; // e.g. 'SALES_MGR'
+    description: string;
+    level: number; // 1 to 10 (Access level rank, 10 being Super Admin)
+    color: string; // e.g. 'rose', 'sky', 'emerald', 'amber', 'purple', 'indigo', 'slate'
+    isSystem: boolean;
+    permissions: Permission[];
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface ApiSystemUser {
