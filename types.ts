@@ -335,12 +335,14 @@ export interface Permission {
 
 export interface UserRoleDefinition {
     id: string; // e.g. 'super-admin', 'sales-manager', 'sales-staff', 'hr-manager', 'custom-xxx'
+    apiId?: number; // Backend database ID from Permissions API
     name: string; // Persian name, e.g. 'مدیر فروش'
     code: string; // e.g. 'SALES_MGR'
     description: string;
     level: number; // 1 to 10 (Access level rank, 10 being Super Admin)
     color: string; // e.g. 'rose', 'sky', 'emerald', 'amber', 'purple', 'indigo', 'slate'
     isSystem: boolean;
+    isRoleDefinition?: boolean;
     permissions: Permission[];
     createdAt?: string;
     updatedAt?: string;

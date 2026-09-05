@@ -8,15 +8,16 @@ import {
     formatJalaliDateTime, 
     getRelativeTimeAgo, 
     getUserPresenceStatus,
-    recordUserActivity
+    recordUserActivity,
+    getCustomRolesFromApi,
+    saveCustomRoleToApi,
+    deleteCustomRoleFromApi
 } from '../services/api';
 import type { StaffUser, Permission, MyProfile, UserRoleDefinition } from '../types';
 import { 
     SYSTEM_ROLE_LEVELS, 
-    getAllDefinedRoles, 
-    saveCustomRole, 
-    deleteCustomRole, 
-    saveUserRoleAssignment, 
+    DEFAULT_SYSTEM_ROLES, 
+    mergeRoles, 
     resolveUserRole 
 } from '../utils/roleDefinitions';
 import Spinner from '../components/Spinner';
@@ -89,7 +90,7 @@ const getRoleColorBadge = (color?: string) => {
 const AccessControlPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'USERS' | 'ROLES'>('USERS');
     const [users, setUsers] = useState<StaffUser[]>([]);
-    const [roles, setRoles] = useState<UserRoleDefinition[]>([]);
+    const [roles, setRoles] = useState<UserRoleDefinition[]>(DEFAULT_SYSTEM_ROLES);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -113,6 +114,7 @@ const AccessControlPage: React.FC = () => {
 
     // Custom Role Creation / Edit Modal State
     const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+    const [isSavingRole, setIsSavingRole] = useState(false);
     const [editingRole, setEditingRole] = useState<Partial<UserRoleDefinition>>({
         name: '',
         code: '',
@@ -122,46 +124,40 @@ const AccessControlPage: React.FC = () => {
         permissions: []
     });
 
-    const refreshRoles = () => {
-        setRoles(getAllDefinedRoles());
-    };
-
-    useEffect(() => {
-        recordUserActivity('مشاهده مدیریت دسترسی و نقش‌های کاربران');
-        fetchUsers();
-        refreshRoles();
-    }, []);
-
-    useEffect(() => {
-        const handleRefresh = () => {
-            fetchUsers();
-            refreshRoles();
-        };
-        const handleRolesUpdated = () => {
-            refreshRoles();
-        };
-        window.addEventListener('app-refresh', handleRefresh);
-        window.addEventListener('user-activity-updated', handleRefresh);
-        window.addEventListener('app-roles-updated', handleRolesUpdated);
-        return () => {
-            window.removeEventListener('app-refresh', handleRefresh);
-            window.removeEventListener('user-activity-updated', handleRefresh);
-            window.removeEventListener('app-roles-updated', handleRolesUpdated);
-        };
-    }, []);
-
-    const fetchUsers = async () => {
+    const fetchData = async () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await getStaffUsers();
-            setUsers(data);
+            const [usersData, customRolesData] = await Promise.all([
+                getStaffUsers(),
+                getCustomRolesFromApi()
+            ]);
+            setUsers(usersData);
+            const merged = mergeRoles(customRolesData);
+            setRoles(merged);
         } catch (err) {
-            setError('خطا در بارگذاری کاربران');
+            setError('خطا در بارگذاری اطلاعات دسترسی و کاربران از سرور');
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        recordUserActivity('مشاهده مدیریت دسترسی و نقش‌های کاربران');
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            fetchData();
+        };
+        window.addEventListener('app-refresh', handleRefresh);
+        window.addEventListener('user-activity-updated', handleRefresh);
+        return () => {
+            window.removeEventListener('app-refresh', handleRefresh);
+            window.removeEventListener('user-activity-updated', handleRefresh);
+        };
+    }, []);
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setToast({ message, type });
@@ -208,7 +204,11 @@ const AccessControlPage: React.FC = () => {
         setConfirmNewPassword('');
         setModalTab('profile');
 
-        const resolved = resolveUserRole(user.username, user.role, user.permission_level);
+        const resolved = resolveUserRole(user.username, user.role, user.permission_level, {
+            roleId: user.roleId,
+            roleTitle: user.roleTitle,
+            level: user.userLevel
+        }, roles);
         setSelectedRoleId(resolved.roleId);
         setCustomLevel(resolved.userLevel);
 
@@ -293,7 +293,7 @@ const AccessControlPage: React.FC = () => {
                 await deleteStaffUser(userToDelete.id, userToDelete.username);
                 recordUserActivity(`حذف کاربر ${userToDelete.username}`);
                 showToast('کاربر با موفقیت حذف شد', 'success');
-                fetchUsers();
+                fetchData();
             } catch (err) {
                 showToast('خطا در حذف کاربر', 'error');
             } finally {
@@ -353,14 +353,11 @@ const AccessControlPage: React.FC = () => {
             
             await saveStaffUser(userToSave);
 
-            // Persist the role and level assignment in local storage map
-            saveUserRoleAssignment(username, selectedRoleId, customLevel, targetRole?.name);
-
             recordUserActivity(`ذخیره اطلاعات و سطح دسترسی کاربر ${username}`);
             
             showToast('اطلاعات و سطح کاربری با موفقیت ذخیره شد', 'success');
             setIsModalOpen(false);
-            fetchUsers();
+            fetchData();
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'خطا در ذخیره اطلاعات';
             showToast(msg, 'error');
@@ -372,13 +369,14 @@ const AccessControlPage: React.FC = () => {
     // Role Manager Actions
     const handleOpenCreateRole = () => {
         setEditingRole({
-            id: `role-${Date.now()}`,
+            id: `custom-role-${Date.now()}`,
             name: '',
             code: '',
             description: '',
             level: 4,
             color: 'indigo',
             isSystem: false,
+            isRoleDefinition: true,
             permissions: []
         });
         setIsRoleModalOpen(true);
@@ -392,33 +390,46 @@ const AccessControlPage: React.FC = () => {
         setIsRoleModalOpen(true);
     };
 
-    const handleDeleteRole = (roleId: string) => {
-        if (window.confirm('آیا از حذف این نقش سفارشی اطمینان دارید؟')) {
-            deleteCustomRole(roleId);
-            refreshRoles();
-            showToast('نقش کاربری حذف شد', 'success');
+    const handleDeleteRole = async (role: UserRoleDefinition) => {
+        if (window.confirm(`آیا از حذف نقش سفارشی "${role.name}" اطمینان دارید؟`)) {
+            try {
+                await deleteCustomRoleFromApi(role.id, role.apiId);
+                showToast('نقش کاربری با موفقیت از سرور حذف شد', 'success');
+                fetchData();
+            } catch (err) {
+                showToast('خطا در حذف نقش از سرور', 'error');
+            }
         }
     };
 
-    const handleSaveRole = () => {
+    const handleSaveRole = async () => {
         if (!editingRole.name?.trim()) {
             showToast('نام نقش کاربری الزامی است', 'error');
             return;
         }
-        const roleData: UserRoleDefinition = {
-            id: editingRole.id || `role-${Date.now()}`,
-            name: editingRole.name.trim(),
-            code: editingRole.code?.trim().toUpperCase() || 'CUSTOM_ROLE',
-            description: editingRole.description || '',
-            level: Number(editingRole.level) || 4,
-            color: editingRole.color || 'indigo',
-            isSystem: false,
-            permissions: editingRole.permissions || []
-        };
-        saveCustomRole(roleData);
-        refreshRoles();
-        setIsRoleModalOpen(false);
-        showToast('نقش کاربری با موفقیت ذخیره شد', 'success');
+        setIsSavingRole(true);
+        try {
+            const roleData: UserRoleDefinition = {
+                id: editingRole.id || `custom-role-${Date.now()}`,
+                apiId: editingRole.apiId,
+                name: editingRole.name.trim(),
+                code: editingRole.code?.trim().toUpperCase() || 'CUSTOM_ROLE',
+                description: editingRole.description || '',
+                level: Number(editingRole.level) || 4,
+                color: editingRole.color || 'indigo',
+                isSystem: false,
+                isRoleDefinition: true,
+                permissions: editingRole.permissions || []
+            };
+            await saveCustomRoleToApi(roleData);
+            setIsRoleModalOpen(false);
+            showToast('نقش کاربری با موفقیت در سرور ذخیره شد', 'success');
+            fetchData();
+        } catch (err) {
+            showToast('خطا در ذخیره نقش در سرور', 'error');
+        } finally {
+            setIsSavingRole(false);
+        }
     };
 
     // Filter users by search and level
@@ -434,7 +445,11 @@ const AccessControlPage: React.FC = () => {
 
             if (levelFilter === 'ALL') return true;
 
-            const resolved = resolveUserRole(user.username, user.role, user.permission_level);
+            const resolved = resolveUserRole(user.username, user.role, user.permission_level, {
+                roleId: user.roleId,
+                roleTitle: user.roleTitle,
+                level: user.userLevel
+            }, roles);
             if (levelFilter === '10') return resolved.userLevel >= 10;
             if (levelFilter === '8') return resolved.userLevel === 8;
             if (levelFilter === '6') return resolved.userLevel === 6;
@@ -443,15 +458,22 @@ const AccessControlPage: React.FC = () => {
 
             return true;
         });
-    }, [users, searchQuery, levelFilter]);
+    }, [users, searchQuery, levelFilter, roles]);
 
     const onlineCount = users.filter(u => {
         const presence = getUserPresenceStatus(u.lastActivity || u.last_activity);
         return presence.status === 'online';
     }).length;
 
-    const adminCount = users.filter(u => u.role === 'ADMIN').length;
-    const staffCount = users.filter(u => u.role === 'STAFF').length;
+    const adminCount = users.filter(u => {
+        const resolved = resolveUserRole(u.username, u.role, u.permission_level, {
+            roleId: u.roleId,
+            roleTitle: u.roleTitle,
+            level: u.userLevel
+        }, roles);
+        return resolved.userLevel >= 10;
+    }).length;
+    const staffCount = users.length - adminCount;
 
     return (
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -664,7 +686,11 @@ const AccessControlPage: React.FC = () => {
                             const registerStr = user.registerTime || user.register_time || user.createdAt;
                             const loginStr = user.lastLogin || user.last_login;
                             const activityStr = user.lastActivity || user.last_activity;
-                            const resolved = resolveUserRole(user.username, user.role, user.permission_level);
+                            const resolved = resolveUserRole(user.username, user.role, user.permission_level, {
+                                roleId: user.roleId,
+                                roleTitle: user.roleTitle,
+                                level: user.userLevel
+                            }, roles);
 
                             return (
                                 <div 
@@ -887,7 +913,7 @@ const AccessControlPage: React.FC = () => {
                                     </button>
                                     {!role.isSystem && (
                                         <button
-                                            onClick={() => handleDeleteRole(role.id)}
+                                            onClick={() => handleDeleteRole(role)}
                                             className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg"
                                             title="حذف نقش"
                                         >

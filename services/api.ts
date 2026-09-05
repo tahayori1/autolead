@@ -15,6 +15,7 @@ import type {
     StaffUser,
     ApiSystemUser,
     Permission,
+    UserRoleDefinition,
     PollApiResponseItem,
     ProcessedPollData,
     ZeroCarDelivery,
@@ -425,8 +426,15 @@ export const getStaffUsers = async (): Promise<StaffUser[]> => {
         const usernameKey = (user.username || '').trim().toLowerCase();
         const activity = activityMap[usernameKey];
         
-        // Find permission record for this user (assuming username match)
-        const permRecord = (allPermissions as any[]).find((p: any) => p.username === user.username);
+        // Find permission record for this user (excluding role definition records)
+        const permRecord = (allPermissions as any[]).find((p: any) => 
+            p && p.username === user.username && !p.isRoleDefinition && !String(p.username).startsWith('__ROLE__:')
+        );
+
+        const userLevel = permRecord?.level !== undefined ? Number(permRecord.level) : (isAdmin ? 10 : (user.permission_level === 0 ? 10 : 2));
+        const roleTitle = permRecord?.roleTitle || (isAdmin ? 'مدیر ارشد سیستم' : (userLevel >= 10 ? 'مدیر ارشد سیستم' : 'کارمند اداری'));
+        const roleId = permRecord?.roleId || (isAdmin ? 'super-admin' : (userLevel >= 10 ? 'super-admin' : 'staff-office'));
+        
         // If user is admin, they have implicit full permissions. Otherwise, use stored permissions.
         const permissions = isAdmin ? [] : (permRecord?.permissions || []);
         
@@ -441,6 +449,10 @@ export const getStaffUsers = async (): Promise<StaffUser[]> => {
             fullName: user.full_name || user.username,
             full_name: user.full_name || user.username,
             role: isAdmin ? 'ADMIN' : 'STAFF',
+            roleTitle: roleTitle,
+            roleId: roleId,
+            userLevel: userLevel,
+            permission_level: user.permission_level !== undefined ? user.permission_level : (userLevel >= 10 ? 0 : 1),
             permissions: permissions,
             registerTime: registerTime,
             register_time: registerTime,
@@ -589,29 +601,37 @@ export const saveStaffUser = async (user: Omit<Partial<StaffUser & MyProfile>, '
         }
     }
     
-    // The permissions logic
+    // The permissions & role assignment logic via Permissions API endpoint
     const usernameForPerms = createdUser ? createdUser.username : usernameValue;
     if (usernameForPerms) {
         try {
             const allPermissions = await permissionsService.getAll();
-            const existingRecord = allPermissions.find((p: any) => p.username === usernameForPerms);
+            const existingRecord = (allPermissions as any[]).find((p: any) => 
+                p && p.username === usernameForPerms && !p.isRoleDefinition && !String(p.username).startsWith('__ROLE__:')
+            );
 
-            if (user.role === 'STAFF' && user.permissions) {
-                if (existingRecord) {
-                    await permissionsService.update({
-                        id: existingRecord.id,
-                        username: usernameForPerms,
-                        permissions: user.permissions
-                    });
-                } else {
-                    await permissionsService.create({
-                        username: usernameForPerms,
-                        permissions: user.permissions
-                    });
-                }
-            } else if (user.role === 'ADMIN' && existingRecord) {
-                // Admin has full access, remove restricted permissions record
-                await permissionsService.delete(existingRecord.id);
+            const userRoleTitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد سیستم' : 'کاربر سیستم');
+            const userRoleId = user.roleId || (user.role === 'ADMIN' ? 'super-admin' : 'staff-office');
+            const userLevel = user.userLevel !== undefined ? user.userLevel : (user.role === 'ADMIN' ? 10 : 2);
+            const permList = user.role === 'ADMIN' ? [] : (user.permissions || []);
+
+            const permPayload = {
+                username: usernameForPerms,
+                roleId: userRoleId,
+                roleTitle: userRoleTitle,
+                roleCode: user.role === 'ADMIN' ? 'SUPER_ADMIN' : 'STAFF',
+                level: userLevel,
+                permissions: permList,
+                updatedAt: new Date().toISOString()
+            };
+
+            if (existingRecord && existingRecord.id) {
+                await permissionsService.update({
+                    ...permPayload,
+                    id: existingRecord.id
+                });
+            } else {
+                await permissionsService.create(permPayload);
             }
         } catch (permError) {
             console.warn("Permissions update warning:", permError);
@@ -630,10 +650,16 @@ export const deleteStaffUser = async (id: number, username: string): Promise<voi
     await deleteApiUser(id);
 
     // Delete permissions record
-    const allPermissions = await permissionsService.getAll();
-    const existingRecord = allPermissions.find((p: any) => p.username === username);
-    if (existingRecord) {
-        await permissionsService.delete(existingRecord.id);
+    try {
+        const allPermissions = await permissionsService.getAll();
+        const existingRecord = (allPermissions as any[]).find((p: any) => 
+            p && p.username === username && !p.isRoleDefinition && !String(p.username).startsWith('__ROLE__:')
+        );
+        if (existingRecord && existingRecord.id) {
+            await permissionsService.delete(existingRecord.id);
+        }
+    } catch (e) {
+        console.warn("Permission deletion warning:", e);
     }
 };
 
@@ -1705,6 +1731,106 @@ export const correctiveActionsService = createCrudService<CorrectiveAction>(CORR
 export const leaveRequestsService = createCrudService<LeaveRequest>(LEAVE_REQUESTS_URL);
 export const anonymousSuggestionsService = createCrudService<AnonymousFeedback>(ANONYMOUS_SUGGESTIONS_URL);
 export const permissionsService = createCrudService<any>(PERMISSIONS_URL);
+
+// --- Custom Role Definitions API Service (Pure API Endpoint, zero persistent browser data) ---
+
+export const getCustomRolesFromApi = async (): Promise<UserRoleDefinition[]> => {
+    try {
+        const allRecords = await permissionsService.getAll();
+        if (!Array.isArray(allRecords)) return [];
+
+        const roleDefRecords = allRecords.filter((item: any) => {
+            if (!item || typeof item !== 'object') return false;
+            return (
+                item.isRoleDefinition === true ||
+                item.isRoleDefinition === 1 ||
+                item.isRoleDefinition === 'true' ||
+                (typeof item.username === 'string' && item.username.startsWith('__ROLE__:')) ||
+                (typeof item.roleId === 'string' && item.roleId.startsWith('custom-')) ||
+                item.role_def === 1
+            );
+        });
+
+        return roleDefRecords.map((item: any, idx: number) => {
+            const cleanId = item.roleId || (typeof item.username === 'string' && item.username.startsWith('__ROLE__:') ? item.username.replace('__ROLE__:', '') : `custom-role-${item.id || idx}`);
+            return {
+                id: cleanId,
+                apiId: item.id,
+                name: item.name || item.roleTitle || item.title || 'نقش سفارشی',
+                code: item.code || item.roleCode || 'CUSTOM_ROLE',
+                description: item.description || '',
+                level: item.level !== undefined ? Number(item.level) : 4,
+                color: item.color || 'indigo',
+                isSystem: false,
+                isRoleDefinition: true,
+                permissions: Array.isArray(item.permissions) ? item.permissions : [],
+                createdAt: item.createdAt || item.created_at,
+                updatedAt: item.updatedAt || item.updated_at
+            };
+        });
+    } catch (error) {
+        console.warn('Failed to load custom roles from API:', error);
+        return [];
+    }
+};
+
+export const saveCustomRoleToApi = async (role: UserRoleDefinition): Promise<any> => {
+    ensureOnline();
+    const allRecords = await permissionsService.getAll();
+    const existing = Array.isArray(allRecords) 
+        ? allRecords.find((item: any) => 
+            (role.apiId && item.id === role.apiId) ||
+            (item.roleId && item.roleId === role.id) ||
+            (item.username && item.username === `__ROLE__:${role.id}`)
+          )
+        : null;
+
+    const payload = {
+        username: `__ROLE__:${role.id}`,
+        roleId: role.id,
+        name: role.name,
+        roleTitle: role.name,
+        code: role.code,
+        roleCode: role.code,
+        description: role.description || '',
+        level: Number(role.level) || 4,
+        color: role.color || 'indigo',
+        isSystem: false,
+        isRoleDefinition: true,
+        permissions: role.permissions || [],
+        updatedAt: new Date().toISOString()
+    };
+
+    if (existing && existing.id) {
+        return await permissionsService.update({
+            ...payload,
+            id: existing.id
+        });
+    } else {
+        return await permissionsService.create({
+            ...payload,
+            createdAt: new Date().toISOString()
+        });
+    }
+};
+
+export const deleteCustomRoleFromApi = async (roleId: string, apiId?: number): Promise<void> => {
+    ensureOnline();
+    if (apiId) {
+        await permissionsService.delete(apiId);
+        return;
+    }
+    const allRecords = await permissionsService.getAll();
+    if (Array.isArray(allRecords)) {
+        const existing = allRecords.find((item: any) => 
+            (item.roleId && item.roleId === roleId) ||
+            (item.username && item.username === `__ROLE__:${roleId}`)
+        );
+        if (existing && existing.id) {
+            await permissionsService.delete(existing.id);
+        }
+    }
+};
 export const meetingMinutesService = createCrudService<MeetingMinute>(MEETING_MINUTES_URL);
 export const adCampaignsService = createCrudService<AdCampaign>(AD_CAMPAIGNS_URL);
 export const advertisementService = createCrudService<AdvertisementReport>(ADVERTISEMENT_URL);

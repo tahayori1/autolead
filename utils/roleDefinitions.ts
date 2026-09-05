@@ -111,113 +111,37 @@ export const DEFAULT_SYSTEM_ROLES: UserRoleDefinition[] = [
     }
 ];
 
-const CUSTOM_ROLES_STORAGE_KEY = 'hoseini_custom_roles_definitions';
-const USER_ROLE_MAP_STORAGE_KEY = 'hoseini_user_role_assignment_map';
-
-export const getCustomRoles = (): UserRoleDefinition[] => {
-    if (typeof window === 'undefined') return [];
-    try {
-        const data = localStorage.getItem(CUSTOM_ROLES_STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch {
-        return [];
-    }
+/**
+ * Merge base system roles with custom roles retrieved from the Permissions API endpoint.
+ */
+export const mergeRoles = (customRolesFromApi: UserRoleDefinition[] = []): UserRoleDefinition[] => {
+    const customList = Array.isArray(customRolesFromApi) ? customRolesFromApi : [];
+    // Ensure no duplicate IDs between system and custom
+    const customFiltered = customList.filter(c => !DEFAULT_SYSTEM_ROLES.some(s => s.id === c.id));
+    return [...DEFAULT_SYSTEM_ROLES, ...customFiltered];
 };
 
-export const getAllDefinedRoles = (): UserRoleDefinition[] => {
-    const custom = getCustomRoles();
-    return [...DEFAULT_SYSTEM_ROLES, ...custom];
-};
-
-export const saveCustomRole = (role: UserRoleDefinition): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        const custom = getCustomRoles();
-        const existingIndex = custom.findIndex(r => r.id === role.id);
-        if (existingIndex >= 0) {
-            custom[existingIndex] = { ...role, updatedAt: new Date().toISOString() };
-        } else {
-            custom.push({ ...role, isSystem: false, createdAt: new Date().toISOString() });
-        }
-        localStorage.setItem(CUSTOM_ROLES_STORAGE_KEY, JSON.stringify(custom));
-        window.dispatchEvent(new CustomEvent('app-roles-updated'));
-    } catch (e) {
-        console.error('Failed to save custom role:', e);
-    }
-};
-
-export const deleteCustomRole = (roleId: string): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        const custom = getCustomRoles().filter(r => r.id !== roleId && !r.isSystem);
-        localStorage.setItem(CUSTOM_ROLES_STORAGE_KEY, JSON.stringify(custom));
-        window.dispatchEvent(new CustomEvent('app-roles-updated'));
-    } catch (e) {
-        console.error('Failed to delete custom role:', e);
-    }
-};
-
-export interface UserRoleAssignment {
-    roleId?: string;
-    level?: number;
-    title?: string;
-    roleCode?: string;
-}
-
-export const getAllUserRoleAssignments = (): Record<string, UserRoleAssignment> => {
-    if (typeof window === 'undefined') return {};
-    try {
-        const data = localStorage.getItem(USER_ROLE_MAP_STORAGE_KEY);
-        return data ? JSON.parse(data) : {};
-    } catch {
-        return {};
-    }
-};
-
-export const saveUserRoleAssignment = (
-    username: string, 
-    roleId: string, 
-    customLevel?: number, 
-    customTitle?: string
-): void => {
-    if (!username || typeof window === 'undefined') return;
-    try {
-        const allRoles = getAllDefinedRoles();
-        const targetRole = allRoles.find(r => r.id === roleId);
-        
-        const map = getAllUserRoleAssignments();
-        const key = username.trim().toLowerCase();
-        
-        map[key] = {
-            roleId,
-            level: customLevel !== undefined ? customLevel : (targetRole ? targetRole.level : 2),
-            title: customTitle || (targetRole ? targetRole.name : 'کاربر سیستم'),
-            roleCode: targetRole ? targetRole.code : 'STAFF'
-        };
-        
-        localStorage.setItem(USER_ROLE_MAP_STORAGE_KEY, JSON.stringify(map));
-    } catch (e) {
-        console.error('Failed to save user role assignment:', e);
-    }
-};
-
+/**
+ * Resolve the user's role, level, color and metadata using API data and available roles list.
+ * Completely free of browser local storage.
+ */
 export const resolveUserRole = (
     username?: string, 
     currentRole?: string, 
-    permLevel?: number
+    permLevel?: number,
+    permRecord?: { roleId?: string; roleTitle?: string; level?: number; roleCode?: string },
+    availableRoles?: UserRoleDefinition[]
 ): { roleId: string; roleTitle: string; userLevel: number; color: string; code: string; isSystem: boolean } => {
-    const allRoles = getAllDefinedRoles();
-    const key = (username || '').trim().toLowerCase();
-    const assignments = getAllUserRoleAssignments();
-    const assigned = assignments[key];
+    const allRoles = availableRoles && availableRoles.length > 0 ? availableRoles : DEFAULT_SYSTEM_ROLES;
 
-    if (assigned && assigned.roleId) {
-        const found = allRoles.find(r => r.id === assigned.roleId);
+    // 1. Explicit roleId from Permissions API record
+    if (permRecord && permRecord.roleId) {
+        const found = allRoles.find(r => r.id === permRecord.roleId);
         if (found) {
             return {
                 roleId: found.id,
-                roleTitle: assigned.title || found.name,
-                userLevel: assigned.level !== undefined ? assigned.level : found.level,
+                roleTitle: permRecord.roleTitle || found.name,
+                userLevel: permRecord.level !== undefined ? permRecord.level : found.level,
                 color: found.color,
                 code: found.code,
                 isSystem: found.isSystem
@@ -225,7 +149,8 @@ export const resolveUserRole = (
         }
     }
 
-    if (currentRole === 'ADMIN' || permLevel === 0) {
+    // 2. Admin role or level 10
+    if (currentRole === 'ADMIN' || permLevel === 0 || (permRecord && permRecord.level !== undefined && permRecord.level >= 10)) {
         const adminRole = DEFAULT_SYSTEM_ROLES[0];
         return {
             roleId: adminRole.id,
@@ -237,8 +162,10 @@ export const resolveUserRole = (
         };
     }
 
-    if (permLevel !== undefined && permLevel > 0) {
-        const matched = allRoles.find(r => r.level === permLevel);
+    // 3. Match by numeric level
+    const targetLevel = permRecord?.level !== undefined ? permRecord.level : permLevel;
+    if (targetLevel !== undefined && targetLevel > 0) {
+        const matched = allRoles.find(r => r.level === targetLevel);
         if (matched) {
             return {
                 roleId: matched.id,
@@ -251,7 +178,7 @@ export const resolveUserRole = (
         }
     }
 
-    // Default to staff
+    // 4. Default to staff office role
     const staffRole = DEFAULT_SYSTEM_ROLES[4];
     return {
         roleId: staffRole.id,
