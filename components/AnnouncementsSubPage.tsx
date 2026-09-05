@@ -512,7 +512,7 @@ export const AnnouncementsSubPage: React.FC<AnnouncementsSubPageProps> = ({ logg
                                         <th className="p-3.5 min-w-[320px]">خلاصه و شرح متن</th>
                                         <th className="p-3.5 min-w-[130px]">دسته‌بندی</th>
                                         <th className="p-3.5 min-w-[110px]">مخاطبان</th>
-                                        <th className="p-3.5 min-w-[120px]">نویسنده</th>
+                                        <th className="p-3.5 min-w-[140px]">ایجادکننده / ویرایشگر</th>
                                         <th className="p-3.5 min-w-[150px]">تاریخ ابلاغ</th>
                                         <th className="p-3.5 min-w-[120px] text-center">عملیات</th>
                                     </tr>
@@ -526,7 +526,7 @@ export const AnnouncementsSubPage: React.FC<AnnouncementsSubPageProps> = ({ logg
 
                                         return (
                                             <tr 
-                                                key={ann.id}
+                                                key={ann.id} 
                                                 className={`hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition-colors ${
                                                     Boolean(ann.isUrgent) ? 'bg-red-50/25 dark:bg-red-950/15' : ''
                                                 }`}
@@ -564,8 +564,17 @@ export const AnnouncementsSubPage: React.FC<AnnouncementsSubPageProps> = ({ logg
                                                         {aud.label}
                                                     </span>
                                                 </td>
-                                                <td className="p-3.5 text-slate-700 dark:text-slate-300 font-medium">
-                                                    {ann.author}
+                                                <td className="p-3.5 text-slate-700 dark:text-slate-300">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                                                            {ann.createdBy || ann.author || 'مدیریت بازرگانی'}
+                                                        </span>
+                                                        {ann.updatedBy && (
+                                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                                                ویرایش: {ann.updatedBy}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-3.5 font-mono text-[11px] text-slate-500 dark:text-slate-400" dir="ltr">
                                                     {ann.createdAt}
@@ -731,11 +740,18 @@ export const AnnouncementsSubPage: React.FC<AnnouncementsSubPageProps> = ({ logg
                                 )}
 
                                 {/* Card Footer */}
-                                <div className="mt-auto pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                                    <div className="flex items-center gap-2 truncate">
-                                        <span className="truncate">
-                                            نویسنده: <b className="text-slate-700 dark:text-slate-300">{ann.author}</b>
-                                        </span>
+                                <div className="mt-auto pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                                    <div className="flex flex-col gap-0.5 max-w-[65%]">
+                                        <div className="flex items-center gap-1 truncate">
+                                            <span>ایجادکننده:</span>
+                                            <b className="text-slate-700 dark:text-slate-300 truncate">{ann.createdBy || ann.author || 'مدیریت بازرگانی'}</b>
+                                        </div>
+                                        {ann.updatedBy && (
+                                            <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 truncate">
+                                                <span>ویرایش:</span>
+                                                <b className="truncate">{ann.updatedBy}</b>
+                                            </div>
+                                        )}
                                         {ann.createdAt && (
                                             <span className="font-mono text-[10px] text-slate-400 opacity-80" dir="ltr">
                                                 {ann.createdAt}

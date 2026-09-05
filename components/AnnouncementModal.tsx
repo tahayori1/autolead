@@ -13,7 +13,9 @@ import {
     Plus,
     Calendar,
     Send,
-    Shield
+    Shield,
+    User,
+    Edit3
 } from 'lucide-react';
 import { 
     Announcement, 
@@ -227,6 +229,7 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
 
         setIsSubmitting(true);
         try {
+            const creator = initialData?.createdBy || initialData?.author || currentUserName || 'مدیریت بازرگانی';
             const payload: Partial<Announcement> = {
                 ...(initialData || {}),
                 title: title.trim(),
@@ -238,7 +241,9 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
                 tags,
                 isFromEmail,
                 emailMetadata: isFromEmail ? emailMetadata : undefined,
-                author: initialData?.author || currentUserName || 'مدیریت بازرگانی',
+                author: creator,
+                createdBy: creator,
+                ...(isEdit ? { updatedBy: currentUserName || 'مدیریت بازرگانی' } : {}),
             };
 
             await onSave(payload);
@@ -325,6 +330,29 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
 
                 {/* Modal Body */}
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* User Tracking & Audit Info */}
+                    <div className="bg-slate-50 dark:bg-slate-850/80 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                            <span className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                                <User className="w-4 h-4" />
+                            </span>
+                            <span className="font-bold text-slate-500 dark:text-slate-400">کاربر ایجادکننده:</span>
+                            <span className="font-black text-slate-800 dark:text-white bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                                {initialData?.createdBy || initialData?.author || currentUserName || 'مدیریت بازرگانی'}
+                            </span>
+                        </div>
+                        {isEdit && (
+                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                                <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                                    <Edit3 className="w-4 h-4" />
+                                </span>
+                                <span className="font-bold text-slate-500 dark:text-slate-400">کاربر ویرایش‌کننده:</span>
+                                <span className="font-black text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-950/50 px-2 py-0.5 rounded-md border border-amber-200/80 dark:border-amber-800/60">
+                                    {currentUserName || 'شما'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
                     
                     {/* Notice if pasted from email */}
                     {pasteNotice && (

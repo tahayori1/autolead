@@ -2,7 +2,7 @@ import React from 'react';
 import type { CarSaleCondition } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { User, ClipboardCheck, Info, Sparkles, Clock, UserCheck, ShieldCheck } from 'lucide-react';
-import { formatConditionDateTime } from '../services/api';
+import { formatConditionDateTime, getConditionDateInfo } from '../services/api';
 
 interface ConditionViewModalProps {
     isOpen: boolean;
@@ -26,6 +26,7 @@ const ConditionViewModal: React.FC<ConditionViewModalProps> = ({ isOpen, onClose
 
     const creator = condition.created_by_name || condition.created_by || condition.createdBy;
     const editor = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+    const dateInfo = getConditionDateInfo(condition);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 print:bg-transparent print:p-0" onClick={onClose}>
@@ -128,10 +129,17 @@ const ConditionViewModal: React.FC<ConditionViewModalProps> = ({ isOpen, onClose
                             <span className="font-mono text-2xl font-black text-emerald-700 dark:text-emerald-400">{condition.initial_deposit.toLocaleString('fa-IR')}</span>
                             <span className="text-sm font-sans mr-1 text-slate-600 dark:text-slate-300">تومان</span>
                         </div>
-                        <div className="flex items-center justify-center gap-1.5 mt-1 pt-1.5 border-t border-green-200/60 dark:border-green-900/40 text-xs text-slate-500 dark:text-slate-400 w-full max-w-xs">
-                            <Clock className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400">تاریخ و ساعت آخرین بروزرسانی:</span>
-                            <span className="font-mono font-bold text-slate-700 dark:text-slate-200 dir-ltr">{formatConditionDateTime(condition)}</span>
+                        <div className="flex flex-col items-center justify-center gap-1 mt-1 pt-1.5 border-t border-green-200/60 dark:border-green-900/40 text-xs text-slate-500 dark:text-slate-400 w-full max-w-sm">
+                            <div className="flex items-center justify-center gap-1.5">
+                                <Clock className={`w-3.5 h-3.5 ${dateInfo.isUpdateDate ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} shrink-0`} />
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">{dateInfo.longLabel}</span>
+                                <span className="font-mono font-bold text-slate-700 dark:text-slate-200 dir-ltr">{dateInfo.formattedDate}</span>
+                            </div>
+                            {dateInfo.isUpdateDate && dateInfo.createdDateFormatted && (
+                                <span className="text-[10px] text-slate-400 dark:text-slate-400">
+                                    (تاریخ ثبت اولیه: {dateInfo.createdDateFormatted})
+                                </span>
+                            )}
                         </div>
                     </div>
                     

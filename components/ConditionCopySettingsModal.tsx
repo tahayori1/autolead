@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { CarSaleCondition } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { CopyIcon } from './icons/CopyIcon';
+import { getConditionDateInfo } from '../services/api';
 
 interface ConditionCopySettingsModalProps {
     isOpen: boolean;
@@ -23,6 +24,7 @@ const ConditionCopySettingsModal: React.FC<ConditionCopySettingsModalProps> = ({
     const [includeDeliveryTime, setIncludeDeliveryTime] = useState(true);
     const [includeInitialDeposit, setIncludeInitialDeposit] = useState(true);
     const [includeDescriptions, setIncludeDescriptions] = useState(true);
+    const [includeDate, setIncludeDate] = useState(true);
 
     // Selected conditions selection state
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -90,6 +92,12 @@ const ConditionCopySettingsModal: React.FC<ConditionCopySettingsModalProps> = ({
             if (includeDescriptions && c.descriptions) {
                 lines.push(`📝 توضیحات: ${c.descriptions}`);
             }
+            if (includeDate) {
+                const dateInfo = getConditionDateInfo(c);
+                if (dateInfo.formattedDate && dateInfo.formattedDate !== '—' && dateInfo.formattedDate !== 'نامشخص') {
+                    lines.push(`🕒 ${dateInfo.dateLabel} ${dateInfo.formattedDate}`);
+                }
+            }
 
             return lines.join('\n');
         });
@@ -98,7 +106,7 @@ const ConditionCopySettingsModal: React.FC<ConditionCopySettingsModalProps> = ({
     }, [
         conditions, selectedIds, headerText, footerText,
         includeModelYear, includeSaleType, includePayType, includeDocStatus,
-        includeColors, includeDeliveryTime, includeInitialDeposit, includeDescriptions
+        includeColors, includeDeliveryTime, includeInitialDeposit, includeDescriptions, includeDate
     ]);
 
     const handleCopy = () => {
@@ -168,6 +176,10 @@ const ConditionCopySettingsModal: React.FC<ConditionCopySettingsModalProps> = ({
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input type="checkbox" checked={includeDescriptions} onChange={e => setIncludeDescriptions(e.target.checked)} className="rounded text-sky-600 focus:ring-sky-500" />
                                         <span className="text-sm dark:text-slate-300">توضیحات بخشنامه</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={includeDate} onChange={e => setIncludeDate(e.target.checked)} className="rounded text-sky-600 focus:ring-sky-500" />
+                                        <span className="text-sm dark:text-slate-300">تاریخ (بروزرسانی یا ایجاد)</span>
                                     </label>
                                 </div>
                             </div>

@@ -11,7 +11,8 @@ import {
     CheckCircle2, 
     Share2, 
     Copy,
-    Building2
+    Building2,
+    Edit3
 } from 'lucide-react';
 import { Announcement } from '../types';
 
@@ -202,12 +203,18 @@ export const AnnouncementViewModal: React.FC<AnnouncementViewModalProps> = ({
 
                         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
                             <span className="flex items-center gap-1">
-                                <User className="w-3.5 h-3.5 text-slate-400" />
-                                <span>ثبت شده توسط: <strong className="text-slate-700 dark:text-slate-300">{announcement.author}</strong></span>
+                                <User className="w-3.5 h-3.5 text-indigo-500" />
+                                <span>کاربر ایجادکننده: <strong className="text-slate-750 dark:text-slate-200">{announcement.createdBy || announcement.author || 'مدیریت'}</strong></span>
                             </span>
+                            {announcement.updatedBy && (
+                                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    <span>کاربر ویرایش‌کننده: <strong className="font-bold">{announcement.updatedBy}</strong></span>
+                                </span>
+                            )}
                             <span className="flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                <span className="font-mono text-slate-600 dark:text-slate-300" dir="ltr">{announcement.createdAt}</span>
+                                <span>تاریخ ثبت: <span className="font-mono text-slate-600 dark:text-slate-300" dir="ltr">{announcement.createdAt}</span></span>
                             </span>
                             {announcement.updatedAt && (
                                 <span className="text-amber-600 dark:text-amber-400 font-mono" dir="ltr">

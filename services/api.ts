@@ -640,16 +640,20 @@ export const deleteStaffUser = async (id: number, username: string): Promise<voi
 
 // --- Car Sale Conditions ---
 
-export const formatConditionDateTime = (condition: CarSaleCondition | Partial<CarSaleCondition> | any): string => {
-    if (!condition) return '—';
-    const rawDate = condition.updatedAt || condition.updated_at || condition.last_update || condition.last_updated || condition.createdAt || condition.created_at || condition.date || condition.timestamp;
-    if (!rawDate) {
-        return 'به‌روز';
+export const isValidDateString = (d: any): boolean => {
+    if (!d) return false;
+    const s = String(d).trim();
+    if (!s || s === 'null' || s === 'undefined' || s === '0' || s === '0000-00-00' || s === '0000-00-00 00:00:00' || s.startsWith('0000')) {
+        return false;
     }
+    return true;
+};
 
+export const parseAndFormatPersianDateTime = (rawDate: any): string => {
+    if (!rawDate) return '';
     try {
         const str = String(rawDate).trim();
-        if (!str) return 'به‌روز';
+        if (!str || str === 'null' || str === 'undefined' || str.startsWith('0000')) return '';
 
         // If string already contains Persian year (14xx or 13xx or ۱۴xx)
         if (str.startsWith('14') || str.startsWith('13') || str.startsWith('۱۴') || str.startsWith('۱۳')) {
@@ -668,6 +672,16 @@ export const formatConditionDateTime = (condition: CarSaleCondition | Partial<Ca
             }
         }
 
+        // Regex for date-only: YYYY-MM-DD
+        const dateOnlyParts = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (dateOnlyParts) {
+            const [_, y, m, d] = dateOnlyParts.map(Number);
+            const dateObj = new Date(Date.UTC(y, m - 1, d));
+            if (!isNaN(dateObj.getTime())) {
+                return dateObj.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            }
+        }
+
         const parsedDate = new Date(str);
         if (!isNaN(parsedDate.getTime())) {
             const persianDate = parsedDate.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -679,6 +693,69 @@ export const formatConditionDateTime = (condition: CarSaleCondition | Partial<Ca
     } catch {
         return String(rawDate);
     }
+};
+
+export interface ConditionDateInfo {
+    formattedDate: string;
+    isUpdateDate: boolean;
+    dateLabel: string;        // 'بروزرسانی:' or 'تاریخ ایجاد:'
+    longLabel: string;        // 'تاریخ و ساعت آخرین بروزرسانی:' or 'تاریخ و ساعت ایجاد:'
+    createdDateFormatted?: string;
+    updatedDateFormatted?: string;
+}
+
+export const getConditionDateInfo = (condition: CarSaleCondition | Partial<CarSaleCondition> | any): ConditionDateInfo => {
+    if (!condition) {
+        return {
+            formattedDate: '—',
+            isUpdateDate: false,
+            dateLabel: 'تاریخ ایجاد:',
+            longLabel: 'تاریخ و ساعت ایجاد:'
+        };
+    }
+
+    const rawUpdate = condition.updatedAt || condition.updated_at || condition.last_update || condition.last_updated;
+    const rawCreate = condition.createdAt || condition.created_at || condition.date || condition.timestamp;
+
+    const hasValidUpdate = isValidDateString(rawUpdate);
+    const hasValidCreate = isValidDateString(rawCreate);
+
+    const formattedUpdate = hasValidUpdate ? parseAndFormatPersianDateTime(rawUpdate) : '';
+    const formattedCreate = hasValidCreate ? parseAndFormatPersianDateTime(rawCreate) : '';
+
+    if (hasValidUpdate && formattedUpdate) {
+        return {
+            formattedDate: formattedUpdate,
+            isUpdateDate: true,
+            dateLabel: 'بروزرسانی:',
+            longLabel: 'تاریخ و ساعت آخرین بروزرسانی:',
+            updatedDateFormatted: formattedUpdate,
+            createdDateFormatted: formattedCreate || undefined
+        };
+    }
+
+    // اگر تاریخ بروزرسانی معلوم نبود، تاریخ ایجاد را می‌نویسد
+    if (hasValidCreate && formattedCreate) {
+        return {
+            formattedDate: formattedCreate,
+            isUpdateDate: false,
+            dateLabel: 'تاریخ ایجاد:',
+            longLabel: 'تاریخ و ساعت ایجاد:',
+            createdDateFormatted: formattedCreate
+        };
+    }
+
+    return {
+        formattedDate: 'نامشخص',
+        isUpdateDate: false,
+        dateLabel: 'تاریخ ایجاد:',
+        longLabel: 'تاریخ و ساعت ایجاد:'
+    };
+};
+
+export const formatConditionDateTime = (condition: CarSaleCondition | Partial<CarSaleCondition> | any): string => {
+    const info = getConditionDateInfo(condition);
+    return info.formattedDate;
 };
 
 const normalizeCondition = (condition: any): CarSaleCondition => {
@@ -722,8 +799,11 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
                      : inventory !== undefined ? inventory
                      : 0;
 
-    const updateStamp = updatedAt || updated_at || last_update || last_updated || createdAt || created_at || null;
-    const createStamp = createdAt || created_at || null;
+    const hasValidUpdate = isValidDateString(updatedAt || updated_at || last_update || last_updated);
+    const hasValidCreate = isValidDateString(createdAt || created_at);
+
+    const updateStamp = hasValidUpdate ? (updatedAt || updated_at || last_update || last_updated) : null;
+    const createStamp = hasValidCreate ? (createdAt || created_at) : null;
     const creatorVal = created_by || createdBy || created_by_name || createdByName || restOfApiData.author || null;
     const updaterVal = updated_by || updatedBy || updated_by_name || updatedByName || null;
             
@@ -1019,11 +1099,18 @@ export const getAnnouncements = async (): Promise<Announcement[]> => {
             ? String(item.content)
             : (item.Content || item.summary || item.Summary || item.description || item.Description || item.body || item.text || '');
 
+        const author = item.author || item.createdBy || item.created_by || 'مدیریت بازرگانی';
+        const createdBy = item.createdBy || item.created_by || item.author || 'مدیریت بازرگانی';
+        const updatedBy = item.updatedBy || item.updated_by || item.updater || item.lastModifiedBy || undefined;
+
         const mapped: any = {
             ...item,
             id: Number(item.id) || item.id,
             title,
             content,
+            author,
+            createdBy,
+            ...(updatedBy ? { updatedBy } : {}),
             tags,
             isUrgent,
             isFromEmail,
@@ -1039,8 +1126,12 @@ export const getAnnouncements = async (): Promise<Announcement[]> => {
 export const createAnnouncement = async (announcement: Partial<Announcement>): Promise<Announcement> => {
     ensureOnline();
     const mysqlDateTime = toMySQLDateTime(announcement.createdAt);
+    const createdBy = announcement.createdBy || announcement.author || 'مدیریت بازرگانی';
+    const author = announcement.author || createdBy;
     const payload: any = {
         ...announcement,
+        author,
+        createdBy,
         createdAt: mysqlDateTime,
     };
     delete payload.created_at;
@@ -1065,6 +1156,9 @@ export const updateAnnouncement = async (announcement: Announcement): Promise<An
     const updatedMysql = toMySQLDateTime();
     const payload: any = {
         ...announcement,
+        author: announcement.author || announcement.createdBy || 'مدیریت بازرگانی',
+        createdBy: announcement.createdBy || announcement.author || 'مدیریت بازرگانی',
+        updatedBy: announcement.updatedBy || 'کاربر سیستم',
         updatedAt: updatedMysql,
     };
     if (announcement.createdAt) {

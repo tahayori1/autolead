@@ -8,7 +8,7 @@ import { EyeIcon } from './icons/EyeIcon';
 import { SortIcon } from './icons/SortIcon';
 import { CopyIcon } from './icons/CopyIcon';
 import { Clock, User, UserCheck } from 'lucide-react';
-import { formatConditionDateTime } from '../services/api';
+import { formatConditionDateTime, getConditionDateInfo } from '../services/api';
 
 interface ConditionTableProps {
     conditions: CarSaleCondition[];
@@ -83,7 +83,9 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-150 dark:divide-slate-700/60">
-                        {conditions.map((condition) => (
+                        {conditions.map((condition) => {
+                            const dateInfo = getConditionDateInfo(condition);
+                            return (
                             <tr key={condition.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors ${selectedIds.has(condition.id) ? 'bg-sky-50/80 dark:bg-sky-900/20' : 'bg-white dark:bg-slate-800'}`}>
                                 <td className="px-6 py-4">
                                     <input 
@@ -108,10 +110,10 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                             {formatPrice(condition.initial_deposit)} <span className="text-[11px] font-sans font-normal text-slate-500 dark:text-slate-400">تومان</span>
                                         </div>
                                         <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                            <Clock className="w-3 h-3 text-amber-500 dark:text-amber-400 shrink-0" />
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500">بروزرسانی:</span>
+                                            <Clock className={`w-3 h-3 ${dateInfo.isUpdateDate ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} shrink-0`} />
+                                            <span className="text-[10px] text-slate-400 dark:text-slate-500">{dateInfo.dateLabel}</span>
                                             <span className="font-mono font-medium text-slate-600 dark:text-slate-300 dir-ltr text-right">
-                                                {formatConditionDateTime(condition)}
+                                                {dateInfo.formattedDate}
                                             </span>
                                         </div>
                                         {/* Creator & Editor info */}
@@ -161,14 +163,16 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                        );})}
                     </tbody>
                 </table>
             </div>
 
             {/* Mobile Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 md:hidden">
-                {conditions.map((condition) => (
+                {conditions.map((condition) => {
+                    const dateInfo = getConditionDateInfo(condition);
+                    return (
                     <div key={condition.id} className={`border rounded-xl shadow-sm flex flex-col transition-all ${selectedIds.has(condition.id) ? 'bg-sky-50/80 dark:bg-sky-900/20 border-sky-300 dark:border-sky-800' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
                         <div className="p-4 border-b dark:border-slate-700/80">
                             <div className="flex justify-between items-center">
@@ -193,10 +197,12 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                     {formatPrice(condition.initial_deposit)} <span className="text-sm font-sans font-normal text-slate-500 dark:text-slate-400">تومان</span>
                                 </p>
                                 <div className="flex items-center justify-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-600/60 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                    <Clock className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-400">آخرین بروزرسانی:</span>
+                                    <Clock className={`w-3.5 h-3.5 ${dateInfo.isUpdateDate ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} shrink-0`} />
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-400">
+                                        {dateInfo.isUpdateDate ? 'آخرین بروزرسانی:' : 'تاریخ ایجاد:'}
+                                    </span>
                                     <span className="font-mono font-medium text-slate-700 dark:text-slate-300 dir-ltr">
-                                        {formatConditionDateTime(condition)}
+                                        {dateInfo.formattedDate}
                                     </span>
                                 </div>
                                 {(condition.created_by_name || condition.created_by || condition.createdBy || condition.updated_by_name || condition.updated_by) && (
@@ -248,7 +254,7 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                             </button>
                         </div>
                     </div>
-                ))}
+                );})}
             </div>
         </div>
     );

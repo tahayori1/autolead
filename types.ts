@@ -64,6 +64,8 @@ export interface Announcement {
     category: AnnouncementCategory;
     isUrgent: boolean;
     author: string;
+    createdBy?: string;
+    updatedBy?: string;
     createdAt: string;
     updatedAt?: string;
     tags?: string[];
@@ -392,7 +394,11 @@ export interface StaffUser {
     password?: string; // Optional, used only for creation
     fullName: string;
     full_name?: string;
-    role: 'ADMIN' | 'STAFF';
+    role: 'ADMIN' | 'STAFF' | string;
+    roleTitle?: string;
+    roleId?: string;
+    userLevel?: number; // 0 to 10
+    permission_level?: number;
     permissions: Permission[];
     registerTime?: string;
     register_time?: string;
@@ -502,6 +508,9 @@ export interface LeaveRequest {
     startDate: string;
     endDate?: string; // For daily
     hours?: number; // For hourly
+    startTime?: string; // For hourly, e.g. "09:00"
+    endTime?: string; // For hourly, e.g. "12:00"
+    hourlyCategory?: string; // e.g. 'استحقاقی', 'درمانی / پزشکی', 'شخصی / اضطراری', 'ماموریت ساعتی'
     reason: string;
     status: LeaveStatus;
     createdAt: string;

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getConditions, createCondition, updateCondition, deleteCondition, getCars, getMyProfile } from '../services/api';
+import { getConditions, createCondition, updateCondition, deleteCondition, getCars, getMyProfile, getConditionDateInfo } from '../services/api';
 import { SaleType, ConditionStatus } from '../types';
 import type { CarSaleCondition, Car, MyProfile } from '../types';
 import ConditionTable from '../components/ConditionTable';
@@ -307,7 +307,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
         const headers = [
             "شناسه", "وضعیت", "مدل خودرو", "سال مدل", "نوع فروش",
             "نحوه پرداخت", "وضعیت سند", "رنگ‌ها", "زمان تحویل",
-            "پیش‌پرداخت / قیمت", "توضیحات"
+            "پیش‌پرداخت / قیمت", "تاریخ", "نوع تاریخ", "توضیحات"
         ];
 
         const escapeCSV = (value: any): string => {
@@ -318,19 +318,24 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
             return str;
         };
 
-        const csvRows = sortedAndFilteredConditions.map(c => [
-            c.id,
-            c.status,
-            c.car_model,
-            c.model,
-            c.sale_type,
-            c.pay_type,
-            c.document_status,
-            c.colors.join(' - '),
-            c.delivery_time,
-            c.initial_deposit,
-            c.descriptions,
-        ].map(escapeCSV).join(','));
+        const csvRows = sortedAndFilteredConditions.map(c => {
+            const dateInfo = getConditionDateInfo(c);
+            return [
+                c.id,
+                c.status,
+                c.car_model,
+                c.model,
+                c.sale_type,
+                c.pay_type,
+                c.document_status,
+                c.colors.join(' - '),
+                c.delivery_time,
+                c.initial_deposit,
+                dateInfo.formattedDate,
+                dateInfo.isUpdateDate ? 'بروزرسانی' : 'ایجاد',
+                c.descriptions,
+            ].map(escapeCSV).join(',');
+        });
 
         const csvContent = [headers.join(','), ...csvRows].join('\n');
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
