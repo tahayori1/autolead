@@ -55,16 +55,16 @@ const InventoryPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-    // Tab state
-    const [activeTab, setActiveTab] = useState<ActiveTab>('customer');
+    // Tab state - Default to Warehouse and Showroom inventory
+    const [activeTab, setActiveTab] = useState<ActiveTab>('warehouse');
 
     // View mode: Grouped by car model (default) or flat table
     const [viewMode, setViewMode] = useState<ViewMode>('grouped');
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-    // Filter and Sort states - Priority display by highest stock first
+    // Filter and Sort states - Priority display by highest stock first (Default to available cars only)
     const [searchTerm, setSearchTerm] = useState<string>('');
-    const [selectedStatus, setSelectedStatus] = useState<ConditionStatus | 'all'>('all');
+    const [selectedStatus, setSelectedStatus] = useState<ConditionStatus | 'all'>(ConditionStatus.AVAILABLE);
     const [selectedSaleType, setSelectedSaleType] = useState<SaleType | 'all'>('all');
     const [stockFilter, setStockFilter] = useState<'high_stock' | 'single_unit' | 'out_of_stock' | 'all'>('all');
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'stock_quantity', direction: 'descending' });
@@ -215,7 +215,21 @@ const InventoryPage: React.FC = () => {
         const filtered = conditions.filter(c => {
             const matchesSearch = (c?.car_model || '').toLowerCase().includes(term) ||
                                  (c?.descriptions && c.descriptions.toLowerCase().includes(term));
-            const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus;
+            
+            // Status condition (Strictly available by default)
+            let matchesStatus = true;
+            if (selectedStatus === ConditionStatus.AVAILABLE) {
+                matchesStatus = (c.status === ConditionStatus.AVAILABLE || c.status === 'موجود') && 
+                               (c.stock_quantity === undefined || c.stock_quantity === null || c.stock_quantity > 0);
+            } else if (selectedStatus === ConditionStatus.CAPACITY_FULL) {
+                matchesStatus = c.status === ConditionStatus.CAPACITY_FULL || c.status === 'تکمیل ظرفیت';
+            } else if (selectedStatus === ConditionStatus.SOLD_OUT) {
+                matchesStatus = c.status === ConditionStatus.SOLD_OUT || c.status === 'فروخته شد' || (c.stock_quantity !== undefined && c.stock_quantity !== null && c.stock_quantity <= 0);
+            } else if (selectedStatus === 'all') {
+                matchesStatus = true;
+            } else {
+                matchesStatus = c.status === selectedStatus;
+            }
             
             // Tab condition
             let matchesTab = true;
@@ -707,15 +721,15 @@ const InventoryPage: React.FC = () => {
                     </div>
 
                     {/* Filter Status */}
-                    <div className="w-full lg:w-48 relative">
-                        <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                    <div className="w-full lg:w-56 relative">
+                        <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <select
                             value={selectedStatus}
                             onChange={(e) => setSelectedStatus(e.target.value as any)}
-                            className="w-full pr-9 pl-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-xs font-bold appearance-none cursor-pointer"
+                            className="w-full pr-9 pl-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-xs font-bold appearance-none cursor-pointer focus:border-indigo-500"
                         >
-                            <option value="all">همه وضعیت‌ها</option>
-                            <option value={ConditionStatus.AVAILABLE}>🟢 موجود در انبار</option>
+                            <option value={ConditionStatus.AVAILABLE}>🟢 فقط خودروهای موجود (پیش‌فرض)</option>
+                            <option value="all">همه وضعیت‌ها (شامل تکمیل و ناموجود)</option>
                             <option value={ConditionStatus.CAPACITY_FULL}>🟡 تکمیل ظرفیت</option>
                             <option value={ConditionStatus.SOLD_OUT}>🔴 فروخته شد (عدم موجودی)</option>
                         </select>
@@ -744,9 +758,17 @@ const InventoryPage: React.FC = () => {
                 </div>
 
                 {/* Active Filter Indicators */}
-                {(stockFilter !== 'all' || searchTerm) && (
+                {(stockFilter !== 'all' || searchTerm || selectedStatus !== ConditionStatus.AVAILABLE || selectedSaleType !== 'all') && (
                     <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex-wrap text-xs">
                         <span className="text-slate-400 text-[11px] font-bold">فیلترهای فعال:</span>
+                        {selectedStatus !== ConditionStatus.AVAILABLE && (
+                            <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1 font-bold">
+                                <span>وضعیت: {selectedStatus === 'all' ? 'همه وضعیت‌ها' : selectedStatus}</span>
+                                <button onClick={() => setSelectedStatus(ConditionStatus.AVAILABLE)} className="hover:text-rose-500 mr-1" title="بازگشت به فقط خودروهای موجود">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        )}
                         {stockFilter !== 'all' && (
                             <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1 font-bold">
                                 <span>
@@ -771,12 +793,13 @@ const InventoryPage: React.FC = () => {
                             onClick={() => {
                                 setStockFilter('all');
                                 setSearchTerm('');
-                                setSelectedStatus('all');
+                                setSelectedSaleType('all');
+                                setSelectedStatus(ConditionStatus.AVAILABLE);
                             }}
-                            className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1 mr-auto"
+                            className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1 mr-auto cursor-pointer"
                         >
                             <RotateCcw className="w-3 h-3" />
-                            <span>پاک کردن همه فیلترها</span>
+                            <span>بازنشانی فیلترها (فقط خودروهای موجود)</span>
                         </button>
                     </div>
                 )}
