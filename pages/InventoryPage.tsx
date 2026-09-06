@@ -13,15 +13,32 @@ import PersianDatePicker from '../components/PersianDatePicker';
 import { SalesManagerAssistantPanel } from '../components/SalesManagerAssistantPanel';
 import { 
     Boxes, Search, Filter, RefreshCw, Copy, Download, 
-    Plus, Minus, Check, AlertTriangle, AlertCircle, X, ChevronDown, CheckCircle2,
+    Plus, Minus, Check, AlertTriangle, AlertCircle, X, ChevronDown, ChevronUp, CheckCircle2,
     Calendar, Layers, Palette, DollarSign, Clock, HelpCircle, ArrowUpDown, Eye, Building2, Ticket,
-    Flame, Zap, Sparkles, Target, RotateCcw
+    Flame, Zap, Sparkles, Target, RotateCcw, Car as CarIcon, ListTree, Table as TableIcon
 } from 'lucide-react';
 
 declare const moment: any;
 
 type SortConfig = { key: keyof CarSaleCondition; direction: 'ascending' | 'descending' } | null;
 type ActiveTab = 'radar' | 'warehouse' | 'transfer' | 'customer';
+type ViewMode = 'grouped' | 'table';
+
+export interface GroupedCarModel {
+    carModel: string;
+    totalStock: number;
+    availableStock: number;
+    totalConditions: number;
+    conditions: CarSaleCondition[];
+    allColors: string[];
+    saleTypes: string[];
+    payTypes: string[];
+    modelYears: (number | string)[];
+    hasSingleUnit: boolean;
+    hasHighStock: boolean;
+    isAllSoldOut: boolean;
+    isAllCapacityFull: boolean;
+}
 
 const DEFAULT_DEALERSHIP_FOOTER = `☎️تماس بگیرید:
 (پاسخگویی ۹ تا ۲۰)
@@ -40,6 +57,10 @@ const InventoryPage: React.FC = () => {
 
     // Tab state
     const [activeTab, setActiveTab] = useState<ActiveTab>('customer');
+
+    // View mode: Grouped by car model (default) or flat table
+    const [viewMode, setViewMode] = useState<ViewMode>('grouped');
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
     // Filter and Sort states - Priority display by highest stock first
     const [searchTerm, setSearchTerm] = useState<string>('');
@@ -242,6 +263,111 @@ const InventoryPage: React.FC = () => {
         }
         return filtered;
     }, [conditions, searchTerm, selectedStatus, selectedSaleType, stockFilter, activeTab, sortConfig]);
+
+    // Grouping logic: Aggregate conditions by car model / trim
+    const groupedConditions = useMemo<GroupedCarModel[]>(() => {
+        const groupsMap = new Map<string, CarSaleCondition[]>();
+
+        filteredConditions.forEach(cond => {
+            const modelName = (cond?.car_model || 'سایر').trim();
+            if (!groupsMap.has(modelName)) {
+                groupsMap.set(modelName, []);
+            }
+            groupsMap.get(modelName)!.push(cond);
+        });
+
+        const groups: GroupedCarModel[] = [];
+
+        groupsMap.forEach((conds, carModel) => {
+            const totalStock = conds.reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
+            const availableStock = conds
+                .filter(c => c.status === ConditionStatus.AVAILABLE)
+                .reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
+
+            const allColorsSet = new Set<string>();
+            conds.forEach(c => {
+                if (Array.isArray(c.colors)) {
+                    c.colors.forEach(col => col && allColorsSet.add(col));
+                }
+            });
+
+            const saleTypesSet = new Set<string>();
+            conds.forEach(c => c.sale_type && saleTypesSet.add(c.sale_type));
+
+            const payTypesSet = new Set<string>();
+            conds.forEach(c => c.pay_type && payTypesSet.add(c.pay_type));
+
+            const modelYearsSet = new Set<number | string>();
+            conds.forEach(c => (c.model !== undefined && c.model !== null) && modelYearsSet.add(c.model));
+
+            const hasSingleUnit = conds.some(c => c.stock_quantity === 1 && c.status === ConditionStatus.AVAILABLE);
+            const hasHighStock = totalStock >= 3 && availableStock > 0;
+            const isAllSoldOut = conds.every(c => c.status === ConditionStatus.SOLD_OUT || (c.stock_quantity || 0) === 0);
+            const isAllCapacityFull = conds.every(c => c.status === ConditionStatus.CAPACITY_FULL);
+
+            // Sort conditions inside group: highest year first, then available stock
+            const sortedConds = [...conds].sort((a, b) => {
+                const yearA = Number(a.model) || 0;
+                const yearB = Number(b.model) || 0;
+                if (yearB !== yearA) return yearB - yearA;
+                return (b.stock_quantity || 0) - (a.stock_quantity || 0);
+            });
+
+            groups.push({
+                carModel,
+                totalStock,
+                availableStock,
+                totalConditions: conds.length,
+                conditions: sortedConds,
+                allColors: Array.from(allColorsSet),
+                saleTypes: Array.from(saleTypesSet),
+                payTypes: Array.from(payTypesSet),
+                modelYears: Array.from(modelYearsSet).sort((a, b) => Number(b) - Number(a)),
+                hasSingleUnit,
+                hasHighStock,
+                isAllSoldOut,
+                isAllCapacityFull
+            });
+        });
+
+        // Group-level sorting
+        if (sortConfig !== null) {
+            groups.sort((a, b) => {
+                if (sortConfig.key === 'stock_quantity') {
+                    return sortConfig.direction === 'ascending' 
+                        ? a.totalStock - b.totalStock 
+                        : b.totalStock - a.totalStock;
+                }
+                if (sortConfig.key === 'car_model') {
+                    const comp = a.carModel.localeCompare(b.carModel, 'fa-IR');
+                    return sortConfig.direction === 'ascending' ? comp : -comp;
+                }
+                return 0;
+            });
+        } else {
+            groups.sort((a, b) => b.totalStock - a.totalStock);
+        }
+
+        return groups;
+    }, [filteredConditions, sortConfig]);
+
+    const toggleGroup = (modelName: string) => {
+        setExpandedGroups(prev => {
+            const isCurrentlyOpen = prev[modelName] !== undefined ? prev[modelName] : true;
+            return {
+                ...prev,
+                [modelName]: !isCurrentlyOpen
+            };
+        });
+    };
+
+    const setAllExpanded = (expanded: boolean) => {
+        const newState: Record<string, boolean> = {};
+        groupedConditions.forEach(g => {
+            newState[g.carModel] = expanded;
+        });
+        setExpandedGroups(newState);
+    };
 
     // Summary Metrics per Tab
     const metrics = useMemo(() => {
@@ -656,224 +782,605 @@ const InventoryPage: React.FC = () => {
                 )}
             </div>
 
-            {/* Inventory Data Table */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse min-w-[1000px]">
-                        <thead>
-                            <tr className="bg-slate-50/75 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-500 font-bold text-[11px] uppercase tracking-wider">
-                                <th onClick={() => handleSort('car_model')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
-                                    <div className="flex items-center gap-1.5 justify-start">
-                                        <span>مدل و تیپ خودرو</span>
-                                        <ArrowUpDown className="w-3 h-3" />
+            {/* View Mode Toolbar & Quick Controls */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm">
+                {/* View Mode Switcher */}
+                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                    <button
+                        onClick={() => setViewMode('grouped')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                            viewMode === 'grouped'
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                        }`}
+                        title="نمای تجمیعی و دسته‌بندی بر اساس مدل و تیپ خودرو"
+                    >
+                        <ListTree className="w-3.5 h-3.5" />
+                        <span>نمای تجمیعی مدل‌ها (هوشمند)</span>
+                    </button>
+                    <button
+                        onClick={() => setViewMode('table')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                            viewMode === 'table'
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                        }`}
+                        title="نمای جدولی ساده کل بخشنامه‌ها"
+                    >
+                        <TableIcon className="w-3.5 h-3.5" />
+                        <span>نمای جدولی ساده</span>
+                    </button>
+                </div>
+
+                {/* Quick actions & stats */}
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    {viewMode === 'grouped' && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setAllExpanded(true)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                            >
+                                باز کردن همه
+                            </button>
+                            <button
+                                onClick={() => setAllExpanded(false)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                            >
+                                بستن همه
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5">
+                        <span className="text-indigo-600 dark:text-indigo-400 font-black">{groupedConditions.length.toLocaleString('fa-IR')}</span>
+                        <span>مدل خودرو</span>
+                        <span>|</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black">{filteredConditions.length.toLocaleString('fa-IR')}</span>
+                        <span>شرایط فروش</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* GROUPED VIEW (تجمیع بر اساس مدل و تیپ خودرو) */}
+            {viewMode === 'grouped' && (
+                <div className="space-y-4">
+                    {groupedConditions.map((group) => {
+                        const isExpanded = expandedGroups[group.carModel] !== undefined ? expandedGroups[group.carModel] : true;
+
+                        return (
+                            <div 
+                                key={group.carModel} 
+                                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-sm overflow-hidden transition-all"
+                            >
+                                {/* Group Header Accordion Bar */}
+                                <div
+                                    onClick={() => toggleGroup(group.carModel)}
+                                    className="p-4 bg-slate-50/75 dark:bg-slate-900/50 hover:bg-slate-100/80 dark:hover:bg-slate-900/80 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700/60 transition-colors select-none"
+                                >
+                                    {/* Left (RTL Right): Car Model Info and Badges */}
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                                            activeTab === 'warehouse' 
+                                                ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400' 
+                                                : activeTab === 'transfer'
+                                                ? 'bg-sky-100 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400'
+                                                : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                                        }`}>
+                                            <CarIcon className="w-5 h-5" />
+                                        </div>
+
+                                        <div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="font-black text-slate-900 dark:text-white text-base">
+                                                    {group.carModel}
+                                                </h3>
+
+                                                {/* Variant Count Badge */}
+                                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                                    <Layers className="w-3 h-3" />
+                                                    <span>{group.totalConditions.toLocaleString('fa-IR')} بخشنامه / روش فروش</span>
+                                                </span>
+
+                                                {/* Model Years Badge */}
+                                                {group.modelYears.length > 0 && (
+                                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-mono">
+                                                        سال {group.modelYears.map(y => y.toLocaleString('fa-IR', { useGrouping: false })).join('، ')}
+                                                    </span>
+                                                )}
+
+                                                {/* Single Unit Alert */}
+                                                {group.hasSingleUnit && (
+                                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/50 flex items-center gap-1 shadow-sm">
+                                                        <Zap className="w-3 h-3 text-amber-500 fill-amber-500 animate-pulse" />
+                                                        <span>تک‌موجود / آخرین دستگاه</span>
+                                                    </span>
+                                                )}
+
+                                                {/* High Stock Alert */}
+                                                {group.hasHighStock && (
+                                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1">
+                                                        <Flame className="w-3 h-3 text-rose-500" />
+                                                        <span>اولویت فروش (انباشت موجودی)</span>
+                                                    </span>
+                                                )}
+
+                                                {/* All Sold Out Badge */}
+                                                {group.isAllSoldOut && (
+                                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                        اتمام موجودی
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Subtitle with Colors & Sale Types Summary */}
+                                            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
+                                                {group.saleTypes.length > 0 && (
+                                                    <span className="font-bold">
+                                                        روش‌های عرضه: {group.saleTypes.join(' | ')}
+                                                    </span>
+                                                )}
+                                                {group.allColors.length > 0 && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span className="flex items-center gap-1">
+                                                            <span>🎨 رنگ‌ها:</span>
+                                                            <span className="font-bold text-slate-700 dark:text-slate-300">{group.allColors.join('، ')}</span>
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                </th>
-                                <th onClick={() => handleSort('model')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
-                                    <div className="flex items-center gap-1.5 justify-start">
-                                        <span>سال ساخت</span>
-                                        <ArrowUpDown className="w-3 h-3" />
+
+                                    {/* Right (RTL Left): Total Stock & Expand Chevron */}
+                                    <div className="flex items-center gap-3 justify-between md:justify-end">
+                                        {/* Total Stock Badge */}
+                                        {activeTab !== 'customer' ? (
+                                            <div className={`px-3.5 py-1.5 rounded-xl font-mono flex items-center gap-1.5 border shadow-sm ${
+                                                group.totalStock > 0
+                                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+                                            }`}>
+                                                <Boxes className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                <span className="text-xs font-bold">مجموع موجودی تیپ:</span>
+                                                <span className="text-sm font-black">{group.totalStock.toLocaleString('fa-IR')}</span>
+                                                <span className="text-xs">دستگاه</span>
+                                            </div>
+                                        ) : (
+                                            <div className="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                                <span>{group.totalConditions.toLocaleString('fa-IR')} طرح فروش فعال</span>
+                                            </div>
+                                        )}
+
+                                        {/* Expand/Collapse Toggle Button */}
+                                        <div className="w-8 h-8 rounded-xl bg-slate-200/70 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-transform">
+                                            {isExpanded ? (
+                                                <ChevronUp className="w-4 h-4" />
+                                            ) : (
+                                                <ChevronDown className="w-4 h-4" />
+                                            )}
+                                        </div>
                                     </div>
-                                </th>
-                                <th className="p-4">نوع عرضه / فروش</th>
-                                <th className="p-4">نحوه پرداخت</th>
-                                <th className="p-4">رنگ‌های عرضه شده</th>
-                                <th className="p-4">زمان تحویل</th>
-                                <th onClick={() => handleSort('initial_deposit')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
-                                    <div className="flex items-center gap-1.5 justify-start">
-                                        <span>قیمت / پیش‌پرداخت</span>
-                                        <ArrowUpDown className="w-3 h-3" />
-                                    </div>
-                                </th>
-                                
-                                {/* Omit Stock Column completely in Customer facing Tab */}
-                                {activeTab !== 'customer' && (
-                                    <th onClick={() => handleSort('stock_quantity')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors min-w-[160px]">
+                                </div>
+
+                                {/* Group Body: Nested Conditions Table */}
+                                <AnimatePresence initial={false}>
+                                    {isExpanded && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="overflow-x-auto"
+                                        >
+                                            <table className="w-full text-right border-collapse min-w-[900px]">
+                                                <thead>
+                                                    <tr className="bg-slate-100/60 dark:bg-slate-900/60 border-b border-slate-200/80 dark:border-slate-700/60 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase">
+                                                        <th className="p-3">شناسه بخشنامه</th>
+                                                        <th className="p-3">سال ساخت</th>
+                                                        <th className="p-3">نوع عرضه / فروش</th>
+                                                        <th className="p-3">نحوه پرداخت</th>
+                                                        <th className="p-3">رنگ‌های عرضه شده</th>
+                                                        <th className="p-3">زمان تحویل</th>
+                                                        <th className="p-3">قیمت / پیش‌پرداخت</th>
+                                                        {activeTab !== 'customer' && (
+                                                            <th className="p-3 text-center min-w-[150px]">تعداد موجودی</th>
+                                                        )}
+                                                        <th className="p-3 min-w-[130px]">{activeTab === 'customer' ? 'وضعیت عرضه' : 'مدیریت وضعیت'}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-xs text-slate-700 dark:text-slate-300 font-medium">
+                                                    {group.conditions.map((condition) => {
+                                                        const isAvailable = condition.status === ConditionStatus.AVAILABLE;
+                                                        const isCapacityFull = condition.status === ConditionStatus.CAPACITY_FULL;
+                                                        const isSoldOut = condition.status === ConditionStatus.SOLD_OUT;
+                                                        const isSingle = condition.stock_quantity === 1 && isAvailable;
+                                                        const isHigh = (condition.stock_quantity || 0) >= 3 && isAvailable;
+
+                                                        return (
+                                                            <tr 
+                                                                key={condition.id} 
+                                                                className="hover:bg-slate-50/70 dark:hover:bg-slate-900/30 transition-colors"
+                                                            >
+                                                                {/* ID & Description */}
+                                                                <td className="p-3">
+                                                                    <div className="space-y-0.5">
+                                                                        <div className="font-mono font-bold text-slate-500 text-[11px]">
+                                                                            #{condition.id}
+                                                                        </div>
+                                                                        {condition.descriptions && (
+                                                                            <div className="text-[10px] text-slate-400 line-clamp-1 max-w-[180px]">
+                                                                                {condition.descriptions}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+
+                                                                {/* Model Year */}
+                                                                <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-200">
+                                                                    {condition.model ? condition.model.toLocaleString('fa-IR', { useGrouping: false }) : '-'}
+                                                                </td>
+
+                                                                {/* Sale Type */}
+                                                                <td className="p-3">
+                                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
+                                                                        condition.sale_type === SaleType.TRANSFER
+                                                                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                                                            : condition.sale_type === SaleType.USED
+                                                                            ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                                                                            : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                                                                    }`}>
+                                                                        {condition.sale_type}
+                                                                    </span>
+                                                                </td>
+
+                                                                {/* Pay Type */}
+                                                                <td className="p-3">
+                                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
+                                                                        condition.pay_type === PayType.CASH 
+                                                                            ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                                                            : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
+                                                                    }`}>
+                                                                        {condition.pay_type}
+                                                                    </span>
+                                                                </td>
+
+                                                                {/* Colors */}
+                                                                <td className="p-3">
+                                                                    {condition.colors && condition.colors.length > 0 ? (
+                                                                        <div className="flex flex-wrap gap-1 max-w-[160px]">
+                                                                            {condition.colors.map((color, idx) => (
+                                                                                <span key={idx} className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-600 dark:text-slate-300">
+                                                                                    {color}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </td>
+
+                                                                {/* Delivery Time */}
+                                                                <td className="p-3 text-slate-600 dark:text-slate-300 font-bold text-[11px]">
+                                                                    {condition.delivery_time || '-'}
+                                                                </td>
+
+                                                                {/* Price / Initial deposit */}
+                                                                <td className="p-3 font-mono font-black text-slate-900 dark:text-white text-xs">
+                                                                    {condition.initial_deposit 
+                                                                        ? `${condition.initial_deposit.toLocaleString('fa-IR')} تومان`
+                                                                        : 'نامشخص'
+                                                                    }
+                                                                </td>
+
+                                                                {/* Stock Quantity Controls */}
+                                                                {activeTab !== 'customer' && (
+                                                                    <td className="p-3 text-center">
+                                                                        <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" dir="ltr">
+                                                                            <button
+                                                                                onClick={() => handleStockChange(condition, 1)}
+                                                                                className="w-6 h-6 bg-white dark:bg-slate-800 hover:bg-emerald-500 hover:text-white border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-xs"
+                                                                                title="افزایش ۱ دستگاه"
+                                                                            >
+                                                                                <Plus className="w-3 h-3" />
+                                                                            </button>
+                                                                            
+                                                                            <input
+                                                                                type="text"
+                                                                                value={condition.stock_quantity === 0 ? '0' : condition.stock_quantity}
+                                                                                onChange={(e) => handleDirectStockChange(condition, e.target.value)}
+                                                                                className="w-10 py-0.5 border-none bg-transparent text-slate-900 dark:text-slate-100 outline-none text-center font-mono font-black text-xs"
+                                                                            />
+
+                                                                            <button
+                                                                                onClick={() => handleStockChange(condition, -1)}
+                                                                                disabled={condition.stock_quantity <= 0}
+                                                                                className="w-6 h-6 bg-white dark:bg-slate-800 hover:bg-rose-500 hover:text-white border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-xs disabled:opacity-40 disabled:pointer-events-none"
+                                                                                title="کاهش ۱ دستگاه"
+                                                                            >
+                                                                                <Minus className="w-3 h-3" />
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                )}
+
+                                                                {/* Status */}
+                                                                <td className="p-3">
+                                                                    {activeTab === 'customer' ? (
+                                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
+                                                                            isAvailable 
+                                                                                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                                                                : isCapacityFull
+                                                                                    ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
+                                                                                    : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
+                                                                        }`}>
+                                                                            <span className={`w-1.5 h-1.5 rounded-full ${
+                                                                                isAvailable ? 'bg-emerald-500' : isCapacityFull ? 'bg-amber-500' : 'bg-rose-500'
+                                                                            }`}></span>
+                                                                            {condition.status}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <div className="relative">
+                                                                            <select
+                                                                                value={condition.status}
+                                                                                onChange={(e) => handleStatusChange(condition, e.target.value as ConditionStatus)}
+                                                                                className={`px-2 py-1 rounded-lg text-[10px] font-black border-none outline-none cursor-pointer appearance-none ${
+                                                                                    isAvailable 
+                                                                                        ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' 
+                                                                                        : isCapacityFull
+                                                                                            ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
+                                                                                            : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400'
+                                                                                }`}
+                                                                            >
+                                                                                <option value={ConditionStatus.AVAILABLE}>🟢 موجود</option>
+                                                                                <option value={ConditionStatus.CAPACITY_FULL}>🟡 تکمیل ظرفیت</option>
+                                                                                <option value={ConditionStatus.SOLD_OUT}>🔴 فروخته شد</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        );
+                    })}
+
+                    {groupedConditions.length === 0 && (
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 p-12 text-center text-slate-400 dark:text-slate-500 font-bold">
+                            <Boxes className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                            هیچ خودرویی با فیلترهای کنونی در این بخش یافت نشد.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* FLAT TABLE VIEW (نمای جدولی ساده) */}
+            {viewMode === 'table' && (
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/60 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-right border-collapse min-w-[1000px]">
+                            <thead>
+                                <tr className="bg-slate-50/75 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-500 font-bold text-[11px] uppercase tracking-wider">
+                                    <th onClick={() => handleSort('car_model')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
                                         <div className="flex items-center gap-1.5 justify-start">
-                                            <span>موجودی انبار</span>
+                                            <span>مدل و تیپ خودرو</span>
                                             <ArrowUpDown className="w-3 h-3" />
                                         </div>
                                     </th>
-                                )}
-
-                                <th className="p-4 min-w-[140px]">{activeTab === 'customer' ? 'وضعیت عرضه' : 'مدیریت وضعیت'}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-xs text-slate-700 dark:text-slate-300 font-medium">
-                            {filteredConditions.map((condition) => {
-                                const isAvailable = condition.status === ConditionStatus.AVAILABLE;
-                                const isCapacityFull = condition.status === ConditionStatus.CAPACITY_FULL;
-                                const isSoldOut = condition.status === ConditionStatus.SOLD_OUT;
-                                const isSingleUnit = condition.stock_quantity === 1 && isAvailable;
-                                const isHighStock = (condition.stock_quantity || 0) >= 3 && isAvailable;
-
-                                return (
-                                    <tr key={condition.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
-                                        {/* Car Model with Smart Badges */}
-                                        <td className="p-4">
-                                            <div className="space-y-1">
-                                                <div className="font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                        activeTab === 'warehouse' ? 'bg-indigo-500' : activeTab === 'transfer' ? 'bg-sky-500' : 'bg-emerald-500'
-                                                    }`}></span>
-                                                    <span>{condition.car_model}</span>
-
-                                                    {/* Single Unit Alert (آخرین دستگاه) */}
-                                                    {isSingleUnit && (
-                                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/50 flex items-center gap-1 shadow-sm">
-                                                            <Zap className="w-3 h-3 text-amber-500 fill-amber-500 animate-pulse" />
-                                                            <span>آخرین دستگاه (تک‌موجود)</span>
-                                                        </span>
-                                                    )}
-
-                                                    {/* High Stock Alert (اولویت فروش مدیر) */}
-                                                    {isHighStock && (
-                                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                                                            <Flame className="w-3 h-3 text-rose-500" />
-                                                            <span>اولویت فروش</span>
-                                                        </span>
-                                                    )}
-
-                                                    {/* Sold Out Badge */}
-                                                    {isSoldOut && (
-                                                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                                            اتمام موجودی
-                                                        </span>
-                                                    )}
-                                                </div>
+                                    <th onClick={() => handleSort('model')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
+                                        <div className="flex items-center gap-1.5 justify-start">
+                                            <span>سال ساخت</span>
+                                            <ArrowUpDown className="w-3 h-3" />
+                                        </div>
+                                    </th>
+                                    <th className="p-4">نوع عرضه / فروش</th>
+                                    <th className="p-4">نحوه پرداخت</th>
+                                    <th className="p-4">رنگ‌های عرضه شده</th>
+                                    <th className="p-4">زمان تحویل</th>
+                                    <th onClick={() => handleSort('initial_deposit')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors">
+                                        <div className="flex items-center gap-1.5 justify-start">
+                                            <span>قیمت / پیش‌پرداخت</span>
+                                            <ArrowUpDown className="w-3 h-3" />
+                                        </div>
+                                    </th>
+                                    
+                                    {/* Omit Stock Column completely in Customer facing Tab */}
+                                    {activeTab !== 'customer' && (
+                                        <th onClick={() => handleSort('stock_quantity')} className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors min-w-[160px]">
+                                            <div className="flex items-center gap-1.5 justify-start">
+                                                <span>موجودی انبار</span>
+                                                <ArrowUpDown className="w-3 h-3" />
                                             </div>
-                                        </td>
-                                        
-                                        {/* Model Year */}
-                                        <td className="p-4 font-mono font-bold text-slate-500">
-                                            {condition.model ? condition.model.toLocaleString('fa-IR', { useGrouping: false }) : '-'}
-                                        </td>
+                                        </th>
+                                    )}
 
-                                        {/* Sale Type */}
-                                        <td className="p-4">
-                                            <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-black">
-                                                {condition.sale_type}
-                                            </span>
-                                        </td>
+                                    <th className="p-4 min-w-[140px]">{activeTab === 'customer' ? 'وضعیت عرضه' : 'مدیریت وضعیت'}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-xs text-slate-700 dark:text-slate-300 font-medium">
+                                {filteredConditions.map((condition) => {
+                                    const isAvailable = condition.status === ConditionStatus.AVAILABLE;
+                                    const isCapacityFull = condition.status === ConditionStatus.CAPACITY_FULL;
+                                    const isSoldOut = condition.status === ConditionStatus.SOLD_OUT;
+                                    const isSingleUnit = condition.stock_quantity === 1 && isAvailable;
+                                    const isHighStock = (condition.stock_quantity || 0) >= 3 && isAvailable;
 
-                                        {/* Pay Type */}
-                                        <td className="p-4">
-                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${
-                                                condition.pay_type === PayType.CASH 
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
-                                                    : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
-                                            }`}>
-                                                {condition.pay_type}
-                                            </span>
-                                        </td>
-
-                                        {/* Colors */}
-                                        <td className="p-4">
-                                            {condition.colors && condition.colors.length > 0 ? (
-                                                <div className="flex flex-wrap gap-1 max-w-xs">
-                                                    {condition.colors.map((color, idx) => (
-                                                        <span key={idx} className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-500 dark:text-slate-400">
-                                                            {color}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <span className="text-slate-400">-</span>
-                                            )}
-                                        </td>
-
-                                        {/* Delivery Time */}
-                                        <td className="p-4 text-slate-500 font-bold">
-                                            {condition.delivery_time || '-'}
-                                        </td>
-
-                                        {/* Initial Deposit / Price */}
-                                        <td className="p-4 font-mono font-black text-slate-900 dark:text-white">
-                                            {condition.initial_deposit 
-                                                ? `${condition.initial_deposit.toLocaleString('fa-IR')} تومان`
-                                                : 'نامشخص'
-                                            }
-                                        </td>
-
-                                        {/* INTERACTIVE STOCK COUNTER (ONLY in admin/staff tabs, hidden in Customer view) */}
-                                        {activeTab !== 'customer' && (
+                                    return (
+                                        <tr key={condition.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                                            {/* Car Model with Smart Badges */}
                                             <td className="p-4">
-                                                <div className="flex items-center gap-1.5" dir="ltr">
-                                                    <button
-                                                        onClick={() => handleStockChange(condition, 1)}
-                                                        className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    
-                                                    <input
-                                                        type="text"
-                                                        value={condition.stock_quantity === 0 ? '0' : condition.stock_quantity}
-                                                        onChange={(e) => handleDirectStockChange(condition, e.target.value)}
-                                                        className="w-12 py-1 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-center font-mono font-black text-xs"
-                                                    />
+                                                <div className="space-y-1">
+                                                    <div className="font-black text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                                            activeTab === 'warehouse' ? 'bg-indigo-500' : activeTab === 'transfer' ? 'bg-sky-500' : 'bg-emerald-500'
+                                                        }`}></span>
+                                                        <span>{condition.car_model}</span>
 
-                                                    <button
-                                                        onClick={() => handleStockChange(condition, -1)}
-                                                        disabled={condition.stock_quantity <= 0}
-                                                        className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                                                    >
-                                                        <Minus className="w-3.5 h-3.5" />
-                                                    </button>
+                                                        {/* Single Unit Alert (آخرین دستگاه) */}
+                                                        {isSingleUnit && (
+                                                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/50 flex items-center gap-1 shadow-sm">
+                                                                <Zap className="w-3 h-3 text-amber-500 fill-amber-500 animate-pulse" />
+                                                                <span>آخرین دستگاه (تک‌موجود)</span>
+                                                            </span>
+                                                        )}
+
+                                                        {/* High Stock Alert (اولویت فروش مدیر) */}
+                                                        {isHighStock && (
+                                                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                                                <Flame className="w-3 h-3 text-rose-500" />
+                                                                <span>اولویت فروش</span>
+                                                            </span>
+                                                        )}
+
+                                                        {/* Sold Out Badge */}
+                                                        {isSoldOut && (
+                                                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                                اتمام موجودی
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </td>
-                                        )}
+                                            
+                                            {/* Model Year */}
+                                            <td className="p-4 font-mono font-bold text-slate-500">
+                                                {condition.model ? condition.model.toLocaleString('fa-IR', { useGrouping: false }) : '-'}
+                                            </td>
 
-                                        {/* STATUS BADGE (Interactive in admin tabs, clean static view-only in customer tab) */}
-                                        <td className="p-4">
-                                            {activeTab === 'customer' ? (
-                                                <span className={`px-3 py-1.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
-                                                    isAvailable 
-                                                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
-                                                        : isCapacityFull
-                                                            ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
-                                                            : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
-                                                }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                        isAvailable ? 'bg-emerald-500' : isCapacityFull ? 'bg-amber-500' : 'bg-rose-500'
-                                                    }`}></span>
-                                                    {condition.status}
+                                            {/* Sale Type */}
+                                            <td className="p-4">
+                                                <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-black">
+                                                    {condition.sale_type}
                                                 </span>
-                                            ) : (
-                                                <div className="relative">
-                                                    <select
-                                                        value={condition.status}
-                                                        onChange={(e) => handleStatusChange(condition, e.target.value as ConditionStatus)}
-                                                        className={`px-2 py-1 rounded-lg text-[10px] font-black border-none outline-none cursor-pointer appearance-none ${
-                                                            isAvailable 
-                                                                ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' 
+                                            </td>
+
+                                            {/* Pay Type */}
+                                            <td className="p-4">
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${
+                                                    condition.pay_type === PayType.CASH 
+                                                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                                        : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
+                                                }`}>
+                                                    {condition.pay_type}
+                                                </span>
+                                            </td>
+
+                                            {/* Colors */}
+                                            <td className="p-4">
+                                                {condition.colors && condition.colors.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-1 max-w-xs">
+                                                        {condition.colors.map((color, idx) => (
+                                                            <span key={idx} className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-500 dark:text-slate-400">
+                                                                {color}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                            </td>
+
+                                            {/* Delivery Time */}
+                                            <td className="p-4 text-slate-500 font-bold">
+                                                {condition.delivery_time || '-'}
+                                            </td>
+
+                                            {/* Initial Deposit / Price */}
+                                            <td className="p-4 font-mono font-black text-slate-900 dark:text-white">
+                                                {condition.initial_deposit 
+                                                    ? `${condition.initial_deposit.toLocaleString('fa-IR')} تومان`
+                                                    : 'نامشخص'
+                                                }
+                                            </td>
+
+                                            {/* INTERACTIVE STOCK COUNTER (ONLY in admin/staff tabs, hidden in Customer view) */}
+                                            {activeTab !== 'customer' && (
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-1.5" dir="ltr">
+                                                        <button
+                                                            onClick={() => handleStockChange(condition, 1)}
+                                                            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                                                        >
+                                                            <Plus className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        
+                                                        <input
+                                                            type="text"
+                                                            value={condition.stock_quantity === 0 ? '0' : condition.stock_quantity}
+                                                            onChange={(e) => handleDirectStockChange(condition, e.target.value)}
+                                                            className="w-12 py-1 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none text-center font-mono font-black text-xs"
+                                                        />
+
+                                                        <button
+                                                            onClick={() => handleStockChange(condition, -1)}
+                                                            disabled={condition.stock_quantity <= 0}
+                                                            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                                                        >
+                                                            <Minus className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            )}
+
+                                            {/* STATUS BADGE (Interactive in admin tabs, clean static view-only in customer tab) */}
+                                            <td className="p-4">
+                                                {activeTab === 'customer' ? (
+                                                    <span className={`px-3 py-1.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
+                                                        isAvailable 
+                                                            ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                                            : isCapacityFull
+                                                                ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400'
+                                                                : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
+                                                    }`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                                            isAvailable ? 'bg-emerald-500' : isCapacityFull ? 'bg-amber-500' : 'bg-rose-500'
+                                                        }`}></span>
+                                                        {condition.status}
+                                                    </span>
+                                                ) : (
+                                                    <div className="relative">
+                                                        <select
+                                                            value={condition.status}
+                                                            onChange={(e) => handleStatusChange(condition, e.target.value as ConditionStatus)}
+                                                            className={`px-2 py-1 rounded-lg text-[10px] font-black border-none outline-none cursor-pointer appearance-none ${
+                                                                isAvailable 
+                                                                    ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' 
                                                                 : isCapacityFull
                                                                     ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
                                                                     : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400'
-                                                        }`}
-                                                    >
-                                                        <option value={ConditionStatus.AVAILABLE}>🟢 موجود</option>
-                                                        <option value={ConditionStatus.CAPACITY_FULL}>🟡 تکمیل ظرفیت</option>
-                                                        <option value={ConditionStatus.SOLD_OUT}>🔴 فروخته شد</option>
-                                                    </select>
-                                                </div>
-                                            )}
+                                                            }`}
+                                                        >
+                                                            <option value={ConditionStatus.AVAILABLE}>🟢 موجود</option>
+                                                            <option value={ConditionStatus.CAPACITY_FULL}>🟡 تکمیل ظرفیت</option>
+                                                            <option value={ConditionStatus.SOLD_OUT}>🔴 فروخته شد</option>
+                                                        </select>
+                                                    </div>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                
+                                {filteredConditions.length === 0 && (
+                                    <tr>
+                                        <td colSpan={activeTab === 'customer' ? 8 : 9} className="p-12 text-center text-slate-400 dark:text-slate-500 font-bold">
+                                            <Boxes className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                                            هیچ خودرویی با فیلترهای کنونی در این بخش یافت نشد.
                                         </td>
                                     </tr>
-                                );
-                            })}
-                            
-                            {filteredConditions.length === 0 && (
-                                <tr>
-                                    <td colSpan={activeTab === 'customer' ? 8 : 9} className="p-12 text-center text-slate-400 dark:text-slate-500 font-bold">
-                                        <Boxes className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                                        هیچ خودرویی با فیلترهای کنونی در این بخش یافت نشد.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
             </>
             )}
 
@@ -926,6 +1433,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
     const [includeStatus, setIncludeStatus] = useState(false);
     const [includeSingleUnitBadge, setIncludeSingleUnitBadge] = useState(true);
     const [sortByHighestStock, setSortByHighestStock] = useState(true);
+    const [groupByCarModel, setGroupByCarModel] = useState(true);
 
     // Compact mode state
     const [isCompact, setIsCompact] = useState<boolean>(() => {
@@ -1019,6 +1527,56 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
         
         if (sortByHighestStock) {
             selectedConditions = [...selectedConditions].sort((a, b) => (b.stock_quantity || 0) - (a.stock_quantity || 0));
+        }
+
+        if (groupByCarModel) {
+            // Group conditions by car_model
+            const groupsMap = new Map<string, CarSaleCondition[]>();
+            selectedConditions.forEach(c => {
+                const model = (c.car_model || 'سایر').trim();
+                if (!groupsMap.has(model)) groupsMap.set(model, []);
+                groupsMap.get(model)!.push(c);
+            });
+
+            const groupBlocks: string[] = [];
+            groupsMap.forEach((conds, modelName) => {
+                const totalStock = conds.reduce((acc, c) => acc + (c.stock_quantity || 0), 0);
+                const hasSingle = conds.some(c => c.stock_quantity === 1 && c.status === ConditionStatus.AVAILABLE);
+
+                let headerLine = `🚘 ${modelName}`;
+                if (hasSingle && includeSingleUnitBadge) {
+                    headerLine += ' ⚡[تک‌موجود]';
+                }
+                if (activeTab !== 'customer' && includeStockQty && totalStock > 0) {
+                    headerLine += ` (مجموع موجودی: ${totalStock.toLocaleString('fa-IR')} دستگاه)`;
+                }
+
+                const condLines = conds.map((c, idx) => {
+                    const parts: string[] = [];
+                    if (includeModelYear && c.model) parts.push(`مدل ${c.model.toLocaleString('fa-IR', { useGrouping: false })}`);
+                    if (includeSaleType && c.sale_type) parts.push(c.sale_type);
+                    if (includePayType && c.pay_type) parts.push(c.pay_type);
+                    if (includeColors && c.colors && c.colors.length > 0) parts.push(`رنگ: ${c.colors.join('/')}`);
+                    if (includeDeliveryTime && c.delivery_time) parts.push(`تحویل: ${c.delivery_time}`);
+                    if (includePrice && c.initial_deposit) {
+                        const label = c.pay_type === 'نقدی' ? 'قیمت' : 'پیش‌پرداخت';
+                        parts.push(`${label}: ${c.initial_deposit.toLocaleString('fa-IR')} تومان`);
+                    }
+                    if (activeTab !== 'customer' && includeStockQty) {
+                        parts.push(`موجودی: ${c.stock_quantity ? c.stock_quantity.toLocaleString('fa-IR') : '۰'}`);
+                    }
+                    if (includeStatus && c.status) {
+                        parts.push(`وضعیت: ${c.status}`);
+                    }
+
+                    return `  ▫️ گزینه ${toPersianDigits(String(idx + 1))}: ${parts.join(' | ')}`;
+                });
+
+                groupBlocks.push(`${headerLine}\n${condLines.join('\n')}`);
+            });
+
+            const divider = isCompact ? '\n\n' : '\n\n───────────────────\n\n';
+            return `${headerText}\n\n${groupBlocks.join(divider)}\n\n${footerText}`;
         }
 
         const rows = selectedConditions.map((c) => {
@@ -1161,7 +1719,7 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
         conditions, selectedIds, headerText, footerText, activeTab,
         includeModelYear, includeSaleType, includePayType,
         includeColors, includeDeliveryTime, includePrice, includeStockQty, isCompact, includeStatus,
-        includeSingleUnitBadge, sortByHighestStock
+        includeSingleUnitBadge, sortByHighestStock, groupByCarModel
     ]);
 
     const handleCopy = () => {
@@ -1261,6 +1819,16 @@ const CopyInventorySettingsModal: React.FC<CopyInventorySettingsModalProps> = ({
                         <div className="space-y-2 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
                             <label className="block text-[11px] font-black text-indigo-900 dark:text-indigo-200">تنظیمات اولویت و ظاهر:</label>
                             
+                            <label className="flex items-center gap-2.5 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={groupByCarModel} 
+                                    onChange={e => setGroupByCarModel(e.target.checked)} 
+                                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" 
+                                />
+                                <span className="text-xs font-black text-indigo-900 dark:text-indigo-200">تجمیع و دسته‌بندی گزینه‌ها زیر عنوان هر مدل خودرو 🚘</span>
+                            </label>
+
                             <label className="flex items-center gap-2.5 cursor-pointer">
                                 <input 
                                     type="checkbox" 

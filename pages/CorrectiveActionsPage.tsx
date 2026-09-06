@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { CorrectiveAction, CorrectiveActionPriority, CorrectiveActionStatus, CorrectiveActionEffectiveness } from '../types';
-import { correctiveActionsService } from '../services/api';
+import type { CorrectiveAction, CorrectiveActionPriority, CorrectiveActionStatus, CorrectiveActionEffectiveness, StaffUser, MyProfile } from '../types';
+import { correctiveActionsService, getStaffUsers, getMyProfile } from '../services/api';
 import { ClipboardCheckIcon } from '../components/icons/ClipboardCheckIcon';
 import { PlusIcon } from '../components/icons/PlusIcon';
 import { TrashIcon } from '../components/icons/TrashIcon';
@@ -228,6 +228,8 @@ const formatToMySqlDateTime = (dateStr?: string, timeStr?: string): string => {
 
 const CorrectiveActionsPage: React.FC = () => {
     const [actions, setActions] = useState<CorrectiveAction[]>([]);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+    const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -243,11 +245,17 @@ const CorrectiveActionsPage: React.FC = () => {
     const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
     const [selectedPriorityFilter, setSelectedPriorityFilter] = useState('ALL');
 
-    const fetchActions = async () => {
+    const fetchData = async () => {
         setLoading(true);
         try {
-            const data = await correctiveActionsService.getAll();
-            setActions(Array.isArray(data) ? data : []);
+            const [actionsData, usersData, profileData] = await Promise.all([
+                correctiveActionsService.getAll().catch(() => []),
+                getStaffUsers().catch(() => []),
+                getMyProfile().catch(() => null)
+            ]);
+            setActions(Array.isArray(actionsData) ? actionsData : []);
+            setStaffUsers(Array.isArray(usersData) ? usersData : []);
+            setCurrentUserProfile(profileData);
         } catch (error) {
             setToast({ message: 'خطا در دریافت اطلاعات اقدامات اصلاحی', type: 'error' });
         } finally {
@@ -256,12 +264,12 @@ const CorrectiveActionsPage: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchActions();
+        fetchData();
     }, []);
 
     useEffect(() => {
         const handleRefresh = () => {
-            fetchActions();
+            fetchData();
         };
         window.addEventListener('app-refresh', handleRefresh);
         return () => window.removeEventListener('app-refresh', handleRefresh);
@@ -270,14 +278,16 @@ const CorrectiveActionsPage: React.FC = () => {
     const openCreateModal = () => {
         const todayJalali = getCurrentJalaliDate();
         const currentTime = getCurrentTimeStr();
+        const defaultRegisteredBy = currentUserProfile?.full_name || currentUserProfile?.fullName || currentUserProfile?.username || (staffUsers.length > 0 ? (staffUsers[0].fullName || staffUsers[0].username) : '');
+        
         setCurrentAction({
             title: '',
             description: '',
             department: 'خدمات پس از فروش و تعمیرگاه',
             priority: 'MEDIUM',
-            responsiblePerson: '',
+            responsiblePerson: staffUsers.length > 0 ? (staffUsers[0].fullName || staffUsers[0].username) : '',
             verifierPerson: '',
-            registeredBy: '',
+            registeredBy: defaultRegisteredBy,
             rootCause: '',
             actionPlan: '',
             resourcesRequired: '',
@@ -327,8 +337,13 @@ const CorrectiveActionsPage: React.FC = () => {
             setModalStep(1);
             return;
         }
+        if (!currentAction.registeredBy || !currentAction.registeredBy.trim()) {
+            setToast({ message: 'انتخاب ثبت‌کننده اقدام از لیست کاربران الزامی است', type: 'error' });
+            setModalStep(1);
+            return;
+        }
         if (!currentAction.responsiblePerson || !currentAction.responsiblePerson.trim()) {
-            setToast({ message: 'مسئول اجرا الزامی است', type: 'error' });
+            setToast({ message: 'انتخاب مسئول اجرا از لیست کاربران الزامی است', type: 'error' });
             setModalStep(2);
             return;
         }
@@ -378,7 +393,7 @@ const CorrectiveActionsPage: React.FC = () => {
                 setToast({ message: 'اقدام اصلاحی جدید با موفقیت ثبت شد', type: 'success' });
             }
             setIsModalOpen(false);
-            fetchActions();
+            fetchData();
         } catch (error) {
             setToast({ message: 'خطا در ذخیره اطلاعات اقدام اصلاحی', type: 'error' });
         }
@@ -392,7 +407,7 @@ const CorrectiveActionsPage: React.FC = () => {
                 if (selectedActionForDetail?.id === id) {
                     setIsDetailModalOpen(false);
                 }
-                fetchActions();
+                fetchData();
             } catch (error) {
                 setToast({ message: 'خطا در حذف اقدام اصلاحی', type: 'error' });
             }
@@ -440,7 +455,7 @@ const CorrectiveActionsPage: React.FC = () => {
                 message: nextCompleted ? 'اقدام اصلاحی به عنوان انجام شده علامت‌گذاری شد' : 'وضعیت به در حال انجام تغییر کرد', 
                 type: 'success' 
             });
-            fetchActions();
+            fetchData();
         } catch (error) {
             setToast({ message: 'خطا در تغییر وضعیت اقدام اصلاحی', type: 'error' });
         }
@@ -1188,16 +1203,30 @@ const CorrectiveActionsPage: React.FC = () => {
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                                ثبت‌کننده اقدام
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                                                <User className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span>ثبت‌کننده اقدام</span>
+                                                <span className="text-rose-500">*</span>
                                             </label>
-                                            <input
-                                                type="text"
-                                                placeholder="نام پرسنل یا بازرس"
+                                            <select
                                                 value={currentAction.registeredBy || ''}
                                                 onChange={e => setCurrentAction({ ...currentAction, registeredBy: e.target.value })}
-                                                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white"
-                                            />
+                                                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="" disabled>-- انتخاب ثبت‌کننده اقدام --</option>
+                                                {currentAction.registeredBy && !staffUsers.some(u => (u.fullName || u.username) === currentAction.registeredBy) && (
+                                                    <option value={currentAction.registeredBy}>{currentAction.registeredBy}</option>
+                                                )}
+                                                {staffUsers.map(user => {
+                                                    const displayName = user.fullName || user.username;
+                                                    const subtitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد' : '');
+                                                    return (
+                                                        <option key={user.id} value={displayName}>
+                                                            {displayName} {subtitle ? `(${subtitle})` : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
                                         </div>
                                     </div>
 
@@ -1253,29 +1282,56 @@ const CorrectiveActionsPage: React.FC = () => {
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                                مسئول اجرا / پیگیری <span className="text-rose-500">*</span>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                                                <User className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span>مسئول اجرا / پیگیری</span>
+                                                <span className="text-rose-500">*</span>
                                             </label>
-                                            <input
-                                                type="text"
-                                                placeholder="نام مسئول مستقیم اجرای اقدام"
+                                            <select
                                                 value={currentAction.responsiblePerson || ''}
                                                 onChange={e => setCurrentAction({ ...currentAction, responsiblePerson: e.target.value })}
-                                                className="w-full px-4 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                                            />
+                                                className="w-full px-4 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="" disabled>-- انتخاب مسئول اجرا / پیگیری --</option>
+                                                {currentAction.responsiblePerson && !staffUsers.some(u => (u.fullName || u.username) === currentAction.responsiblePerson) && (
+                                                    <option value={currentAction.responsiblePerson}>{currentAction.responsiblePerson}</option>
+                                                )}
+                                                {staffUsers.map(user => {
+                                                    const displayName = user.fullName || user.username;
+                                                    const subtitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد' : '');
+                                                    return (
+                                                        <option key={user.id} value={displayName}>
+                                                            {displayName} {subtitle ? `(${subtitle})` : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                                مسئول تایید و پایش اثربخشی
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                                                <User className="w-3.5 h-3.5 text-emerald-500" />
+                                                <span>مسئول تایید و پایش اثربخشی</span>
                                             </label>
-                                            <input
-                                                type="text"
-                                                placeholder="نام مدیر یا بازرس ناظر"
+                                            <select
                                                 value={currentAction.verifierPerson || ''}
                                                 onChange={e => setCurrentAction({ ...currentAction, verifierPerson: e.target.value })}
-                                                className="w-full px-4 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white"
-                                            />
+                                                className="w-full px-4 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="">-- بدون انتخاب / تعیین نشده --</option>
+                                                {currentAction.verifierPerson && !staffUsers.some(u => (u.fullName || u.username) === currentAction.verifierPerson) && (
+                                                    <option value={currentAction.verifierPerson}>{currentAction.verifierPerson}</option>
+                                                )}
+                                                {staffUsers.map(user => {
+                                                    const displayName = user.fullName || user.username;
+                                                    const subtitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد' : '');
+                                                    return (
+                                                        <option key={user.id} value={displayName}>
+                                                            {displayName} {subtitle ? `(${subtitle})` : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
                                         </div>
                                     </div>
 

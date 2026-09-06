@@ -79,12 +79,17 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                             <SortableHeader title="نوع فروش" sortKey="sale_type" />
                             <SortableHeader title="تحویل" sortKey="delivery_time" />
                             <SortableHeader title="عمومی" sortKey="is_public" />
+                            <th scope="col" className="px-6 py-3 font-bold text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                ثبت و ویرایش‌کننده
+                            </th>
                             <th scope="col" className="px-6 py-3"></th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-150 dark:divide-slate-700/60">
                         {conditions.map((condition) => {
                             const dateInfo = getConditionDateInfo(condition);
+                            const creatorName = condition.created_by_name || condition.created_by || condition.createdBy || 'کاربر سیستم';
+                            const updaterName = condition.updated_by_name || condition.updated_by || condition.updatedBy;
                             return (
                             <tr key={condition.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors ${selectedIds.has(condition.id) ? 'bg-sky-50/80 dark:bg-sky-900/20' : 'bg-white dark:bg-slate-800'}`}>
                                 <td className="px-6 py-4">
@@ -104,38 +109,8 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                     {condition.car_model}
                                     {condition.model ? <span className="text-xs text-slate-400 font-normal mr-1.5 font-mono">({condition.model})</span> : null}
                                 </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex flex-col">
-                                        <div className="font-mono font-bold text-slate-900 dark:text-white text-sm">
-                                            {formatPrice(condition.initial_deposit)} <span className="text-[11px] font-sans font-normal text-slate-500 dark:text-slate-400">تومان</span>
-                                        </div>
-                                        <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                            <Clock className={`w-3 h-3 ${dateInfo.isUpdateDate ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} shrink-0`} />
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500">{dateInfo.dateLabel}</span>
-                                            <span className="font-mono font-medium text-slate-600 dark:text-slate-300 dir-ltr text-right">
-                                                {dateInfo.formattedDate}
-                                            </span>
-                                        </div>
-                                        {/* Creator & Editor info */}
-                                        {(condition.created_by_name || condition.created_by || condition.createdBy || condition.updated_by_name || condition.updated_by) && (
-                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                                                {(condition.created_by_name || condition.created_by || condition.createdBy) && (
-                                                    <span className="flex items-center gap-0.5" title="کاربر ثبت‌کننده">
-                                                        <User className="w-2.5 h-2.5 text-slate-400" />
-                                                        <span>ثبت:</span>
-                                                        <span className="font-bold text-slate-600 dark:text-slate-300">{condition.created_by_name || condition.created_by || condition.createdBy}</span>
-                                                    </span>
-                                                )}
-                                                {(condition.updated_by_name || condition.updated_by) && (
-                                                    <span className="flex items-center gap-0.5" title="کاربر آخرین ویرایش‌کننده">
-                                                        <UserCheck className="w-2.5 h-2.5 text-indigo-400" />
-                                                        <span>ویرایش:</span>
-                                                        <span className="font-bold text-indigo-600 dark:text-indigo-300">{condition.updated_by_name || condition.updated_by}</span>
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
+                                <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-white text-sm whitespace-nowrap">
+                                    {formatPrice(condition.initial_deposit)} <span className="text-[11px] font-sans font-normal text-slate-500 dark:text-slate-400">تومان</span>
                                 </td>
                                 <td className="px-6 py-4">{condition.sale_type}</td>
                                 <td className="px-6 py-4">{condition.delivery_time}</td>
@@ -145,6 +120,47 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                     ) : (
                                         <span className="text-slate-400 dark:text-slate-500 font-bold text-xs">پیش‌نویس</span>
                                     )}
+                                </td>
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-col gap-1 text-[11px] min-w-[180px]">
+                                        {/* Creator and creation time */}
+                                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                                            <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                                <User className="w-3 h-3" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-slate-400">ثبت:</span>
+                                                    <span className="font-bold text-slate-800 dark:text-slate-200">{creatorName}</span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 font-mono dir-ltr text-right">
+                                                    {dateInfo.createdDateFormatted || (condition.created_at ? formatConditionDateTime(condition.created_at) : dateInfo.formattedDate)}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Updater and update time if available */}
+                                        {updaterName ? (
+                                            <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-700/60 text-slate-700 dark:text-slate-300">
+                                                <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                                    <UserCheck className="w-3 h-3" />
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[10px] text-indigo-500 font-medium">ویرایش:</span>
+                                                        <span className="font-bold text-indigo-600 dark:text-indigo-300">{updaterName}</span>
+                                                    </div>
+                                                    <span className="text-[10px] text-slate-400 font-mono dir-ltr text-right">
+                                                        {dateInfo.formattedDate}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
+                                                <span>بدون ویرایش ثانویه</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center justify-end gap-3">
@@ -205,24 +221,41 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                         {dateInfo.formattedDate}
                                     </span>
                                 </div>
-                                {(condition.created_by_name || condition.created_by || condition.createdBy || condition.updated_by_name || condition.updated_by) && (
-                                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-1.5 pt-1.5 border-t border-slate-200/40 dark:border-slate-600/40 text-[10px] text-slate-500 dark:text-slate-400">
-                                        {(condition.created_by_name || condition.created_by || condition.createdBy) && (
-                                            <span className="flex items-center gap-1">
-                                                <User className="w-3 h-3 text-slate-400" />
-                                                <span>ثبت:</span>
-                                                <span className="font-bold text-slate-700 dark:text-slate-200">{condition.created_by_name || condition.created_by || condition.createdBy}</span>
+                                <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-600/60 text-[11px] text-slate-500 dark:text-slate-400">
+                                    {/* Creator info */}
+                                    <div className="flex items-center justify-between bg-slate-100/70 dark:bg-slate-700/60 px-2.5 py-1 rounded-lg">
+                                        <div className="flex items-center gap-1.5">
+                                            <User className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                            <span className="text-[10px] text-slate-400">کاربر ثبت‌کننده:</span>
+                                            <span className="font-bold text-slate-700 dark:text-slate-200">
+                                                {condition.created_by_name || condition.created_by || condition.createdBy || 'کاربر سیستم'}
                                             </span>
-                                        )}
-                                        {(condition.updated_by_name || condition.updated_by) && (
-                                            <span className="flex items-center gap-1">
-                                                <UserCheck className="w-3 h-3 text-indigo-400" />
-                                                <span>ویرایش:</span>
-                                                <span className="font-bold text-indigo-600 dark:text-indigo-300">{condition.updated_by_name || condition.updated_by}</span>
-                                            </span>
-                                        )}
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 font-mono dir-ltr">
+                                            {dateInfo.createdDateFormatted || (condition.created_at ? formatConditionDateTime(condition.created_at) : dateInfo.formattedDate)}
+                                        </span>
                                     </div>
-                                )}
+
+                                    {/* Editor info */}
+                                    {(condition.updated_by_name || condition.updated_by || condition.updatedBy) ? (
+                                        <div className="flex items-center justify-between bg-indigo-50/60 dark:bg-indigo-950/30 px-2.5 py-1 rounded-lg">
+                                            <div className="flex items-center gap-1.5">
+                                                <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                <span className="text-[10px] text-indigo-400">آخرین ویرایش:</span>
+                                                <span className="font-bold text-indigo-600 dark:text-indigo-300">
+                                                    {condition.updated_by_name || condition.updated_by || condition.updatedBy}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-400 font-mono dir-ltr">
+                                                {dateInfo.formattedDate}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <div className="text-[10px] text-slate-400 text-center py-0.5">
+                                            (بدون ویرایش ثانویه)
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-slate-600 dark:text-slate-300">
                                 <div className="flex flex-col">

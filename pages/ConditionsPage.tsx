@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getConditions, createCondition, updateCondition, deleteCondition, getCars, getMyProfile, getConditionDateInfo } from '../services/api';
+import { getConditions, createCondition, updateCondition, deleteCondition, getCars, getMyProfile, getConditionDateInfo, toMySQLDateTime } from '../services/api';
 import { SaleType, ConditionStatus } from '../types';
 import type { CarSaleCondition, Car, MyProfile } from '../types';
 import ConditionTable from '../components/ConditionTable';
@@ -131,7 +131,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
                     created_by_name: currentCondition.created_by_name || currentCondition.created_by || currentCondition.createdBy || currentDisplayName,
                     updated_by: currentUsername,
                     updated_by_name: currentDisplayName,
-                    updatedAt: new Date().toISOString()
+                    updatedAt: toMySQLDateTime()
                 };
                 await updateCondition(currentCondition.id, updatedPayload);
                 showToast('شرط با موفقیت ویرایش شد', 'success');
@@ -142,8 +142,8 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
                     created_by_name: currentDisplayName,
                     updated_by: currentUsername,
                     updated_by_name: currentDisplayName,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    createdAt: toMySQLDateTime(),
+                    updatedAt: toMySQLDateTime()
                 };
                 await createCondition(newPayload);
                 showToast('شرط جدید با موفقیت اضافه شد', 'success');

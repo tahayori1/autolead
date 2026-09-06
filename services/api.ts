@@ -664,7 +664,70 @@ export const deleteStaffUser = async (id: number, username: string): Promise<voi
 };
 
 
-// --- Car Sale Conditions ---
+// --- Car Sale Conditions & Datetime Helpers ---
+
+/**
+ * Formats any Date, timestamp, ISO string, or date string to standard MySQL DATETIME format (YYYY-MM-DD HH:MM:SS)
+ * Completely removes ISO 'T', 'Z', milliseconds, and timezone offsets so MySQL DATETIME / TIMESTAMP columns accept it without error.
+ * Example output: '2026-09-06 10:39:29'
+ */
+export const toMySQLDateTime = (input?: Date | string | number | null): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const formatToSqlString = (d: Date): string => {
+        const year = d.getFullYear();
+        const month = pad(d.getMonth() + 1);
+        const day = pad(d.getDate());
+        const hours = pad(d.getHours());
+        const minutes = pad(d.getMinutes());
+        const seconds = pad(d.getSeconds());
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    };
+
+    if (!input) {
+        return formatToSqlString(new Date());
+    }
+
+    if (input instanceof Date) {
+        return isNaN(input.getTime()) ? formatToSqlString(new Date()) : formatToSqlString(input);
+    }
+
+    if (typeof input === 'number') {
+        const d = new Date(input);
+        return isNaN(d.getTime()) ? formatToSqlString(new Date()) : formatToSqlString(d);
+    }
+
+    if (typeof input === 'string') {
+        const trimmed = input.trim();
+        if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed.startsWith('0000')) {
+            return formatToSqlString(new Date());
+        }
+
+        // If already in standard MySQL format: YYYY-MM-DD HH:MM:SS
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+            return trimmed;
+        }
+
+        // If Date only: YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return `${trimmed} 00:00:00`;
+        }
+
+        // Try standard Date parsing (handles ISO 8601 strings with Z or offsets properly)
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+            return formatToSqlString(d);
+        }
+
+        // Fallback regex matching YYYY-MM-DD and HH:MM:SS
+        const match = trimmed.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (match) {
+            const [_, y, m, day, h, min, s = '00'] = match;
+            return `${y}-${m}-${day} ${h}:${min}:${s.padStart(2, '0')}`;
+        }
+    }
+
+    return formatToSqlString(new Date());
+};
 
 export const isValidDateString = (d: any): boolean => {
     if (!d) return false;
@@ -690,7 +753,9 @@ export const parseAndFormatPersianDateTime = (rawDate: any): string => {
         const parts = str.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
         if (parts) {
             const [_, y, m, d, h, min] = parts.map(Number);
-            const dateObj = new Date(Date.UTC(y, m - 1, d, h, min));
+            // If it's pure MySQL local datetime (no Z or offset in string), use local time
+            const isLocal = !str.includes('Z') && !str.includes('+') && !str.match(/-\d{2}:\d{2}$/);
+            const dateObj = isLocal ? new Date(y, m - 1, d, h, min) : new Date(str);
             if (!isNaN(dateObj.getTime())) {
                 const persianDate = dateObj.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
                 const persianTime = dateObj.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
@@ -702,7 +767,7 @@ export const parseAndFormatPersianDateTime = (rawDate: any): string => {
         const dateOnlyParts = str.match(/(\d{4})-(\d{2})-(\d{2})/);
         if (dateOnlyParts) {
             const [_, y, m, d] = dateOnlyParts.map(Number);
-            const dateObj = new Date(Date.UTC(y, m - 1, d));
+            const dateObj = new Date(y, m - 1, d);
             if (!isNaN(dateObj.getTime())) {
                 return dateObj.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
             }
@@ -860,6 +925,10 @@ const denormalizeCondition = (condition: Omit<CarSaleCondition, 'id'> | CarSaleC
 
     const creatorVal = condition.created_by || condition.createdBy || condition.created_by_name || null;
     const updaterVal = condition.updated_by || condition.updatedBy || condition.updated_by_name || null;
+    
+    // Convert all datetime fields strictly to MySQL 'YYYY-MM-DD HH:MM:SS' format
+    const createdAtVal = toMySQLDateTime(condition.createdAt || condition.created_at);
+    const updatedAtVal = toMySQLDateTime(condition.updatedAt || condition.updated_at);
 
     return {
         ...restOfAppData,
@@ -875,6 +944,12 @@ const denormalizeCondition = (condition: Omit<CarSaleCondition, 'id'> | CarSaleC
         updatedBy: updaterVal,
         updated_by_name: updaterVal,
         updatedByName: updaterVal,
+        createdAt: createdAtVal,
+        created_at: createdAtVal,
+        updatedAt: updatedAtVal,
+        updated_at: updatedAtVal,
+        last_update: updatedAtVal,
+        last_updated: updatedAtVal,
         stock: stockQtyVal,
         stock_qty: stockQtyVal,
         qty: stockQtyVal,
@@ -911,11 +986,13 @@ export const getConditionsByCarModel = async (carModel: string): Promise<CarSale
 
 export const createCondition = async (condition: Omit<CarSaleCondition, 'id'>): Promise<CarSaleCondition> => {
     ensureOnline();
-    const nowIso = new Date().toISOString();
+    const nowMysql = toMySQLDateTime();
     const payload = {
         ...condition,
-        updatedAt: nowIso,
-        createdAt: condition.createdAt || nowIso
+        updatedAt: nowMysql,
+        updated_at: nowMysql,
+        createdAt: condition.createdAt ? toMySQLDateTime(condition.createdAt) : (condition.created_at ? toMySQLDateTime(condition.created_at) : nowMysql),
+        created_at: condition.created_at ? toMySQLDateTime(condition.created_at) : (condition.createdAt ? toMySQLDateTime(condition.createdAt) : nowMysql),
     };
     const response = await fetch(`${API_BASE_URL}/conditions`, {
         method: 'POST',
@@ -924,16 +1001,19 @@ export const createCondition = async (condition: Omit<CarSaleCondition, 'id'>): 
     });
     const newCondition = await handleResponse(response);
     const normalized = normalizeCondition(newCondition);
-    if (!normalized.updatedAt) normalized.updatedAt = nowIso;
+    if (!normalized.updatedAt) normalized.updatedAt = nowMysql;
     return normalized;
 };
 
 export const updateCondition = async (id: number, updatedCondition: CarSaleCondition): Promise<CarSaleCondition> => {
     ensureOnline();
-    const nowIso = new Date().toISOString();
+    const nowMysql = toMySQLDateTime();
     const payload = {
         ...updatedCondition,
-        updatedAt: nowIso
+        updatedAt: nowMysql,
+        updated_at: nowMysql,
+        createdAt: updatedCondition.createdAt ? toMySQLDateTime(updatedCondition.createdAt) : (updatedCondition.created_at ? toMySQLDateTime(updatedCondition.created_at) : undefined),
+        created_at: updatedCondition.created_at ? toMySQLDateTime(updatedCondition.created_at) : (updatedCondition.createdAt ? toMySQLDateTime(updatedCondition.createdAt) : undefined)
     };
     const response = await fetch(`${API_BASE_URL}/conditions`, {
         method: 'PUT',
@@ -942,7 +1022,7 @@ export const updateCondition = async (id: number, updatedCondition: CarSaleCondi
     });
     const resultCondition = await handleResponse(response);
     const normalized = resultCondition ? normalizeCondition(resultCondition) : payload;
-    if (!normalized.updatedAt) normalized.updatedAt = nowIso;
+    if (!normalized.updatedAt) normalized.updatedAt = nowMysql;
     return normalized;
 };
 
@@ -1025,49 +1105,6 @@ export const deleteUser = async (id: number): Promise<void> => {
 
 // --- Announcements (CRM Organizational Announcements) ---
 const ANNOUNCEMENTS_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/crm/anouncement';
-
-/**
- * Formats a Date, timestamp or date string to standard MySQL DATETIME format (YYYY-MM-DD HH:MM:SS)
- * Example: '2026-09-05 03:05:42'
- */
-export const toMySQLDateTime = (input?: Date | string | number | null): string => {
-    let date: Date;
-    if (!input) {
-        date = new Date();
-    } else if (input instanceof Date) {
-        date = input;
-    } else if (typeof input === 'string') {
-        const trimmed = input.trim();
-        // Return directly if already in standard MySQL DATETIME format: YYYY-MM-DD HH:MM:SS
-        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
-            return trimmed;
-        }
-        // If ISO format like '2026-09-05T03:05:42.000Z'
-        if (trimmed.includes('T')) {
-            const clean = trimmed.replace('T', ' ').split('.')[0].replace('Z', '').trim();
-            if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(clean)) {
-                return clean;
-            }
-        }
-        date = new Date(trimmed);
-    } else {
-        date = new Date(input);
-    }
-
-    if (isNaN(date.getTime())) {
-        date = new Date();
-    }
-
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const year = date.getFullYear();
-    const month = pad(date.getMonth() + 1);
-    const day = pad(date.getDate());
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    const seconds = pad(date.getSeconds());
-
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-};
 
 // Ensure no legacy persistent browser data remains
 try {
@@ -1664,7 +1701,7 @@ const CRM_URL = `${API_BASE_URL}/crm`;
 const CALLOG_URL = `${API_BASE_URL}/calllog`;
 const SALARY_ADVANCE_URL = `${API_BASE_URL}/SalaryAdvance`;
 
-// Helper to sanitize payload and prevent MySQL ER_TRUNCATED_WRONG_VALUE on empty date strings
+// Helper to sanitize payload and prevent MySQL ER_TRUNCATED_WRONG_VALUE on empty date strings or syntax errors from unquoted arrays
 const sanitizePayload = <T>(item: Partial<T>): any => {
     if (!item || typeof item !== 'object') return item;
     const sanitized: any = { ...item };
@@ -1672,13 +1709,21 @@ const sanitizePayload = <T>(item: Partial<T>): any => {
     const knownDateFields = [
         'executionDate', 'dueDate', 'executedAt', 'registrationDate', 'createdAt', 'updatedAt',
         'targetDate', 'startDate', 'endDate', 'deliveryDate', 'purchaseDate', 'saleDate',
-        'paymentDate', 'meetingDate', 'followUpDate', 'completedAt', 'crmDate'
+        'paymentDate', 'meetingDate', 'followUpDate', 'completedAt', 'crmDate', 'created_at', 'updated_at'
     ];
 
     for (const key of Object.keys(sanitized)) {
         const val = sanitized[key];
+        if (val === undefined) {
+            delete sanitized[key];
+            continue;
+        }
+        if (Array.isArray(val)) {
+            sanitized[key] = JSON.stringify(val);
+            continue;
+        }
         if (val === '') {
-            if (knownDateFields.includes(key) || key.endsWith('Date') || key.endsWith('At')) {
+            if (knownDateFields.includes(key) || key.endsWith('Date') || key.endsWith('At') || key.endsWith('_at')) {
                 sanitized[key] = null;
             }
         }
@@ -1835,7 +1880,183 @@ export const meetingMinutesService = createCrudService<MeetingMinute>(MEETING_MI
 export const adCampaignsService = createCrudService<AdCampaign>(AD_CAMPAIGNS_URL);
 export const advertisementService = createCrudService<AdvertisementReport>(ADVERTISEMENT_URL);
 export const usedCarsService = createCrudService<UsedCar>(USED_CARS_URL);
-export const carOrdersService = createCrudService<CarOrder>(CAR_ORDERS_URL);
+
+// --- Car Orders Normalizer & Service ---
+const normalizeCarOrder = (order: any): CarOrder => {
+    if (!order || typeof order !== 'object') return order;
+
+    let experts: string[] = [];
+    if (Array.isArray(order.carExperts)) {
+        experts = order.carExperts;
+    } else if (Array.isArray(order.car_experts)) {
+        experts = order.car_experts;
+    } else if (typeof order.carExperts === 'string' && order.carExperts.trim()) {
+        try {
+            const parsed = JSON.parse(order.carExperts);
+            if (Array.isArray(parsed)) experts = parsed;
+            else experts = order.carExperts.split('،').map((s: string) => s.trim()).filter(Boolean);
+        } catch {
+            experts = order.carExperts.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+    } else if (typeof order.car_experts === 'string' && order.car_experts.trim()) {
+        try {
+            const parsed = JSON.parse(order.car_experts);
+            if (Array.isArray(parsed)) experts = parsed;
+            else experts = order.car_experts.split('،').map((s: string) => s.trim()).filter(Boolean);
+        } catch {
+            experts = order.car_experts.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+    }
+
+    const parseNum = (v: any) => {
+        if (v === null || v === undefined || v === '') return undefined;
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
+    };
+
+    return {
+        id: Number(order.id),
+        trackingCode: order.trackingCode || order.tracking_code || '',
+        buyerName: order.buyerName || order.buyer_name || '',
+        buyerNationalId: order.buyerNationalId || order.buyer_national_id || '',
+        buyerPhone: order.buyerPhone || order.buyer_phone || '',
+        buyerCity: order.buyerCity || order.buyer_city || '',
+        buyerAddress: order.buyerAddress || order.buyer_address || '',
+        buyerPostalCode: order.buyerPostalCode || order.buyer_postal_code || order.buyerAddressPostalCode || '',
+        carName: order.carName || order.car_name || '',
+        conditionId: Number(order.conditionId || order.condition_id || 0),
+        conditionSummary: order.conditionSummary || order.condition_summary || '',
+        selectedColor: order.selectedColor || order.selected_color || '',
+        proposedPrice: Number(order.proposedPrice || order.proposed_price || 0),
+        userNotes: order.userNotes || order.user_notes || '',
+        carExperts: experts,
+        expertIds: Array.isArray(order.expertIds) ? order.expertIds : [],
+        adminNotes: order.adminNotes || order.admin_notes || '',
+        finalPrice: parseNum(order.finalPrice ?? order.final_price),
+        deliveryDeadline: order.deliveryDeadline || order.delivery_deadline || '',
+        deductFromStock: order.deductFromStock === true || order.deductFromStock === 1 || order.deductFromStock === '1' || order.deduct_from_stock === 1 || order.deduct_from_stock === '1' || order.deduct_from_stock === true,
+        status: order.status || 'PENDING_ADMIN',
+        createdBy: order.createdBy || order.created_by || '',
+        createdAt: order.createdAt || order.created_at || '',
+        updatedAt: order.updatedAt || order.updated_at || '',
+    };
+};
+
+const denormalizeCarOrder = (order: Partial<CarOrder>): any => {
+    if (!order || typeof order !== 'object') return order;
+    
+    const expertsArray = Array.isArray(order.carExperts) ? order.carExperts : [];
+    const expertIdsArray = Array.isArray(order.expertIds) ? order.expertIds : [];
+    const expertsJson = JSON.stringify(expertsArray);
+    const expertIdsJson = JSON.stringify(expertIdsArray);
+
+    const deductVal = order.deductFromStock === false || (order as any).deduct_from_stock === false ? 0 : 1;
+    const finalPriceVal = order.finalPrice !== undefined && order.finalPrice !== null && !isNaN(Number(order.finalPrice)) 
+        ? Number(order.finalPrice) 
+        : null;
+    const proposedPriceVal = Number(order.proposedPrice) || 0;
+
+    const result: any = {
+        id: order.id ? Number(order.id) : undefined,
+        trackingCode: order.trackingCode || null,
+        tracking_code: order.trackingCode || null,
+        buyerName: order.buyerName || '',
+        buyer_name: order.buyerName || '',
+        buyerNationalId: order.buyerNationalId || '',
+        buyer_national_id: order.buyerNationalId || '',
+        buyerPhone: order.buyerPhone || '',
+        buyer_phone: order.buyerPhone || '',
+        buyerCity: order.buyerCity || '',
+        buyer_city: order.buyerCity || '',
+        buyerAddress: order.buyerAddress || '',
+        buyer_address: order.buyerAddress || '',
+        buyerPostalCode: order.buyerPostalCode || '',
+        buyer_postal_code: order.buyerPostalCode || '',
+        carName: order.carName || '',
+        car_name: order.carName || '',
+        conditionId: order.conditionId ? Number(order.conditionId) : null,
+        condition_id: order.conditionId ? Number(order.conditionId) : null,
+        conditionSummary: order.conditionSummary || '',
+        condition_summary: order.conditionSummary || '',
+        selectedColor: order.selectedColor || '',
+        selected_color: order.selectedColor || '',
+        proposedPrice: proposedPriceVal,
+        proposed_price: proposedPriceVal,
+        userNotes: order.userNotes || '',
+        user_notes: order.userNotes || '',
+        carExperts: expertsJson,
+        car_experts: expertsJson,
+        expertIds: expertIdsJson,
+        expert_ids: expertIdsJson,
+        adminNotes: order.adminNotes || '',
+        admin_notes: order.adminNotes || '',
+        finalPrice: finalPriceVal,
+        final_price: finalPriceVal,
+        deliveryDeadline: order.deliveryDeadline || '',
+        delivery_deadline: order.deliveryDeadline || '',
+        deductFromStock: deductVal,
+        deduct_from_stock: deductVal,
+        status: order.status || 'PENDING_ADMIN',
+        createdBy: order.createdBy || '',
+        created_by: order.createdBy || '',
+        createdAt: order.createdAt || null,
+        created_at: order.createdAt || null,
+        updatedAt: order.updatedAt || null,
+        updated_at: order.updatedAt || null,
+    };
+
+    if (result.id === undefined) {
+        delete result.id;
+    }
+
+    return result;
+};
+
+export const carOrdersService = {
+    getAll: async (): Promise<CarOrder[]> => {
+        const response = await fetch(CAR_ORDERS_URL, { headers: getAuthHeaders() });
+        const data = await handleResponse(response);
+        if (Array.isArray(data)) return data.map(normalizeCarOrder);
+        if (data && typeof data === 'object') return [normalizeCarOrder(data)];
+        return [];
+    },
+    getById: async (id: number): Promise<CarOrder | null> => {
+        const response = await fetch(`${CAR_ORDERS_URL}/${id}`, { headers: getAuthHeaders() });
+        const data = await handleResponse(response);
+        return data ? normalizeCarOrder(data) : null;
+    },
+    create: async (item: Partial<CarOrder>): Promise<CarOrder> => {
+        ensureOnline();
+        const payload = sanitizePayload(denormalizeCarOrder(item));
+        const response = await fetch(CAR_ORDERS_URL, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+        });
+        const resData = await handleResponse(response);
+        return resData ? normalizeCarOrder(resData) : (item as CarOrder);
+    },
+    update: async (item: Partial<CarOrder> & { id: number }): Promise<CarOrder> => {
+        ensureOnline();
+        const payload = sanitizePayload(denormalizeCarOrder(item));
+        const response = await fetch(CAR_ORDERS_URL, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+        });
+        const resData = await handleResponse(response);
+        return resData ? normalizeCarOrder(resData) : (item as CarOrder);
+    },
+    delete: async (id: number): Promise<void> => {
+        ensureOnline();
+        const response = await fetch(CAR_ORDERS_URL, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ id }),
+        });
+        return handleResponse(response);
+    }
+};
 
 export const overtimeService = createCrudService<OvertimeRequest>(OVERTIME_URL);
 export const salaryAdvanceService = createCrudService<SalaryAdvanceRequest>(SALARY_ADVANCE_URL);

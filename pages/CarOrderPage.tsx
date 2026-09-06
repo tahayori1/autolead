@@ -239,36 +239,55 @@ const CarOrderPage: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
         const shouldDeduct = deductStockOverride !== undefined ? deductStockOverride : reviewData.deductFromStock;
         
         try {
-            if (shouldDeduct) {
-                const allConditions = await getConditions();
-                const associatedCondition = allConditions.find(c => c.id === selectedOrder.conditionId);
-                
-                if (associatedCondition) {
-                    if (associatedCondition.stock_quantity <= 0) {
-                        setToast({ message: 'موجودی انبار این بخشنامه صفر است اما سفارش تایید شد.', type: 'error' });
-                    } else {
-                        await updateCondition(associatedCondition.id, { ...associatedCondition, stock_quantity: associatedCondition.stock_quantity - 1 });
+            // Deduct from condition inventory if requested (wrapped to avoid blocking approval if condition stock fails)
+            if (shouldDeduct && selectedOrder.conditionId) {
+                try {
+                    const allConditions = await getConditions();
+                    const associatedCondition = allConditions.find(c => Number(c.id) === Number(selectedOrder.conditionId));
+                    
+                    if (associatedCondition) {
+                        if (associatedCondition.stock_quantity <= 0) {
+                            setToast({ message: 'موجودی انبار این بخشنامه صفر است اما سفارش با موفقیت تایید گردید.', type: 'success' });
+                        } else {
+                            await updateCondition(associatedCondition.id, { 
+                                ...associatedCondition, 
+                                stock_quantity: Math.max(0, associatedCondition.stock_quantity - 1) 
+                            });
+                        }
                     }
+                } catch (stockErr) {
+                    console.warn("Stock deduction warning:", stockErr);
                 }
             }
 
             const trackingCode = selectedOrder.trackingCode || `ACL-${Math.floor(100000 + Math.random() * 900000)}`;
-            await carOrdersService.update({
+            const finalPriceVal = Number(reviewData.finalPrice) > 0 
+                ? Number(reviewData.finalPrice) 
+                : (Number(selectedOrder.finalPrice) > 0 ? Number(selectedOrder.finalPrice) : (Number(selectedOrder.proposedPrice) || 0));
+
+            const updatedOrder: CarOrder = {
                 ...selectedOrder,
-                ...reviewData,
+                adminNotes: reviewData.adminNotes !== undefined ? reviewData.adminNotes : (selectedOrder.adminNotes || ''),
+                finalPrice: finalPriceVal,
+                deliveryDeadline: reviewData.deliveryDeadline !== undefined ? reviewData.deliveryDeadline : (selectedOrder.deliveryDeadline || ''),
                 deductFromStock: shouldDeduct,
                 trackingCode,
                 status: OrderStatus.PENDING_PAYMENT,
                 updatedAt: now,
-            });
+            };
+
+            await carOrdersService.update(updatedOrder);
 
             setToast({ message: `سفارش تایید و کد رهگیری ${trackingCode} صادر شد.${shouldDeduct ? ' (از انبار کسر گردید)' : ''}`, type: 'success' });
             setIsReviewModalOpen(false);
             setIsApproveConfirmModalOpen(false);
+            setSelectedOrder(null);
             fetchData();
             setActiveTab('PAYMENT');
-        } catch (error) {
-            setToast({ message: 'خطا در فرآیند تایید', type: 'error' });
+        } catch (error: any) {
+            console.error("Approval error:", error);
+            const errMsg = error?.message || 'خطا در فرآیند تایید';
+            setToast({ message: errMsg, type: 'error' });
         }
     };
 
