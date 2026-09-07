@@ -38,11 +38,60 @@ import {
     Copy,
     ArrowRight,
     BarChart3,
-    FileSpreadsheet
+    FileSpreadsheet,
+    Users,
+    CheckSquare,
+    Square,
+    UserCheck,
+    ShieldCheck,
+    UserCog,
+    ArrowUpDown,
+    SlidersHorizontal,
+    CalendarClock,
+    CalendarDays,
+    Hourglass,
+    ChevronDown,
+    ChevronUp,
+    X,
+    BellRing
 } from 'lucide-react';
 import { CorrectiveActionsAnalyticsView } from '../components/corrective-actions/CorrectiveActionsAnalyticsView';
 
 declare const moment: any;
+
+export type CorrectiveActionSortOption = 
+    | 'SMART_URGENCY'   // اقدامات با موعد نزدیک و انجام‌نشده در ابتدا (پیش‌فرض هوشمند)
+    | 'DUE_DATE_ASC'     // مهلت اجرا (نزدیک‌ترین موعد به دورترین)
+    | 'DUE_DATE_DESC'    // مهلت اجرا (دورترین موعد به نزدیک‌ترین)
+    | 'REG_DATE_DESC'    // زمان ثبت (جدیدترین به قدیمی‌ترین)
+    | 'REG_DATE_ASC'     // زمان ثبت (قدیمی‌ترین به جدیدترین)
+    | 'EXEC_DATE_DESC'   // تاریخ اجرا (جدیدترین به قدیمی‌ترین)
+    | 'EXEC_DATE_ASC'    // تاریخ اجرا (قدیمی‌ترین به جدیدترین)
+    | 'PRIORITY_DESC'    // اولویت (بحرانی و بالا به پایین)
+    | 'TITLE_ASC';       // عنوان (الفبایی)
+
+export type DueDateFilterOption = 
+    | 'ALL' 
+    | 'OVERDUE' 
+    | 'DUE_TODAY' 
+    | 'DUE_3_DAYS' 
+    | 'DUE_7_DAYS' 
+    | 'DUE_30_DAYS' 
+    | 'HAS_DUE_DATE' 
+    | 'NO_DUE_DATE';
+
+export type RegDateFilterOption = 
+    | 'ALL' 
+    | 'TODAY' 
+    | 'LAST_7_DAYS' 
+    | 'LAST_30_DAYS';
+
+export type ExecDateFilterOption = 
+    | 'ALL' 
+    | 'EXECUTED' 
+    | 'NOT_EXECUTED' 
+    | 'ON_TIME' 
+    | 'LATE';
 
 const DEPARTMENTS = [
     'فروش و بازاریابی',
@@ -240,10 +289,30 @@ const CorrectiveActionsPage: React.FC = () => {
 
     // Filters and search
     const [activeViewTab, setActiveViewTab] = useState<'LIST' | 'REPORTS'>('LIST');
+    const [scopeFilter, setScopeFilter] = useState<'MY_ACTIONS' | 'ALL_ACTIONS'>('ALL_ACTIONS');
+    const [myRoleFilter, setMyRoleFilter] = useState<'ALL' | 'RESPONSIBLE' | 'VERIFIER' | 'REGISTERED_BY'>('ALL');
     const [filterTab, setFilterTab] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CRITICAL'>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
     const [selectedPriorityFilter, setSelectedPriorityFilter] = useState('ALL');
+
+    // Enhanced Sorting & Advanced Timing / User Filters
+    const [sortBy, setSortBy] = useState<CorrectiveActionSortOption>('SMART_URGENCY');
+    const [selectedDueDateFilter, setSelectedDueDateFilter] = useState<DueDateFilterOption>('ALL');
+    const [selectedRegDateFilter, setSelectedRegDateFilter] = useState<RegDateFilterOption>('ALL');
+    const [selectedExecDateFilter, setSelectedExecDateFilter] = useState<ExecDateFilterOption>('ALL');
+    const [selectedResponsibleFilter, setSelectedResponsibleFilter] = useState<string>('ALL');
+    const [selectedRegistrarFilter, setSelectedRegistrarFilter] = useState<string>('ALL');
+    const [selectedVerifierFilter, setSelectedVerifierFilter] = useState<string>('ALL');
+    const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+
+    // Bulk edit and multi-selection state
+    const [selectedActionIds, setSelectedActionIds] = useState<number[]>([]);
+    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+    const [bulkRegisteredBy, setBulkRegisteredBy] = useState<string>('__NO_CHANGE__');
+    const [bulkResponsiblePerson, setBulkResponsiblePerson] = useState<string>('__NO_CHANGE__');
+    const [bulkVerifierPerson, setBulkVerifierPerson] = useState<string>('__NO_CHANGE__');
+    const [bulkLoading, setBulkLoading] = useState(false);
 
     const fetchData = async () => {
         setLoading(true);
@@ -461,6 +530,45 @@ const CorrectiveActionsPage: React.FC = () => {
         }
     };
 
+    // Helper: Convert string date to Date object at midnight
+    const getGregorianDateObj = (dateStr?: string | null): Date | null => {
+        if (!dateStr || !dateStr.trim()) return null;
+        try {
+            const gregStr = dateStr.includes('/') ? toGregorian(dateStr) : dateStr;
+            const clean = (gregStr || '').replace('T', ' ').split(' ')[0].trim();
+            if (!clean) return null;
+            const d = new Date(clean);
+            if (isNaN(d.getTime())) return null;
+            d.setHours(0, 0, 0, 0);
+            return d;
+        } catch {
+            return null;
+        }
+    };
+
+    // Helper: Calculate days diff between target date and today
+    const getDaysDiffFromToday = (targetDateStr?: string | null): number | null => {
+        const targetDate = getGregorianDateObj(targetDateStr);
+        if (!targetDate) return null;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diffTime = targetDate.getTime() - today.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    };
+
+    // Helper: Extract registration date as Date object
+    const getActionRegDateObj = (action: CorrectiveAction): Date | null => {
+        if (action.registrationDate) {
+            const d = getGregorianDateObj(action.registrationDate);
+            if (d) return d;
+        }
+        const parsed = parseCreatedAt(action.createdAt);
+        if (parsed.jalaliDate) {
+            return getGregorianDateObj(parsed.jalaliDate);
+        }
+        return null;
+    };
+
     // Helper: Check if action is overdue
     const isActionOverdue = (action: CorrectiveAction): boolean => {
         if (action.isCompleted) return false;
@@ -509,7 +617,7 @@ const CorrectiveActionsPage: React.FC = () => {
             } else if (diffDays === 0) {
                 return { text: 'امروز آخرین مهلت اجرا است', color: 'text-amber-600 dark:text-amber-400 font-bold', isOverdue: false };
             } else if (diffDays <= 3) {
-                return { text: `${diffDays} روز تا پایان مهلت`, color: 'text-amber-600 dark:text-amber-400', isOverdue: false };
+                return { text: `${diffDays} روز تا پایان مهلت`, color: 'text-amber-600 dark:text-amber-400 font-bold', isOverdue: false };
             } else {
                 return { text: `${diffDays} روز باقیمانده`, color: 'text-slate-500 dark:text-slate-400', isOverdue: false };
             }
@@ -518,10 +626,130 @@ const CorrectiveActionsPage: React.FC = () => {
         }
     };
 
-    // Filtered actions
+    // Admin & Role detection
+    const isUserAdmin = useMemo(() => {
+        if (!currentUserProfile) return false;
+        return (
+            currentUserProfile.isAdmin === 1 ||
+            currentUserProfile.permission_level === 1 ||
+            currentUserProfile.role === 'ADMIN' ||
+            currentUserProfile.username === 'admin'
+        );
+    }, [currentUserProfile]);
+
+    // Effective scope: non-admins are ALWAYS restricted to 'MY_ACTIONS'
+    const effectiveScope = isUserAdmin ? scopeFilter : 'MY_ACTIONS';
+
+    const normalizeStr = (s?: string | null) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const getUserIdentifiers = (profile: any): string[] => {
+        if (!profile) return [];
+        const list: string[] = [];
+        if (profile.full_name) list.push(normalizeStr(profile.full_name));
+        if (profile.fullName) list.push(normalizeStr(profile.fullName));
+        if (profile.username) list.push(normalizeStr(profile.username));
+        if (profile.name) list.push(normalizeStr(profile.name));
+        return Array.from(new Set(list.filter(Boolean)));
+    };
+
+    const checkNameMatch = (nameInAction?: string | null, userIdentifiers: string[] = []): boolean => {
+        if (!nameInAction || userIdentifiers.length === 0) return false;
+        const normalized = normalizeStr(nameInAction);
+        if (!normalized) return false;
+        return userIdentifiers.some(u => 
+            normalized === u || 
+            normalized.includes(u) || 
+            u.includes(normalized)
+        );
+    };
+
+    const getUserRelationToAction = (action: CorrectiveAction, profile: any) => {
+        const userIds = getUserIdentifiers(profile);
+        const isResponsible = checkNameMatch(action.responsiblePerson, userIds);
+        const isVerifier = checkNameMatch(action.verifierPerson, userIds);
+        const isRegistrar = checkNameMatch(action.registeredBy, userIds);
+        const isRelated = isResponsible || isVerifier || isRegistrar;
+
+        return { isRelated, isResponsible, isVerifier, isRegistrar };
+    };
+
+    const myActionsList = useMemo(() => {
+        return actions.filter(action => getUserRelationToAction(action, currentUserProfile).isRelated);
+    }, [actions, currentUserProfile]);
+
+    const myResponsibleCount = useMemo(() => {
+        return actions.filter(action => getUserRelationToAction(action, currentUserProfile).isResponsible).length;
+    }, [actions, currentUserProfile]);
+
+    const myVerifierCount = useMemo(() => {
+        return actions.filter(action => getUserRelationToAction(action, currentUserProfile).isVerifier).length;
+    }, [actions, currentUserProfile]);
+
+    const myRegistrarCount = useMemo(() => {
+        return actions.filter(action => getUserRelationToAction(action, currentUserProfile).isRegistrar).length;
+    }, [actions, currentUserProfile]);
+
+    // Unique lists for User Filters
+    const uniqueResponsiblePersons = useMemo(() => {
+        const list: string[] = [];
+        actions.forEach(a => {
+            if (a.responsiblePerson && a.responsiblePerson.trim()) list.push(a.responsiblePerson.trim());
+        });
+        staffUsers.forEach(u => {
+            if (u.fullName && u.fullName.trim()) list.push(u.fullName.trim());
+            else if (u.username && u.username.trim()) list.push(u.username.trim());
+        });
+        return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, 'fa'));
+    }, [actions, staffUsers]);
+
+    const uniqueRegistrars = useMemo(() => {
+        const list: string[] = [];
+        actions.forEach(a => {
+            if (a.registeredBy && a.registeredBy.trim()) list.push(a.registeredBy.trim());
+        });
+        staffUsers.forEach(u => {
+            if (u.fullName && u.fullName.trim()) list.push(u.fullName.trim());
+            else if (u.username && u.username.trim()) list.push(u.username.trim());
+        });
+        return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, 'fa'));
+    }, [actions, staffUsers]);
+
+    const uniqueVerifiers = useMemo(() => {
+        const list: string[] = [];
+        actions.forEach(a => {
+            if (a.verifierPerson && a.verifierPerson.trim()) list.push(a.verifierPerson.trim());
+        });
+        staffUsers.forEach(u => {
+            if (u.fullName && u.fullName.trim()) list.push(u.fullName.trim());
+            else if (u.username && u.username.trim()) list.push(u.username.trim());
+        });
+        return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, 'fa'));
+    }, [actions, staffUsers]);
+
+    const scopedActions = useMemo(() => {
+        if (effectiveScope === 'MY_ACTIONS') {
+            return actions.filter(action => {
+                const rel = getUserRelationToAction(action, currentUserProfile);
+                if (!rel.isRelated) return false;
+                if (myRoleFilter === 'RESPONSIBLE' && !rel.isResponsible) return false;
+                if (myRoleFilter === 'VERIFIER' && !rel.isVerifier) return false;
+                if (myRoleFilter === 'REGISTERED_BY' && !rel.isRegistrar) return false;
+                return true;
+            });
+        }
+        return actions;
+    }, [actions, effectiveScope, currentUserProfile, myRoleFilter]);
+
+    const canDeleteAction = (action: CorrectiveAction) => {
+        if (isUserAdmin) return true;
+        const rel = getUserRelationToAction(action, currentUserProfile);
+        return rel.isRegistrar;
+    };
+
+    // Filtered and Sorted actions
     const filteredActions = useMemo(() => {
-        return actions.filter(action => {
-            // Tab filter
+        const filtered = scopedActions.filter(action => {
+            // Quick Status Tab filter
             if (filterTab === 'IN_PROGRESS' && action.isCompleted) return false;
             if (filterTab === 'COMPLETED' && !action.isCompleted) return false;
             if (filterTab === 'OVERDUE' && !isActionOverdue(action)) return false;
@@ -533,6 +761,82 @@ const CorrectiveActionsPage: React.FC = () => {
             // Priority filter
             if (selectedPriorityFilter !== 'ALL' && action.priority !== selectedPriorityFilter) return false;
 
+            // Due Date Filter (مهلت اجرا)
+            if (selectedDueDateFilter === 'OVERDUE') {
+                if (action.isCompleted) return false;
+                const diff = getDaysDiffFromToday(action.dueDate);
+                if (diff === null || diff >= 0) return false;
+            } else if (selectedDueDateFilter === 'DUE_TODAY') {
+                if (action.isCompleted) return false;
+                const diff = getDaysDiffFromToday(action.dueDate);
+                if (diff !== 0) return false;
+            } else if (selectedDueDateFilter === 'DUE_3_DAYS') {
+                if (action.isCompleted) return false;
+                const diff = getDaysDiffFromToday(action.dueDate);
+                if (diff === null || diff < 0 || diff > 3) return false;
+            } else if (selectedDueDateFilter === 'DUE_7_DAYS') {
+                if (action.isCompleted) return false;
+                const diff = getDaysDiffFromToday(action.dueDate);
+                if (diff === null || diff < 0 || diff > 7) return false;
+            } else if (selectedDueDateFilter === 'DUE_30_DAYS') {
+                if (action.isCompleted) return false;
+                const diff = getDaysDiffFromToday(action.dueDate);
+                if (diff === null || diff < 0 || diff > 30) return false;
+            } else if (selectedDueDateFilter === 'HAS_DUE_DATE') {
+                if (!action.dueDate || !action.dueDate.trim()) return false;
+            } else if (selectedDueDateFilter === 'NO_DUE_DATE') {
+                if (action.dueDate && action.dueDate.trim()) return false;
+            }
+
+            // Registration Date Filter (زمان ثبت)
+            if (selectedRegDateFilter === 'TODAY') {
+                const regDate = getActionRegDateObj(action);
+                if (!regDate) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (regDate.getTime() !== today.getTime()) return false;
+            } else if (selectedRegDateFilter === 'LAST_7_DAYS') {
+                const regDate = getActionRegDateObj(action);
+                if (!regDate) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
+                if (diffDays < 0 || diffDays > 7) return false;
+            } else if (selectedRegDateFilter === 'LAST_30_DAYS') {
+                const regDate = getActionRegDateObj(action);
+                if (!regDate) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((today.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
+                if (diffDays < 0 || diffDays > 30) return false;
+            }
+
+            // Execution Date & Status Filter (تاریخ اجرا و وضعیت انجام)
+            if (selectedExecDateFilter === 'EXECUTED') {
+                if (!action.isCompleted && (!action.executionDate || !action.executionDate.trim())) return false;
+            } else if (selectedExecDateFilter === 'NOT_EXECUTED') {
+                if (action.isCompleted || (action.executionDate && action.executionDate.trim())) return false;
+            } else if (selectedExecDateFilter === 'ON_TIME') {
+                if (!action.isCompleted && !action.executionDate) return false;
+                const info = getDeadlineInfo(action.dueDate, true, action.executionDate);
+                if (info.isOverdue) return false;
+            } else if (selectedExecDateFilter === 'LATE') {
+                if (!action.isCompleted && !action.executionDate) return false;
+                const info = getDeadlineInfo(action.dueDate, true, action.executionDate);
+                if (!info.isOverdue) return false;
+            }
+
+            // User Filters (مسئول اجرا، ثبت‌کننده، مسئول تایید و پایش)
+            if (selectedResponsibleFilter !== 'ALL') {
+                if (normalizeStr(action.responsiblePerson) !== normalizeStr(selectedResponsibleFilter)) return false;
+            }
+            if (selectedRegistrarFilter !== 'ALL') {
+                if (normalizeStr(action.registeredBy) !== normalizeStr(selectedRegistrarFilter)) return false;
+            }
+            if (selectedVerifierFilter !== 'ALL') {
+                if (normalizeStr(action.verifierPerson) !== normalizeStr(selectedVerifierFilter)) return false;
+            }
+
             // Search query
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
@@ -542,26 +846,169 @@ const CorrectiveActionsPage: React.FC = () => {
                 const matchDept = (action.department || '').toLowerCase().includes(q);
                 const matchRoot = (action.rootCause || '').toLowerCase().includes(q);
                 const matchReg = (action.registeredBy || '').toLowerCase().includes(q);
-                if (!matchTitle && !matchDesc && !matchResp && !matchDept && !matchRoot && !matchReg) {
+                const matchVerif = (action.verifierPerson || '').toLowerCase().includes(q);
+                if (!matchTitle && !matchDesc && !matchResp && !matchDept && !matchRoot && !matchReg && !matchVerif) {
                     return false;
                 }
             }
 
             return true;
         });
-    }, [actions, filterTab, selectedDeptFilter, selectedPriorityFilter, searchQuery]);
+
+        // Sorting
+        return filtered.sort((a, b) => {
+            if (sortBy === 'SMART_URGENCY') {
+                // 1. Uncompleted items always come before completed items
+                if (a.isCompleted !== b.isCompleted) {
+                    return a.isCompleted ? 1 : -1;
+                }
+
+                // Both uncompleted: rank by deadline urgency & proximity
+                if (!a.isCompleted && !b.isCompleted) {
+                    const diffA = getDaysDiffFromToday(a.dueDate);
+                    const diffB = getDaysDiffFromToday(b.dueDate);
+
+                    // If both have due dates
+                    if (diffA !== null && diffB !== null) {
+                        // Nearest deadline (or overdue) comes first
+                        if (diffA !== diffB) return diffA - diffB;
+                    } else if (diffA !== null && diffB === null) {
+                        return -1; // Item with due date comes first
+                    } else if (diffA === null && diffB !== null) {
+                        return 1; // Item without due date comes later
+                    }
+
+                    // If same due date or no due dates, sort by priority
+                    const priorityWeight: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+                    const pDiff = (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+                    if (pDiff !== 0) return pDiff;
+
+                    // Then by registration date (newest first)
+                    const regA = getActionRegDateObj(a)?.getTime() || 0;
+                    const regB = getActionRegDateObj(b)?.getTime() || 0;
+                    return regB - regA;
+                }
+
+                // Both completed: newest execution/registration first
+                const execA = getGregorianDateObj(a.executionDate)?.getTime() || getActionRegDateObj(a)?.getTime() || 0;
+                const execB = getGregorianDateObj(b.executionDate)?.getTime() || getActionRegDateObj(b)?.getTime() || 0;
+                return execB - execA;
+            }
+
+            if (sortBy === 'DUE_DATE_ASC') {
+                const dueA = getGregorianDateObj(a.dueDate)?.getTime() ?? 9999999999999;
+                const dueB = getGregorianDateObj(b.dueDate)?.getTime() ?? 9999999999999;
+                return dueA - dueB;
+            }
+            if (sortBy === 'DUE_DATE_DESC') {
+                const dueA = getGregorianDateObj(a.dueDate)?.getTime() ?? 0;
+                const dueB = getGregorianDateObj(b.dueDate)?.getTime() ?? 0;
+                return dueB - dueA;
+            }
+            if (sortBy === 'REG_DATE_DESC') {
+                const timeA = getActionRegDateObj(a)?.getTime() || 0;
+                const timeB = getActionRegDateObj(b)?.getTime() || 0;
+                return timeB - timeA;
+            }
+            if (sortBy === 'REG_DATE_ASC') {
+                const timeA = getActionRegDateObj(a)?.getTime() || 0;
+                const timeB = getActionRegDateObj(b)?.getTime() || 0;
+                return timeA - timeB;
+            }
+            if (sortBy === 'EXEC_DATE_DESC') {
+                const execA = getGregorianDateObj(a.executionDate)?.getTime() ?? 0;
+                const execB = getGregorianDateObj(b.executionDate)?.getTime() ?? 0;
+                return execB - execA;
+            }
+            if (sortBy === 'EXEC_DATE_ASC') {
+                const execA = getGregorianDateObj(a.executionDate)?.getTime() ?? 9999999999999;
+                const execB = getGregorianDateObj(b.executionDate)?.getTime() ?? 9999999999999;
+                return execA - execB;
+            }
+            if (sortBy === 'PRIORITY_DESC') {
+                const priorityWeight: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+                return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+            }
+            if (sortBy === 'TITLE_ASC') {
+                return (a.title || '').localeCompare(b.title || '', 'fa');
+            }
+
+            return 0;
+        });
+    }, [
+        scopedActions, 
+        filterTab, 
+        selectedDeptFilter, 
+        selectedPriorityFilter, 
+        selectedDueDateFilter, 
+        selectedRegDateFilter, 
+        selectedExecDateFilter, 
+        selectedResponsibleFilter, 
+        selectedRegistrarFilter, 
+        selectedVerifierFilter, 
+        searchQuery, 
+        sortBy
+    ]);
+
+    // Urgent and approaching deadline count (uncompleted with deadline <= 3 days)
+    const urgentApproachingActions = useMemo(() => {
+        return scopedActions.filter(a => {
+            if (a.isCompleted) return false;
+            const diff = getDaysDiffFromToday(a.dueDate);
+            return diff !== null && diff <= 3;
+        });
+    }, [scopedActions]);
+
+    // Active filter counts for badge
+    const activeFiltersCount = useMemo(() => {
+        let count = 0;
+        if (selectedDeptFilter !== 'ALL') count++;
+        if (selectedPriorityFilter !== 'ALL') count++;
+        if (selectedDueDateFilter !== 'ALL') count++;
+        if (selectedRegDateFilter !== 'ALL') count++;
+        if (selectedExecDateFilter !== 'ALL') count++;
+        if (selectedResponsibleFilter !== 'ALL') count++;
+        if (selectedRegistrarFilter !== 'ALL') count++;
+        if (selectedVerifierFilter !== 'ALL') count++;
+        if (searchQuery.trim()) count++;
+        return count;
+    }, [
+        selectedDeptFilter, 
+        selectedPriorityFilter, 
+        selectedDueDateFilter, 
+        selectedRegDateFilter, 
+        selectedExecDateFilter, 
+        selectedResponsibleFilter, 
+        selectedRegistrarFilter, 
+        selectedVerifierFilter, 
+        searchQuery
+    ]);
+
+    const handleResetAllFilters = () => {
+        setSelectedDeptFilter('ALL');
+        setSelectedPriorityFilter('ALL');
+        setSelectedDueDateFilter('ALL');
+        setSelectedRegDateFilter('ALL');
+        setSelectedExecDateFilter('ALL');
+        setSelectedResponsibleFilter('ALL');
+        setSelectedRegistrarFilter('ALL');
+        setSelectedVerifierFilter('ALL');
+        setSearchQuery('');
+        setFilterTab('ALL');
+        setSortBy('SMART_URGENCY');
+    };
 
     // Statistics metrics
     const stats = useMemo(() => {
-        const total = actions.length;
-        const inProgress = actions.filter(a => !a.isCompleted).length;
-        const completed = actions.filter(a => a.isCompleted).length;
-        const overdue = actions.filter(isActionOverdue).length;
-        const critical = actions.filter(a => (a.priority === 'CRITICAL' || a.priority === 'HIGH') && !a.isCompleted).length;
+        const total = scopedActions.length;
+        const inProgress = scopedActions.filter(a => !a.isCompleted).length;
+        const completed = scopedActions.filter(a => a.isCompleted).length;
+        const overdue = scopedActions.filter(isActionOverdue).length;
+        const critical = scopedActions.filter(a => (a.priority === 'CRITICAL' || a.priority === 'HIGH') && !a.isCompleted).length;
         const onTimeRate = completed > 0 ? Math.round((completed / (completed + overdue)) * 100) : 100;
 
         return { total, inProgress, completed, overdue, critical, onTimeRate };
-    }, [actions]);
+    }, [scopedActions]);
 
     const handleCopyActionText = (action: CorrectiveAction) => {
         const parsedCreated = parseCreatedAt(action.createdAt);
@@ -585,6 +1032,115 @@ const CorrectiveActionsPage: React.FC = () => {
         if (navigator.clipboard) {
             navigator.clipboard.writeText(text);
             setToast({ message: 'گزارش کامل اقدام اصلاحی با موفقیت کپی شد', type: 'success' });
+        }
+    };
+
+    // Selection helpers
+    const isActionSelected = (id: number) => selectedActionIds.includes(id);
+
+    const toggleSelectAction = (id: number) => {
+        setSelectedActionIds(prev => 
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const isAllFilteredSelected = filteredActions.length > 0 && filteredActions.every(a => selectedActionIds.includes(a.id));
+    const isSomeFilteredSelected = filteredActions.some(a => selectedActionIds.includes(a.id)) && !isAllFilteredSelected;
+
+    const toggleSelectAllFiltered = () => {
+        if (isAllFilteredSelected) {
+            const filteredIds = new Set(filteredActions.map(a => a.id));
+            setSelectedActionIds(prev => prev.filter(id => !filteredIds.has(id)));
+        } else {
+            const newSelected = new Set([...selectedActionIds, ...filteredActions.map(a => a.id)]);
+            setSelectedActionIds(Array.from(newSelected));
+        }
+    };
+
+    const clearSelection = () => {
+        setSelectedActionIds([]);
+    };
+
+    const openBulkEditModal = () => {
+        if (selectedActionIds.length === 0) {
+            setToast({ message: 'لطفاً حداقل یک اقدام اصلاحی را برای ویرایش دسته‌جمعی انتخاب کنید', type: 'error' });
+            return;
+        }
+        setBulkRegisteredBy('__NO_CHANGE__');
+        setBulkResponsiblePerson('__NO_CHANGE__');
+        setBulkVerifierPerson('__NO_CHANGE__');
+        setIsBulkEditModalOpen(true);
+    };
+
+    const handleBulkSave = async () => {
+        if (
+            bulkRegisteredBy === '__NO_CHANGE__' &&
+            bulkResponsiblePerson === '__NO_CHANGE__' &&
+            bulkVerifierPerson === '__NO_CHANGE__'
+        ) {
+            setToast({ message: 'حداقل یکی از فیلدها (ثبت‌کننده، مسئول اجرا یا مسئول تایید) را جهت تغییر مشخص نمایید', type: 'error' });
+            return;
+        }
+
+        setBulkLoading(true);
+        try {
+            const selectedActionsList = actions.filter(a => selectedActionIds.includes(a.id));
+            let successCount = 0;
+
+            for (const action of selectedActionsList) {
+                const parsedCreated = parseCreatedAt(action.createdAt);
+                const regDateSource = action.registrationDate || parsedCreated.jalaliDate;
+                const gregorianRegDate = regDateSource ? (toGregorian(regDateSource) || null) : null;
+                const regTime = action.registrationTime || parsedCreated.time;
+                const validCreatedAt = formatToMySqlDateTime(gregorianRegDate || undefined, regTime);
+
+                const gregorianDueDate = (action.dueDate && action.dueDate.trim())
+                    ? (toGregorian(action.dueDate) || null)
+                    : null;
+                const gregorianExecDate = (action.executionDate && action.executionDate.trim())
+                    ? (toGregorian(action.executionDate) || null)
+                    : (action.isCompleted ? (toGregorian(getCurrentJalaliDate()) || null) : null);
+                const validExecutedAt = (action.isCompleted && gregorianExecDate)
+                    ? formatToMySqlDateTime(gregorianExecDate, getCurrentTimeStr())
+                    : null;
+
+                const nextRegisteredBy = bulkRegisteredBy !== '__NO_CHANGE__' ? bulkRegisteredBy : (action.registeredBy || '');
+                const nextResponsiblePerson = bulkResponsiblePerson !== '__NO_CHANGE__' ? bulkResponsiblePerson : (action.responsiblePerson || '');
+                let nextVerifierPerson = action.verifierPerson;
+                if (bulkVerifierPerson === '__CLEAR__') {
+                    nextVerifierPerson = '';
+                } else if (bulkVerifierPerson !== '__NO_CHANGE__') {
+                    nextVerifierPerson = bulkVerifierPerson;
+                }
+
+                const updatedAction: CorrectiveAction = {
+                    ...action,
+                    createdAt: validCreatedAt || null,
+                    registrationDate: gregorianRegDate || null,
+                    registrationTime: regTime || null,
+                    dueDate: gregorianDueDate || null,
+                    executionDate: gregorianExecDate || null,
+                    executedAt: validExecutedAt || null,
+                    registeredBy: nextRegisteredBy,
+                    responsiblePerson: nextResponsiblePerson,
+                    verifierPerson: nextVerifierPerson,
+                };
+
+                await correctiveActionsService.update(updatedAction);
+                successCount++;
+            }
+
+            setToast({
+                message: `اطلاعات ${successCount.toLocaleString('fa-IR')} اقدام اصلاحی با موفقیت بروزرسانی شد`,
+                type: 'success'
+            });
+            setIsBulkEditModalOpen(false);
+            setSelectedActionIds([]);
+            fetchData();
+        } catch (error) {
+            setToast({ message: 'خطا در اعمال تغییرات دسته‌جمعی', type: 'error' });
+        } finally {
+            setBulkLoading(false);
         }
     };
 
@@ -654,10 +1210,158 @@ const CorrectiveActionsPage: React.FC = () => {
                 </button>
             </div>
 
+            {/* Scope Selection / Role Context Bar */}
+            {isUserAdmin ? (
+                <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl gap-1">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setScopeFilter('ALL_ACTIONS');
+                                setMyRoleFilter('ALL');
+                            }}
+                            className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-2 ${
+                                scopeFilter === 'ALL_ACTIONS'
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                            <Building2 className="w-4 h-4" />
+                            <span>همه اقدامات اصلاحی (کل سازمان)</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                                scopeFilter === 'ALL_ACTIONS' ? 'bg-indigo-700/90 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}>
+                                {actions.length.toLocaleString('fa-IR')}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setScopeFilter('MY_ACTIONS')}
+                            className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-2 ${
+                                scopeFilter === 'MY_ACTIONS'
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                            <UserCheck className="w-4 h-4" />
+                            <span>اقدامات اصلاحی من</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                scopeFilter === 'MY_ACTIONS' ? 'bg-indigo-700/90 text-white' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                            }`}>
+                                {myActionsList.length.toLocaleString('fa-IR')}
+                            </span>
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 px-2 text-xs text-slate-500 dark:text-slate-400">
+                        <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span className="font-bold text-[11px]">
+                            دسترسی مدیر ارشد: مشاهده کل اقدامات سازمانی یا تفکیک وظایف شخصی
+                        </span>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-gradient-to-r from-indigo-50/90 via-sky-50/50 to-white dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-xs">
+                            <UserCheck className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-black text-sm text-slate-800 dark:text-white">بخش اقدامات اصلاحی من</h3>
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono">
+                                    {myActionsList.length.toLocaleString('fa-IR')} وظیفه مرتبط
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                نمایش وظایف و اقدامات اصلاحی مرتبط با حساب کاربری شما ({currentUserProfile?.full_name || currentUserProfile?.fullName || currentUserProfile?.username || 'کاربر جاری'}) به عنوان مسئول اجرا، مسئول تایید یا ثبت‌کننده.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Role Filter Chips when in MY_ACTIONS */}
+            {effectiveScope === 'MY_ACTIONS' && (
+                <div className="flex flex-wrap items-center gap-2 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 px-1 flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5" /> فیلتر نقش من:
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setMyRoleFilter('ALL')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            myRoleFilter === 'ALL'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                        }`}
+                    >
+                        <span>همه نقش‌های من</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                            myRoleFilter === 'ALL' ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        }`}>
+                            {myActionsList.length}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMyRoleFilter('RESPONSIBLE')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            myRoleFilter === 'RESPONSIBLE'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                        }`}
+                    >
+                        <User className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>مسئول اجرا / پیگیری</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                            myRoleFilter === 'RESPONSIBLE' ? 'bg-indigo-700 text-white' : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                        }`}>
+                            {myResponsibleCount}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMyRoleFilter('VERIFIER')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            myRoleFilter === 'VERIFIER'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                        }`}
+                    >
+                        <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>مسئول تایید و پایش</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                            myRoleFilter === 'VERIFIER' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                        }`}>
+                            {myVerifierCount}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMyRoleFilter('REGISTERED_BY')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            myRoleFilter === 'REGISTERED_BY'
+                                ? 'bg-sky-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                        }`}
+                    >
+                        <FileText className="w-3.5 h-3.5 text-sky-400" />
+                        <span>ثبت‌شده توسط من</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                            myRoleFilter === 'REGISTERED_BY' ? 'bg-sky-700 text-white' : 'bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300'
+                        }`}>
+                            {myRegistrarCount}
+                        </span>
+                    </button>
+                </div>
+            )}
+
             {/* TAB CONTENT */}
             {activeViewTab === 'REPORTS' ? (
                 <CorrectiveActionsAnalyticsView
-                    actions={actions}
+                    actions={scopedActions}
                     onOpenCreateModal={openCreateModal}
                     onViewDetail={openDetailModal}
                     onSetToast={setToast}
@@ -727,11 +1431,11 @@ const CorrectiveActionsPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Filters Bar & Quick Tabs */}
+            {/* Filters Bar, Sorting & Quick Tabs */}
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-                <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+                <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3">
                     {/* Status Tabs */}
-                    <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl gap-1 overflow-x-auto">
+                    <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl gap-1 overflow-x-auto shrink-0">
                         <button
                             type="button"
                             onClick={() => setFilterTab('ALL')}
@@ -789,62 +1493,464 @@ const CorrectiveActionsPage: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Search Input */}
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="جستجو در عنوان، شرح، مسئول، دپارتمان یا ریشه مشکل..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full pr-9 pl-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                    {/* Sorting & Search Controls */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 xl:justify-end">
+                        {/* Sort Dropdown */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                            <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">مرتب‌سازی:</span>
+                            <select
+                                value={sortBy}
+                                onChange={e => setSortBy(e.target.value as CorrectiveActionSortOption)}
+                                className="bg-transparent text-xs font-bold text-slate-800 dark:text-white focus:outline-none cursor-pointer pr-1"
+                            >
+                                <option value="SMART_URGENCY" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white font-bold">
+                                    ⚡ هوشمند (موعد نزدیک و انجام‌نشده در ابتدا)
+                                </option>
+                                <option value="DUE_DATE_ASC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    ⏳ مهلت اجرا (نزدیک‌ترین به دورترین)
+                                </option>
+                                <option value="DUE_DATE_DESC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    ⏳ مهلت اجرا (دورترین به نزدیک‌ترین)
+                                </option>
+                                <option value="REG_DATE_DESC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    📅 زمان ثبت (جدیدترین به قدیمی‌ترین)
+                                </option>
+                                <option value="REG_DATE_ASC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    📅 زمان ثبت (قدیمی‌ترین به جدیدترین)
+                                </option>
+                                <option value="EXEC_DATE_DESC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    ✅ تاریخ اجرا (جدیدترین به قدیمی‌ترین)
+                                </option>
+                                <option value="EXEC_DATE_ASC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    ✅ تاریخ اجرا (قدیمی‌ترین به جدیدترین)
+                                </option>
+                                <option value="PRIORITY_DESC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    🔥 اولویت (بحرانی و بالا به پایین)
+                                </option>
+                                <option value="TITLE_ASC" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    🔤 عنوان اقدام (الفبایی)
+                                </option>
+                            </select>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative flex-1 max-w-md">
+                            <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="جستجو در عنوان، شرح، مسئول، دپارتمان یا ریشه مشکل..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full pr-9 pl-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
                     </div>
                 </div>
 
-                {/* Secondary Filters */}
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
-                    <span className="text-slate-500 font-bold flex items-center gap-1">
-                        <Filter className="w-3.5 h-3.5" /> فیلتر سریع:
-                    </span>
+                {/* Secondary Filters Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-slate-500 font-bold flex items-center gap-1">
+                            <Filter className="w-3.5 h-3.5" /> فیلتر سریع:
+                        </span>
 
-                    <select
-                        value={selectedDeptFilter}
-                        onChange={e => setSelectedDeptFilter(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
-                    >
-                        <option value="ALL">همه دپارتمان‌ها و واحدها</option>
-                        {DEPARTMENTS.map(d => (
-                            <option key={d} value={d}>{d}</option>
-                        ))}
-                    </select>
+                        <select
+                            value={selectedDeptFilter}
+                            onChange={e => setSelectedDeptFilter(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                        >
+                            <option value="ALL">همه دپارتمان‌ها و واحدها</option>
+                            {DEPARTMENTS.map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
 
-                    <select
-                        value={selectedPriorityFilter}
-                        onChange={e => setSelectedPriorityFilter(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
-                    >
-                        <option value="ALL">همه اولویت‌ها</option>
-                        {PRIORITIES.map(p => (
-                            <option key={p.key} value={p.key}>{p.label}</option>
-                        ))}
-                    </select>
+                        <select
+                            value={selectedPriorityFilter}
+                            onChange={e => setSelectedPriorityFilter(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                        >
+                            <option value="ALL">همه اولویت‌ها</option>
+                            {PRIORITIES.map(p => (
+                                <option key={p.key} value={p.key}>{p.label}</option>
+                            ))}
+                        </select>
 
-                    {(selectedDeptFilter !== 'ALL' || selectedPriorityFilter !== 'ALL' || searchQuery) && (
+                        {/* Toggle Advanced Filters Button */}
                         <button
                             type="button"
-                            onClick={() => {
-                                setSelectedDeptFilter('ALL');
-                                setSelectedPriorityFilter('ALL');
-                                setSearchQuery('');
-                            }}
-                            className="px-2.5 py-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 font-bold flex items-center gap-1"
+                            onClick={() => setIsAdvancedFiltersOpen(!isAdvancedFiltersOpen)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${
+                                isAdvancedFiltersOpen || activeFiltersCount > 0
+                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/80 dark:border-indigo-800 dark:text-indigo-300'
+                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                            }`}
                         >
-                            <RotateCcw className="w-3 h-3" /> بازنشانی فیلترها
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                            <span>فیلترهای زمانبندی و کاربران</span>
+                            {activeFiltersCount > 0 && (
+                                <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] font-mono flex items-center justify-center font-bold">
+                                    {activeFiltersCount}
+                                </span>
+                            )}
+                            {isAdvancedFiltersOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
-                    )}
+
+                        {(activeFiltersCount > 0 || filterTab !== 'ALL' || sortBy !== 'SMART_URGENCY') && (
+                            <button
+                                type="button"
+                                onClick={handleResetAllFilters}
+                                className="px-2.5 py-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 font-bold flex items-center gap-1 text-xs"
+                            >
+                                <RotateCcw className="w-3 h-3" /> بازنشانی همه
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Bulk Selection Actions */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={toggleSelectAllFiltered}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${
+                                isAllFilteredSelected
+                                    ? 'bg-indigo-50 border-indigo-300 text-indigo-700 dark:bg-indigo-950 dark:border-indigo-800 dark:text-indigo-300'
+                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                            }`}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isAllFilteredSelected}
+                                ref={el => {
+                                    if (el) el.indeterminate = isSomeFilteredSelected;
+                                }}
+                                onChange={toggleSelectAllFiltered}
+                                className="w-3.5 h-3.5 accent-indigo-600 rounded cursor-pointer pointer-events-none"
+                            />
+                            <span>{isAllFilteredSelected ? 'لغو انتخاب همه' : 'انتخاب همه موارد'}</span>
+                        </button>
+
+                        {selectedActionIds.length > 0 && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={openBulkEditModal}
+                                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
+                                >
+                                    <Users className="w-3.5 h-3.5" />
+                                    <span>ویرایش گروهی ({selectedActionIds.length.toLocaleString('fa-IR')})</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={clearSelection}
+                                    className="px-2 py-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold transition"
+                                >
+                                    لغو
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
+
+                {/* Advanced Timing & User Filters Drawer / Panel */}
+                {isAdvancedFiltersOpen && (
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/60 p-4 rounded-xl space-y-4 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                <SlidersHorizontal className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                <span>فیلترهای تخصصی زمانبندی و تفکیک کاربران</span>
+                            </h4>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                نتایج منطبق: <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-black">{filteredActions.length.toLocaleString('fa-IR')}</strong> اقدام
+                            </span>
+                        </div>
+
+                        {/* SECTION 1: TIMING & DEADLINE FILTERS */}
+                        <div>
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+                                <CalendarClock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                <span>۱. فیلتر بر اساس زمانبندی‌ها و موعدها:</span>
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {/* Due Date Filter */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                                        ⏳ مهلت اجرا (Due Date)
+                                    </label>
+                                    <select
+                                        value={selectedDueDateFilter}
+                                        onChange={e => setSelectedDueDateFilter(e.target.value as DueDateFilterOption)}
+                                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="ALL">همه مهلت‌ها</option>
+                                        <option value="OVERDUE">🚨 دارای تاخیر و معوق (انجام‌نشده)</option>
+                                        <option value="DUE_TODAY">⏰ امروز (آخرین مهلت)</option>
+                                        <option value="DUE_3_DAYS">⚡ موعد نزدیک (تا ۳ روز آینده)</option>
+                                        <option value="DUE_7_DAYS">📅 موعد در این هفته (تا ۷ روز)</option>
+                                        <option value="DUE_30_DAYS">📆 موعد در این ماه (تا ۳۰ روز)</option>
+                                        <option value="HAS_DUE_DATE">📌 دارای مهلت مشخص</option>
+                                        <option value="NO_DUE_DATE">⚪ فاقد مهلت مشخص</option>
+                                    </select>
+                                </div>
+
+                                {/* Registration Date Filter */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                                        📅 زمان ثبت اقدام اصلاحی
+                                    </label>
+                                    <select
+                                        value={selectedRegDateFilter}
+                                        onChange={e => setSelectedRegDateFilter(e.target.value as RegDateFilterOption)}
+                                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="ALL">همه زمان‌های ثبت</option>
+                                        <option value="TODAY">ثبت شده در امروز</option>
+                                        <option value="LAST_7_DAYS">ثبت شده در ۷ روز اخیر</option>
+                                        <option value="LAST_30_DAYS">ثبت شده در ۳۰ روز اخیر</option>
+                                    </select>
+                                </div>
+
+                                {/* Execution Date & Status Filter */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">
+                                        ✅ تاریخ و وضعیت اجرا
+                                    </label>
+                                    <select
+                                        value={selectedExecDateFilter}
+                                        onChange={e => setSelectedExecDateFilter(e.target.value as ExecDateFilterOption)}
+                                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="ALL">همه وضعیت‌های اجرا</option>
+                                        <option value="EXECUTED">✅ اجرا شده (دارای تاریخ اجرا)</option>
+                                        <option value="NOT_EXECUTED">⏳ در انتظار اجرا (فاقد تاریخ اجرا)</option>
+                                        <option value="ON_TIME">🟢 اجرا شده در موعد مقرر</option>
+                                        <option value="LATE">🔴 اجرا شده با تاخیر</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SECTION 2: USER & STAKEHOLDER FILTERS */}
+                        <div>
+                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                <span>۲. فیلتر بر اساس کاربران و نقش‌ها:</span>
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {/* Responsible Person Filter */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block flex items-center gap-1">
+                                        <User className="w-3 h-3 text-indigo-500" /> مسئول اجرا / پیگیری
+                                    </label>
+                                    <select
+                                        value={selectedResponsibleFilter}
+                                        onChange={e => setSelectedResponsibleFilter(e.target.value)}
+                                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="ALL">همه مسئولین اجرا</option>
+                                        {uniqueResponsiblePersons.map(name => (
+                                            <option key={name} value={name}>{name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Registrar Filter */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block flex items-center gap-1">
+                                        <FileText className="w-3 h-3 text-sky-500" /> ثبت‌کننده اقدام
+                                    </label>
+                                    <select
+                                        value={selectedRegistrarFilter}
+                                        onChange={e => setSelectedRegistrarFilter(e.target.value)}
+                                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="ALL">همه ثبت‌کنندگان</option>
+                                        {uniqueRegistrars.map(name => (
+                                            <option key={name} value={name}>{name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Verifier Filter */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block flex items-center gap-1">
+                                        <CheckCheck className="w-3 h-3 text-emerald-500" /> مسئول تایید و پایش
+                                    </label>
+                                    <select
+                                        value={selectedVerifierFilter}
+                                        onChange={e => setSelectedVerifierFilter(e.target.value)}
+                                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="ALL">همه مسئولین تایید و پایش</option>
+                                        {uniqueVerifiers.map(name => (
+                                            <option key={name} value={name}>{name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Reset All in Advanced Panel */}
+                        <div className="flex justify-end pt-1">
+                            <button
+                                type="button"
+                                onClick={handleResetAllFilters}
+                                className="px-3 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center gap-1"
+                            >
+                                <RotateCcw className="w-3.5 h-3.5" /> پاک کردن فیلترها و مرتب‌سازی پیش‌فرض
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Active Filter Badges */}
+                {activeFiltersCount > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
+                        <span className="text-[10px] font-bold text-slate-400">فیلترهای فعال:</span>
+
+                        {selectedDeptFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium border border-slate-200 dark:border-slate-700">
+                                واحد: {selectedDeptFilter}
+                                <button type="button" onClick={() => setSelectedDeptFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedPriorityFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium border border-slate-200 dark:border-slate-700">
+                                اولویت: {PRIORITIES.find(p => p.key === selectedPriorityFilter)?.label || selectedPriorityFilter}
+                                <button type="button" onClick={() => setSelectedPriorityFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedDueDateFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200 dark:border-indigo-800">
+                                ⏳ مهلت: {
+                                    selectedDueDateFilter === 'OVERDUE' ? 'دارای تاخیر' :
+                                    selectedDueDateFilter === 'DUE_TODAY' ? 'امروز' :
+                                    selectedDueDateFilter === 'DUE_3_DAYS' ? 'تا ۳ روز آینده' :
+                                    selectedDueDateFilter === 'DUE_7_DAYS' ? 'تا ۷ روز آینده' :
+                                    selectedDueDateFilter === 'DUE_30_DAYS' ? 'تا ۳۰ روز آینده' :
+                                    selectedDueDateFilter === 'HAS_DUE_DATE' ? 'دارای مهلت' : 'فاقد مهلت'
+                                }
+                                <button type="button" onClick={() => setSelectedDueDateFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedRegDateFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200 dark:border-indigo-800">
+                                📅 ثبت: {
+                                    selectedRegDateFilter === 'TODAY' ? 'امروز' :
+                                    selectedRegDateFilter === 'LAST_7_DAYS' ? '۷ روز اخیر' : '۳۰ روز اخیر'
+                                }
+                                <button type="button" onClick={() => setSelectedRegDateFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedExecDateFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200 dark:border-indigo-800">
+                                ✅ وضعیت اجرا: {
+                                    selectedExecDateFilter === 'EXECUTED' ? 'اجرا شده' :
+                                    selectedExecDateFilter === 'NOT_EXECUTED' ? 'در انتظار اجرا' :
+                                    selectedExecDateFilter === 'ON_TIME' ? 'در موعد مقرر' : 'با تاخیر'
+                                }
+                                <button type="button" onClick={() => setSelectedExecDateFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedResponsibleFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200 dark:border-indigo-800">
+                                👤 مسئول: {selectedResponsibleFilter}
+                                <button type="button" onClick={() => setSelectedResponsibleFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedRegistrarFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200 dark:border-indigo-800">
+                                📝 ثبت‌کننده: {selectedRegistrarFilter}
+                                <button type="button" onClick={() => setSelectedRegistrarFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {selectedVerifierFilter !== 'ALL' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-200 dark:border-indigo-800">
+                                🔍 مسئول تایید: {selectedVerifierFilter}
+                                <button type="button" onClick={() => setSelectedVerifierFilter('ALL')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+
+                        {searchQuery.trim() && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium border border-slate-200 dark:border-slate-700">
+                                جستجو: "{searchQuery}"
+                                <button type="button" onClick={() => setSearchQuery('')} className="hover:text-rose-500"><X className="w-3 h-3" /></button>
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
+
+            {/* Approaching Deadline Quick Alert Banner */}
+            {urgentApproachingActions.length > 0 && selectedDueDateFilter === 'ALL' && (
+                <div className="bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 p-3.5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs">
+                            <BellRing className="w-4 h-4 animate-bounce" />
+                        </div>
+                        <div>
+                            <span className="font-black text-xs text-amber-900 dark:text-amber-200 block">
+                                {urgentApproachingActions.length.toLocaleString('fa-IR')} اقدام اصلاحی موعد نزدیک یا معوق دارند و هنوز انجام نشده‌اند!
+                            </span>
+                            <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                                این اقدامات به دلیل نزدیک بودن مهلت اجرا، به صورت هوشمند در ابتدای لیست نمایش داده می‌شوند.
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedDueDateFilter('DUE_3_DAYS')}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition shadow-xs whitespace-nowrap"
+                    >
+                        مشاهده اقدامات موعد نزدیک
+                    </button>
+                </div>
+            )}
+
+            {/* Bulk Selection Sticky Notification / Bar */}
+            {selectedActionIds.length > 0 && (
+                <div className="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white p-4 rounded-2xl shadow-xl border border-indigo-700 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-indigo-700 flex items-center justify-center font-black font-mono text-sm text-indigo-100 border border-indigo-500 shadow-inner">
+                            {selectedActionIds.length.toLocaleString('fa-IR')}
+                        </div>
+                        <div>
+                            <span className="font-black text-xs block">
+                                {selectedActionIds.length.toLocaleString('fa-IR')} اقدام اصلاحی انتخاب شده است
+                            </span>
+                            <span className="text-[11px] text-indigo-200">
+                                امکان تغییر همزمان ثبت‌کننده، مسئول اجرا یا مسئول تایید برای موارد انتخابی
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                            type="button"
+                            onClick={openBulkEditModal}
+                            className="flex-1 sm:flex-initial px-4 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-black text-xs rounded-xl shadow-sm flex items-center justify-center gap-2 transition"
+                        >
+                            <Users className="w-4 h-4 text-indigo-600" />
+                            <span>ویرایش گروهی مسئولین و ثبت‌کننده</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={clearSelection}
+                            className="px-3 py-2 bg-indigo-950/60 hover:bg-indigo-950 text-indigo-200 hover:text-white text-xs font-bold rounded-xl transition border border-indigo-600/40"
+                        >
+                            لغو انتخاب
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Action Cards List */}
             {loading ? (
@@ -860,28 +1966,56 @@ const CorrectiveActionsPage: React.FC = () => {
                         const regTimeDisplay = action.registrationTime || parsedCreated.time || '';
                         const dueDateDisplay = toJalali(action.dueDate) || 'تعیین نشده';
                         const execDateDisplay = action.executionDate ? toJalali(action.executionDate) : '';
+                        const rel = getUserRelationToAction(action, currentUserProfile);
 
                         return (
                             <div 
                                 key={action.id} 
                                 className={`bg-white dark:bg-slate-900 rounded-2xl border transition-all duration-200 shadow-xs flex flex-col justify-between overflow-hidden ${
-                                    action.isCompleted 
-                                        ? 'border-emerald-200/80 dark:border-emerald-900/40 bg-gradient-to-b from-emerald-50/20 to-transparent' 
-                                        : isOverdue 
-                                            ? 'border-rose-300 dark:border-rose-800/80 bg-gradient-to-b from-rose-50/30 to-transparent' 
-                                            : 'border-slate-200 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'
+                                    isActionSelected(action.id)
+                                        ? 'border-indigo-500 ring-2 ring-indigo-500/30 bg-indigo-50/15 dark:bg-indigo-950/20'
+                                        : action.isCompleted 
+                                            ? 'border-emerald-200/80 dark:border-emerald-900/40 bg-gradient-to-b from-emerald-50/20 to-transparent' 
+                                            : isOverdue 
+                                                ? 'border-rose-300 dark:border-rose-800/80 bg-gradient-to-b from-rose-50/30 to-transparent' 
+                                                : 'border-slate-200 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'
                                 }`}
                             >
                                 <div className="p-5 space-y-4">
-                                    {/* Card Top: Department, Priority & Status Tag */}
+                                    {/* Card Top: Selection Checkbox, Department, Priority & Status Tag */}
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-1.5 flex-wrap">
+                                            <label 
+                                                className="flex items-center gap-1.5 cursor-pointer select-none bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-indigo-950/50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 transition"
+                                                onClick={e => e.stopPropagation()}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isActionSelected(action.id)}
+                                                    onChange={() => toggleSelectAction(action.id)}
+                                                    className="w-3.5 h-3.5 accent-indigo-600 rounded cursor-pointer transition"
+                                                />
+                                                <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">
+                                                    #{action.id}
+                                                </span>
+                                            </label>
+
                                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                                 {action.department || 'عمومی'}
                                             </span>
                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${priorityInfo.color} ${priorityInfo.badge}`}>
                                                 {priorityInfo.label}
                                             </span>
+                                            {!action.isCompleted && (() => {
+                                                const diff = getDaysDiffFromToday(action.dueDate);
+                                                if (diff === null || diff < 0 || diff > 3) return null;
+                                                return (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse flex items-center gap-1">
+                                                        <Hourglass className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                                        {diff === 0 ? '⏰ سررسید امروز' : `⚡ ${diff} روز تا موعد`}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
 
                                         <button
@@ -899,6 +2033,30 @@ const CorrectiveActionsPage: React.FC = () => {
                                             <span>{action.isCompleted ? 'اجرا شده' : isOverdue ? 'دارای تاخیر' : 'در جریان'}</span>
                                         </button>
                                     </div>
+
+                                    {/* Role Badges for Current User */}
+                                    {rel.isRelated && (
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {rel.isResponsible && (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                                    <UserCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                                                    <span>وظیفه من (مسئول اجرا)</span>
+                                                </span>
+                                            )}
+                                            {rel.isVerifier && (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                                                    <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                                    <span>تایید و پایش من</span>
+                                                </span>
+                                            )}
+                                            {rel.isRegistrar && !rel.isResponsible && (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 flex items-center gap-1">
+                                                    <FileText className="w-3 h-3 text-sky-600 dark:text-sky-400" />
+                                                    <span>ثبت‌شده توسط من</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Title & Description */}
                                     <div className="space-y-1.5">
@@ -926,16 +2084,24 @@ const CorrectiveActionsPage: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* Responsible & Verifier */}
-                                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/60">
-                                        <span className="flex items-center gap-1">
-                                            <User className="w-3.5 h-3.5 text-slate-400" />
-                                            <span>مسئول اجرا: <strong className="text-slate-700 dark:text-slate-200">{action.responsiblePerson}</strong></span>
-                                        </span>
-                                        {action.registeredBy && (
-                                            <span className="text-[10px] text-slate-400">
-                                                ثبت: {action.registeredBy}
+                                    {/* Responsible, Verifier & Registrar */}
+                                    <div className="space-y-1 pt-1 border-t border-slate-100 dark:border-slate-800/60 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-1">
+                                                <User className="w-3.5 h-3.5 text-slate-400" />
+                                                <span>مسئول اجرا: <strong className="text-slate-700 dark:text-slate-200">{action.responsiblePerson}</strong></span>
                                             </span>
+                                            {action.registeredBy && (
+                                                <span className="text-[10px] text-slate-400">
+                                                    ثبت: {action.registeredBy}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {action.verifierPerson && (
+                                            <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500/80" />
+                                                <span>مسئول تایید و پایش: <strong className="text-slate-700 dark:text-slate-200">{action.verifierPerson}</strong></span>
+                                            </div>
                                         )}
                                     </div>
 
@@ -1036,13 +2202,15 @@ const CorrectiveActionsPage: React.FC = () => {
                                         >
                                             <EditIcon />
                                         </button>
-                                        <button 
-                                            onClick={() => handleDelete(action.id)} 
-                                            className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition"
-                                            title="حذف اقدام"
-                                        >
-                                            <TrashIcon />
-                                        </button>
+                                        {canDeleteAction(action) && (
+                                            <button 
+                                                onClick={() => handleDelete(action.id)} 
+                                                className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition"
+                                                title="حذف اقدام"
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1054,9 +2222,15 @@ const CorrectiveActionsPage: React.FC = () => {
                             <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
                                 <ClipboardCheckIcon className="w-6 h-6" />
                             </div>
-                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">موردی با شرایط انتخابی یافت نشد</h4>
+                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                {effectiveScope === 'MY_ACTIONS' && myActionsList.length === 0
+                                    ? 'هیچ اقدام اصلاحی مرتبط با شما یافت نشد'
+                                    : 'موردی با شرایط انتخابی یافت نشد'}
+                            </h4>
                             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                                فیلترهای جستجو را بررسی کنید یا اقدام اصلاحی جدیدی تعریف نمایید.
+                                {effectiveScope === 'MY_ACTIONS' && myActionsList.length === 0
+                                    ? 'شما در حال حاضر به عنوان مسئول اجرا، مسئول تایید یا ثبت‌کننده در اقدامی ثبت نشده‌اید.'
+                                    : 'فیلترهای جستجو را بررسی کنید یا اقدام اصلاحی جدیدی تعریف نمایید.'}
                             </p>
                             <button
                                 type="button"
@@ -1743,6 +2917,185 @@ const CorrectiveActionsPage: React.FC = () => {
                                 className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition"
                             >
                                 بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* BULK EDIT MODAL */}
+            {isBulkEditModalOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/60 backdrop-blur-xs flex justify-center items-center z-50 p-4 overflow-y-auto" 
+                    onClick={() => !bulkLoading && setIsBulkEditModalOpen(false)}
+                >
+                    <div 
+                        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-6" 
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                                    <Users className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-sm text-slate-800 dark:text-white">
+                                        ویرایش دسته‌جمعی اقدامات اصلاحی
+                                    </h3>
+                                    <span className="text-[11px] text-slate-400">
+                                        تغییر همزمان ثبت‌کننده، مسئول اجرا و مسئول تایید ({selectedActionIds.length.toLocaleString('fa-IR')} اقدام انتخاب‌شده)
+                                    </span>
+                                </div>
+                            </div>
+                            {!bulkLoading && (
+                                <button 
+                                    onClick={() => setIsBulkEditModalOpen(false)} 
+                                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg"
+                                >
+                                    <CloseIcon className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-xs">
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
+                                <p className="leading-relaxed">
+                                    فیلدهایی که مایل به تغییر دسته‌جمعی آن‌ها هستید را تعیین کنید. هر فیلدی که روی <strong>«بدون تغییر»</strong> باقی بماند، در اقدامات انتخابی بدون تغییر حفظ خواهد شد.
+                                </p>
+                            </div>
+
+                            {/* Selected Actions Preview */}
+                            <div className="space-y-1.5">
+                                <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                                    اقدامات اصلاحی انتخاب‌شده ({selectedActionIds.length.toLocaleString('fa-IR')} مورد):
+                                </span>
+                                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                                    {actions.filter(a => selectedActionIds.includes(a.id)).map(act => (
+                                        <span key={act.id} className="px-2 py-1 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 text-[11px] font-medium flex items-center gap-1 shadow-2xs">
+                                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">#{act.id}</span>
+                                            <span className="truncate max-w-[160px]">{act.title}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Field 1: registeredBy (ثبت‌کننده اقدام) */}
+                            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-indigo-500" />
+                                    <span>۱. تغییر ثبت‌کننده اقدام (ثبت‌کننده):</span>
+                                </label>
+                                <select
+                                    value={bulkRegisteredBy}
+                                    onChange={e => setBulkRegisteredBy(e.target.value)}
+                                    className={`w-full px-3 py-2 text-xs rounded-xl border transition ${
+                                        bulkRegisteredBy !== '__NO_CHANGE__' 
+                                            ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-200 font-bold' 
+                                            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                >
+                                    <option value="__NO_CHANGE__">-- بدون تغییر (حفظ ثبت‌کننده فعلی هر اقدام) --</option>
+                                    {staffUsers.map(user => {
+                                        const displayName = user.fullName || user.username;
+                                        const subtitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد' : '');
+                                        return (
+                                            <option key={user.id} value={displayName}>
+                                                تغییر به: {displayName} {subtitle ? `(${subtitle})` : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            {/* Field 2: responsiblePerson (مسئول اجرا / پیگیری) */}
+                            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-sky-500" />
+                                    <span>۲. تغییر مسئول اجرا / پیگیری:</span>
+                                </label>
+                                <select
+                                    value={bulkResponsiblePerson}
+                                    onChange={e => setBulkResponsiblePerson(e.target.value)}
+                                    className={`w-full px-3 py-2 text-xs rounded-xl border transition ${
+                                        bulkResponsiblePerson !== '__NO_CHANGE__' 
+                                            ? 'border-sky-500 bg-sky-50/20 dark:bg-sky-950/30 text-sky-900 dark:text-sky-200 font-bold' 
+                                            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                >
+                                    <option value="__NO_CHANGE__">-- بدون تغییر (حفظ مسئول اجرای فعلی هر اقدام) --</option>
+                                    {staffUsers.map(user => {
+                                        const displayName = user.fullName || user.username;
+                                        const subtitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد' : '');
+                                        return (
+                                            <option key={user.id} value={displayName}>
+                                                تغییر به: {displayName} {subtitle ? `(${subtitle})` : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            {/* Field 3: verifierPerson (مسئول تایید و پایش اثربخشی) */}
+                            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-emerald-500" />
+                                    <span>۳. تغییر مسئول تایید و پایش اثربخشی:</span>
+                                </label>
+                                <select
+                                    value={bulkVerifierPerson}
+                                    onChange={e => setBulkVerifierPerson(e.target.value)}
+                                    className={`w-full px-3 py-2 text-xs rounded-xl border transition ${
+                                        bulkVerifierPerson !== '__NO_CHANGE__' 
+                                            ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 font-bold' 
+                                            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                >
+                                    <option value="__NO_CHANGE__">-- بدون تغییر (حفظ مسئول تایید فعلی هر اقدام) --</option>
+                                    <option value="__CLEAR__">-- حذف و خالی کردن مسئول تایید --</option>
+                                    {staffUsers.map(user => {
+                                        const displayName = user.fullName || user.username;
+                                        const subtitle = user.roleTitle || (user.role === 'ADMIN' ? 'مدیر ارشد' : '');
+                                        return (
+                                            <option key={user.id} value={displayName}>
+                                                تغییر به: {displayName} {subtitle ? `(${subtitle})` : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850">
+                            <button
+                                type="button"
+                                disabled={bulkLoading}
+                                onClick={() => setIsBulkEditModalOpen(false)}
+                                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition disabled:opacity-50"
+                            >
+                                انصراف
+                            </button>
+
+                            <button
+                                type="button"
+                                disabled={bulkLoading || (bulkRegisteredBy === '__NO_CHANGE__' && bulkResponsiblePerson === '__NO_CHANGE__' && bulkVerifierPerson === '__NO_CHANGE__')}
+                                onClick={handleBulkSave}
+                                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {bulkLoading ? (
+                                    <>
+                                        <Spinner />
+                                        <span>در حال اعمال تغییرات...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCheck className="w-4 h-4" />
+                                        <span>اعمال تغییرات روی {selectedActionIds.length.toLocaleString('fa-IR')} اقدام</span>
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
