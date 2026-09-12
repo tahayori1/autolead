@@ -576,8 +576,8 @@ ${changes.join('\n')}`,
         try {
             const [journalData, callLogData, meetingData] = await Promise.all([
                 getCustomerJournals(userId),
-                getCallLogs(),
-                getCrmMeetings().catch(err => {
+                getCallLogs(userNumber || undefined),
+                getCrmMeetings(userId).catch(err => {
                     console.error("Failed to fetch CRM meetings:", err);
                     return [] as CrmMeeting[];
                 })

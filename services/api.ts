@@ -1054,10 +1054,63 @@ export const getLeadHistory = async (number: string): Promise<LeadMessage[]> => 
     return Array.isArray(data) ? data : [];
 };
 
-export const getUsers = async (): Promise<User[]> => {
-    const response = await fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() });
+export interface GetUsersParams {
+    search?: string;
+    items?: number | 'all' | string;
+    Province?: string;
+    City?: string;
+    reference?: string;
+    leadStatus?: string;
+    crmPerson?: string;
+    lastEditedBy?: string;
+}
+
+export const getUsers = async (params?: GetUsersParams): Promise<User[]> => {
+    let url = `${API_BASE_URL}/users`;
+    if (params) {
+        const queryParams = new URLSearchParams();
+        if (params.search && params.search.trim()) {
+            queryParams.append('search', params.search.trim());
+        }
+        if (params.items !== undefined && params.items !== null && params.items !== '') {
+            queryParams.append('items', String(params.items));
+        }
+        if (params.Province && params.Province !== 'all' && params.Province.trim()) {
+            queryParams.append('Province', params.Province.trim());
+        }
+        if (params.City && params.City !== 'all' && params.City.trim()) {
+            queryParams.append('City', params.City.trim());
+        }
+        if (params.reference && params.reference !== 'all' && params.reference.trim()) {
+            queryParams.append('reference', params.reference.trim());
+        }
+        if (params.leadStatus && params.leadStatus !== 'all' && params.leadStatus.trim()) {
+            queryParams.append('leadStatus', params.leadStatus.trim());
+        }
+        if (params.crmPerson && params.crmPerson !== 'all' && params.crmPerson.trim()) {
+            queryParams.append('crmPerson', params.crmPerson.trim());
+        }
+        if (params.lastEditedBy && params.lastEditedBy !== 'all' && params.lastEditedBy.trim()) {
+            queryParams.append('lastEditedBy', params.lastEditedBy.trim());
+        }
+        const qs = queryParams.toString();
+        if (qs) {
+            url += `?${qs}`;
+        }
+    }
+    const response = await fetch(url, { headers: getAuthHeaders() });
     const data = await handleResponse(response);
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+
+    // Client-side safety slice if items limit was requested and backend returned more
+    if (params?.items && params.items !== 'all') {
+        const limit = Number(params.items);
+        if (!isNaN(limit) && limit > 0 && data.length > limit) {
+            return data.slice(0, limit);
+        }
+    }
+
+    return data;
 };
 
 export const getReferences = async (): Promise<Reference[]> => {
@@ -2277,9 +2330,17 @@ export const deleteMessageTemplate = async (id: string): Promise<void> => {
 };
 
 // --- CRM Call Logs Server Endpoints ---
-export const getCallLogs = async (): Promise<CrmCallLog[]> => {
-    const response = await fetch(CALLOG_URL, { headers: getAuthHeaders() });
+export const getCallLogs = async (customerNumber?: string): Promise<CrmCallLog[]> => {
+    let url = CALLOG_URL;
+    if (customerNumber && customerNumber.trim()) {
+        url += `?customer_number=${encodeURIComponent(customerNumber.trim())}`;
+    }
+    const response = await fetch(url, { headers: getAuthHeaders() });
     return handleResponse(response);
+};
+
+export const getCallLogsByCustomerNumber = async (customerNumber: string): Promise<CrmCallLog[]> => {
+    return getCallLogs(customerNumber);
 };
 
 export const createCallLog = async (log: Omit<CrmCallLog, 'id'> & { id?: string }): Promise<CrmCallLog> => {
@@ -2314,8 +2375,12 @@ export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
 // --- CRM Meetings ---
 const CRM_MEETINGS_URL = `${API_BASE_URL}/crmMeetings`;
 
-export const getCrmMeetings = async (): Promise<CrmMeeting[]> => {
-    const response = await fetch(CRM_MEETINGS_URL, { headers: getAuthHeaders() });
+export const getCrmMeetings = async (customerId?: string | number): Promise<CrmMeeting[]> => {
+    let url = CRM_MEETINGS_URL;
+    if (customerId !== undefined && customerId !== null && customerId !== '' && customerId !== 0) {
+        url += `?customer_id=${encodeURIComponent(String(customerId).trim())}`;
+    }
+    const response = await fetch(url, { headers: getAuthHeaders() });
     const data = await handleResponse(response);
     if (!Array.isArray(data)) return [];
     return data.map((item: any) => ({
@@ -2331,6 +2396,10 @@ export const getCrmMeetings = async (): Promise<CrmMeeting[]> => {
         agentName: item.agent_name || item.agentName || 'کاربر سیستم',
         createdAt: item.created_at || item.createdAt || ''
     }));
+};
+
+export const getCrmMeetingsByCustomerId = async (customerId: string | number): Promise<CrmMeeting[]> => {
+    return getCrmMeetings(customerId);
 };
 
 export const createCrmMeeting = async (meeting: Omit<CrmMeeting, 'id'> & { id?: string | number }): Promise<CrmMeeting> => {

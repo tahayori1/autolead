@@ -7,7 +7,7 @@ import {
     sendBaleMessage, createCustomerJournal, createCallLog,
     getCrmStatus, getCallLogs, getAllCustomerJournals, getCrmMeetings
 } from '../services/api';
-import type { Reference } from '../services/api';
+import type { Reference, GetUsersParams } from '../services/api';
 import type { User, LeadMessage, Car, CarSaleCondition, MyProfile, StaffUser, CrmMeeting } from '../types';
 import { OrderStatus, LeadStatus } from '../types';
 import UserTable from '../components/UserTable';
@@ -21,7 +21,7 @@ import BroadcastModal from '../components/BroadcastModal';
 import CarOrderModal from '../components/CarOrderModal';
 import { BroadcastIcon } from '../components/icons/BroadcastIcon';
 import { CloseIcon } from '../components/icons/CloseIcon';
-import UserFilterPanel from '../components/UserFilterPanel';
+import UserFilterPanel, { type UserFilters, type ItemsLimitType } from '../components/UserFilterPanel';
 import { PlusIcon } from '../components/icons/PlusIcon';
 import { ExportIcon } from '../components/icons/ExportIcon';
 import { CopyIcon } from '../components/icons/CopyIcon';
@@ -36,16 +36,6 @@ declare const moment: any;
 const ITEMS_PER_PAGE = 50;
 
 type SortConfig = { key: keyof User; direction: 'ascending' | 'descending' } | null;
-type UserFilters = { 
-    query: string; 
-    carModel: string; 
-    reference: string; 
-    status: LeadStatus | 'all'; 
-    myLeadsOnly?: boolean; 
-    staffUserId: string; 
-    activityFilter?: 'all' | 'no_activity' | 'has_activity';
-    meetingFilter?: 'all' | 'has_meeting' | 'no_meeting';
-};
 
 interface UsersPageProps {
     initialFilters: { carModel?: string };
@@ -92,8 +82,16 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         myLeadsOnly: false, 
         staffUserId: 'all',
         activityFilter: 'all',
-        meetingFilter: 'all'
+        meetingFilter: 'all',
+        province: '',
+        city: '',
+        crmPerson: 'all',
+        lastEditedBy: 'all',
+        itemsLimit: 500
     });
+
+    const isFirstMount = useRef(true);
+    const [isFetchingUsers, setIsFetchingUsers] = useState(false);
 
     const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -124,8 +122,19 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setLoading(true);
         setError(null);
         try {
+            const usersParams: GetUsersParams = {
+                search: filters.query || undefined,
+                items: filters.itemsLimit,
+                Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
+                City: filters.city && filters.city !== 'all' ? filters.city : undefined,
+                reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
+                leadStatus: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
+                lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
+            };
+
             const [usersData, carsData, conditionsData, referencesData, staffData, statusData, callsData, journalsData, meetingsData] = await Promise.all([
-                getUsers(),
+                getUsers(usersParams),
                 getCars(),
                 getConditions(),
                 getReferences(),
@@ -151,7 +160,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [filters]);
 
     // Auto-refresh timer mappings
     const getIntervalSeconds = useCallback(() => {
@@ -184,8 +193,19 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 if (prev <= 1) {
                     // Trigger silent refresh
                     setIsRefreshing(true);
+                    const usersParams: GetUsersParams = {
+                        search: filters.query || undefined,
+                        items: filters.itemsLimit,
+                        Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
+                        City: filters.city && filters.city !== 'all' ? filters.city : undefined,
+                        reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
+                        leadStatus: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                        crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
+                        lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
+                    };
+
                     Promise.all([
-                        getUsers(),
+                        getUsers(usersParams),
                         getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
                         getCallLogs().catch(() => []),
                         getAllCustomerJournals().catch(() => []),
@@ -210,7 +230,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [nextRefreshCountdown, getIntervalSeconds]);
+    }, [nextRefreshCountdown, getIntervalSeconds, filters]);
 
     // Manual Refresh handler
     const handleManualRefresh = useCallback(async () => {
@@ -230,6 +250,47 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         }
     }, [fetchAllData, getIntervalSeconds]);
 
+    // Refetch users with server-side query params when search, itemsLimit, or server filters change
+    useEffect(() => {
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            setIsFetchingUsers(true);
+            try {
+                const usersParams: GetUsersParams = {
+                    search: filters.query || undefined,
+                    items: filters.itemsLimit,
+                    Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
+                    City: filters.city && filters.city !== 'all' ? filters.city : undefined,
+                    reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
+                    leadStatus: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                    crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
+                    lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
+                };
+                const usersData = await getUsers(usersParams);
+                setUsers(usersData);
+            } catch (err) {
+                console.error("Failed to fetch filtered users from server", err);
+            } finally {
+                setIsFetchingUsers(false);
+            }
+        }, filters.query ? 350 : 30);
+
+        return () => clearTimeout(timer);
+    }, [
+        filters.query,
+        filters.itemsLimit,
+        filters.province,
+        filters.city,
+        filters.reference,
+        filters.status,
+        filters.crmPerson,
+        filters.lastEditedBy
+    ]);
+
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
@@ -246,6 +307,47 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setCurrentPage(1);
         setSelectedUserIds(new Set());
     }, [sortConfig, filters]);
+
+    // Available options dynamically derived from loaded data & staff
+    const availableProvinces = useMemo(() => {
+        const set = new Set<string>();
+        users.forEach(u => {
+            if (u.Province && u.Province.trim()) set.add(u.Province.trim());
+        });
+        return Array.from(set).sort();
+    }, [users]);
+
+    const availableCities = useMemo(() => {
+        const set = new Set<string>();
+        users.forEach(u => {
+            if (u.City && u.City.trim()) set.add(u.City.trim());
+        });
+        return Array.from(set).sort();
+    }, [users]);
+
+    const availableCrmPersons = useMemo(() => {
+        const set = new Set<string>();
+        staffUsers.forEach(s => {
+            if (s.fullName) set.add(s.fullName.trim());
+            if (s.username) set.add(s.username.trim());
+        });
+        users.forEach(u => {
+            if (u.crmPerson && u.crmPerson.trim()) set.add(u.crmPerson.trim());
+        });
+        return Array.from(set).sort();
+    }, [users, staffUsers]);
+
+    const availableLastEditedBys = useMemo(() => {
+        const set = new Set<string>();
+        staffUsers.forEach(s => {
+            if (s.fullName) set.add(s.fullName.trim());
+            if (s.username) set.add(s.username.trim());
+        });
+        users.forEach(u => {
+            if (u.lastEditedBy && u.lastEditedBy.trim()) set.add(u.lastEditedBy.trim());
+        });
+        return Array.from(set).sort();
+    }, [users, staffUsers]);
     
     const filteredUsers = useMemo(() => {
         const lowercasedQuery = filters.query.toLowerCase();
@@ -351,6 +453,18 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             const referenceMatch = filters.reference === 'all' || user.reference === filters.reference;
             const statusMatch = filters.status === 'all' || (user.leadStatus || LeadStatus.NEW) === filters.status;
 
+            const provinceMatch = !filters.province || filters.province === 'all' || 
+                (user.Province?.toLowerCase() || '').includes(filters.province.toLowerCase().trim());
+
+            const cityMatch = !filters.city || filters.city === 'all' || 
+                (user.City?.toLowerCase() || '').includes(filters.city.toLowerCase().trim());
+
+            const crmPersonMatch = !filters.crmPerson || filters.crmPerson === 'all' || 
+                user.crmPerson === filters.crmPerson;
+
+            const lastEditedByMatch = !filters.lastEditedBy || filters.lastEditedBy === 'all' || 
+                user.lastEditedBy === filters.lastEditedBy;
+
             const myLeadsMatch = !filters.myLeadsOnly || workedLeadIds.has(Number(user.id));
 
             let staffMatch = true;
@@ -385,7 +499,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 meetingMatch = !hasMeeting;
             }
 
-            return queryMatch && carModelMatch && referenceMatch && statusMatch && myLeadsMatch && staffMatch && activityMatch && meetingMatch;
+            return queryMatch && carModelMatch && referenceMatch && statusMatch && provinceMatch && cityMatch && crmPersonMatch && lastEditedByMatch && myLeadsMatch && staffMatch && activityMatch && meetingMatch;
         });
     }, [users, filters, customerJournals, callLogs, crmMeetings, loggedInUser, staffUsers]);
 
@@ -1049,8 +1163,28 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                         onFilterChange={(newFilters: any) => setFilters(prev => ({...prev, ...newFilters}))}
                         references={references}
                         staffUsers={staffUsers}
+                        availableProvinces={availableProvinces}
+                        availableCities={availableCities}
+                        availableCrmPersons={availableCrmPersons}
+                        availableLastEditedBys={availableLastEditedBys}
+                        isFetching={isFetchingUsers || isRefreshing}
+                        totalLoadedCount={users.length}
                         onClear={() => {
-                            setFilters({ query: '', carModel: 'all', reference: 'all', status: 'all', myLeadsOnly: false, staffUserId: 'all', activityFilter: 'all', meetingFilter: 'all' });
+                            setFilters({ 
+                                query: '', 
+                                carModel: 'all', 
+                                reference: 'all', 
+                                status: 'all', 
+                                myLeadsOnly: false, 
+                                staffUserId: 'all', 
+                                activityFilter: 'all', 
+                                meetingFilter: 'all',
+                                province: '',
+                                city: '',
+                                crmPerson: 'all',
+                                lastEditedBy: 'all',
+                                itemsLimit: 500
+                            });
                             onFiltersCleared();
                         }}
                         refreshMode={refreshMode}
