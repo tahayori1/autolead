@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, LeadStatus, MyProfile } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { sendCrmHeartbeat } from '../services/api';
+import { UserCheck, PlusCircle, AlertCircle } from 'lucide-react';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -36,6 +37,8 @@ const initialFormState: Omit<User, 'id'> = {
 const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, loggedInUser }) => {
     const [formState, setFormState] = useState(initialFormState);
     const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const currentUserName = loggedInUser?.full_name || loggedInUser?.FullName || loggedInUser?.username || 'کاربر سیستم';
 
     // Send heartbeat when editing a lead
     useEffect(() => {
@@ -84,6 +87,16 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
         }
     };
 
+    const handleAppendMySignature = () => {
+        const faDate = new Date().toLocaleDateString('fa-IR');
+        const faTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+        const signature = `\n[📝 یادداشت ${currentUserName} - ${faDate} ${faTime}]: `;
+        setFormState(prev => ({
+            ...prev,
+            Decription: prev.Decription ? `${prev.Decription.trim()}\n${signature}` : `[📝 یادداشت ${currentUserName} - ${faDate} ${faTime}]: `
+        }));
+    };
+
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
         if (!formState.FullName.trim()) newErrors.FullName = 'نام کامل الزامی است.';
@@ -101,7 +114,14 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
-            onSave(formState);
+            const isNumberNewOrChanged = !user || user.Number !== formState.Number;
+            const updatedUserData: Omit<User, 'id'> = {
+                ...formState,
+                registeredBy: user?.registeredBy || currentUserName,
+                phoneRegisteredBy: isNumberNewOrChanged ? currentUserName : (user?.phoneRegisteredBy || currentUserName),
+                lastEditedBy: currentUserName,
+            };
+            onSave(updatedUserData);
         }
     };
 
@@ -109,14 +129,37 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-800 z-10">
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">{user ? 'ویرایش سرنخ' : 'افزودن سرنخ جدید'}</h2>
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800 dark:text-white">{user ? 'ویرایش سرنخ' : 'افزودن سرنخ جدید'}</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">ثبت گزارش تماس و فعالیت‌های CRM به نام کاربر فعال</p>
+                    </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:text-slate-400">
                         <CloseIcon />
                     </button>
                 </div>
+
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    {/* User Identity Notification Banner */}
+                    <div className="p-3 bg-gradient-to-r from-sky-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800/80 border border-sky-200 dark:border-slate-700 rounded-xl flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-sky-600 dark:bg-sky-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                                {currentUserName.charAt(0)}
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-1.5 font-extrabold text-slate-800 dark:text-white">
+                                    <UserCheck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                                    <span>کاربر ثبت‌کننده:</span>
+                                    <span className="text-sky-700 dark:text-sky-300 font-black">{currentUserName}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                                    ثبت شماره تماس، تغییرات فرم و توضیحات جدید به نام شما در گزارش تماس و فعالیت‌های CRM ثبت و مستندسازی می‌شود.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="FullName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نام کامل</label>
@@ -125,7 +168,10 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                             {errors.FullName && <p className="text-red-500 text-xs mt-1">{errors.FullName}</p>}
                         </div>
                         <div>
-                            <label htmlFor="Number" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">شماره تماس</label>
+                            <label htmlFor="Number" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                شماره تماس
+                                <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold mr-1"> (ثبت‌کننده شماره: {currentUserName})</span>
+                            </label>
                             <input type="tel" id="Number" value={formState.Number} onChange={(e) => handleChange('Number', e.target.value)}
                                 className={`w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono ${errors.Number ? 'border-red-500' : 'border-slate-300'}`} dir="ltr" />
                             {errors.Number && <p className="text-red-500 text-xs mt-1">{errors.Number}</p>}
@@ -199,9 +245,28 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                 className="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white border-slate-300" />
                         </div>
                         <div className="md:col-span-2">
-                            <label htmlFor="Decription" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">توضیحات</label>
-                            <textarea id="Decription" rows={3} value={formState.Decription} onChange={(e) => handleChange('Decription', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white" />
+                            <div className="flex items-center justify-between mb-1">
+                                <label htmlFor="Decription" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    توضیحات و یادداشت‌ها
+                                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mr-1"> (نویسنده: {currentUserName})</span>
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleAppendMySignature}
+                                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 hover:underline flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-900/50"
+                                >
+                                    <PlusCircle className="w-3 h-3" />
+                                    <span>درج نام و تاریخ یادداشت من</span>
+                                </button>
+                            </div>
+                            <textarea 
+                                id="Decription" 
+                                rows={3} 
+                                value={formState.Decription} 
+                                onChange={(e) => handleChange('Decription', e.target.value)}
+                                placeholder="توضیحات یا یادداشت جدید خود را اینجا بنویسید..."
+                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white" 
+                            />
                         </div>
                     </div>
                     <div className="pt-4 border-t dark:border-slate-700 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-800 py-4 px-6">

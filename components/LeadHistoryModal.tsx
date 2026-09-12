@@ -42,7 +42,8 @@ import {
     Activity,
     Share2,
     Copy,
-    CheckCheck
+    CheckCheck,
+    PlusCircle
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -411,6 +412,14 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
         }
     };
 
+    const handleAppendEditSignature = () => {
+        const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+        const faDate = new Date().toLocaleDateString('fa-IR');
+        const faTime = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+        const tag = `\n[📝 یادداشت ${authorName} - ${faDate} ${faTime}]: `;
+        setEditDescription(prev => prev ? `${prev.trim()}\n${tag}` : `[📝 یادداشت ${authorName} - ${faDate} ${faTime}]: `);
+    };
+
     const handleSaveEditLead = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         const userId = targetUser?.id;
@@ -439,6 +448,7 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             return;
         }
 
+        const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
         setIsSavingEditLead(true);
         try {
             const updatedUser: User = {
@@ -453,6 +463,8 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
                 leadStatus: editLeadStatus,
                 failReason: editLeadStatus === LeadStatus.LOST ? finalFailReason : undefined,
                 failExplanation: editLeadStatus === LeadStatus.LOST ? editFailExplanation.trim() : undefined,
+                lastEditedBy: authorName,
+                phoneRegisteredBy: (targetUser.Number !== editNumber.trim()) ? authorName : targetUser.phoneRegisteredBy,
                 LastAction: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -460,31 +472,59 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             const result = await updateUser(Number(userId), updatedUser);
 
             // Create customer journal log entry for history timeline
-            const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+            const nowFa = new Date().toLocaleString('fa-IR');
             let changes: string[] = [];
-            if (targetUser.FullName !== updatedUser.FullName) changes.push(`نام: "${targetUser.FullName}" ← "${updatedUser.FullName}"`);
-            if (targetUser.Number !== updatedUser.Number) changes.push(`شماره: "${targetUser.Number}" ← "${updatedUser.Number}"`);
-            if (targetUser.CarModel !== updatedUser.CarModel) changes.push(`خودرو: "${targetUser.CarModel}" ← "${updatedUser.CarModel}"`);
-            if ((targetUser.Province || '') !== (updatedUser.Province || '')) changes.push(`استان: "${targetUser.Province || ''}" ← "${updatedUser.Province || ''}"`);
-            if ((targetUser.City || '') !== (updatedUser.City || '')) changes.push(`شهر: "${targetUser.City || ''}" ← "${updatedUser.City || ''}"`);
-            if ((targetUser.reference || '') !== (updatedUser.reference || '')) changes.push(`مرجع: "${targetUser.reference || ''}" ← "${updatedUser.reference || ''}"`);
-            if (targetUser.leadStatus !== updatedUser.leadStatus) changes.push(`وضعیت: "${targetUser.leadStatus || ''}" ← "${updatedUser.leadStatus || ''}"`);
+            if (targetUser.FullName !== updatedUser.FullName) changes.push(`👤 نام: "${targetUser.FullName || '-'}" ← "${updatedUser.FullName || '-'}"`);
+            if (targetUser.Number !== updatedUser.Number) changes.push(`📞 شماره تماس: "${targetUser.Number || '-'}" ← "${updatedUser.Number || '-'}" (ثبت شماره توسط: ${authorName})`);
+            if (targetUser.CarModel !== updatedUser.CarModel) changes.push(`🚘 خودروی درخواستی: "${targetUser.CarModel || '-'}" ← "${updatedUser.CarModel || '-'}"`);
+            if ((targetUser.Province || '') !== (updatedUser.Province || '')) changes.push(`📍 استان: "${targetUser.Province || ''}" ← "${updatedUser.Province || ''}"`);
+            if ((targetUser.City || '') !== (updatedUser.City || '')) changes.push(`📍 شهر: "${targetUser.City || ''}" ← "${updatedUser.City || ''}"`);
+            if ((targetUser.reference || '') !== (updatedUser.reference || '')) changes.push(`🏷️ مرجع جذب: "${targetUser.reference || ''}" ← "${updatedUser.reference || ''}"`);
+            if (targetUser.leadStatus !== updatedUser.leadStatus) changes.push(`📊 وضعیت: "${targetUser.leadStatus || ''}" ← "${updatedUser.leadStatus || ''}"`);
             if (updatedUser.leadStatus === LeadStatus.LOST && updatedUser.failReason) {
-                changes.push(`علت شکست معامله: "${updatedUser.failReason}"`);
+                changes.push(`❌ علت شکست معامله: "${updatedUser.failReason}"`);
                 if (updatedUser.failExplanation) {
                     changes.push(`توضیحات شکست: "${updatedUser.failExplanation}"`);
                 }
             }
-            if (targetUser.Decription !== updatedUser.Decription) changes.push(`توضیحات به‌روز شد.`);
+            const oldDesc = (targetUser.Decription || '').trim();
+            const newDesc = (updatedUser.Decription || '').trim();
+            if (oldDesc !== newDesc) {
+                if (!oldDesc && newDesc) {
+                    changes.push(`📝 افزودن توضیحات سرنخ توسط [${authorName}]:\n${newDesc}`);
+                } else if (oldDesc && !newDesc) {
+                    changes.push(`📝 حذف توضیحات سرنخ توسط [${authorName}]`);
+                } else {
+                    changes.push(`📝 ویرایش توضیحات سرنخ توسط [${authorName}]:\n${newDesc}`);
+                }
+            }
 
-            const journalContent = `✏️ ویرایش مشخصات اصلی مشتری:
-${changes.length > 0 ? changes.join('\n') : 'تغییری در اطلاعات پایه اعمال نشد.'}`;
+            if (changes.length > 0) {
+                const journalContent = `✏️ ویرایش مشخصات اصلی سرنخ (ثبت در فعالیت‌های CRM):
+👤 کاربر ویرایش‌کننده: ${authorName}
+${changes.join('\n')}`;
 
-            await createCustomerJournal({
-                userId,
-                content: journalContent,
-                author: authorName
-            });
+                await createCustomerJournal({
+                    userId,
+                    content: journalContent,
+                    author: authorName
+                });
+
+                await createCallLog({
+                    userId,
+                    customerName: updatedUser.FullName || '',
+                    customerNumber: updatedUser.Number || '',
+                    callType: 'OUTBOUND',
+                    callStatus: updatedUser.leadStatus === LeadStatus.LOST ? 'REJECTED' : 'SUCCESSFUL',
+                    duration: 0,
+                    agentName: authorName,
+                    notes: `✏️ ثبت گزارش فعالیت و تغییر اطلاعات سرنخ (CRM) توسط ${authorName}:
+${changes.join('\n')}`,
+                    timestamp: nowFa
+                });
+
+                window.dispatchEvent(new Event('crm_call_logs_updated'));
+            }
 
             if (updatedUser.leadStatus === LeadStatus.LOST && updatedUser.failReason) {
                 try {
@@ -497,7 +537,7 @@ ${changes.length > 0 ? changes.join('\n') : 'تغییری در اطلاعات پ
                         duration: 0,
                         agentName: authorName,
                         notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${updatedUser.failReason}${updatedUser.failExplanation ? ` (${updatedUser.failExplanation})` : ''}`,
-                        timestamp: new Date().toLocaleString('fa-IR')
+                        timestamp: nowFa
                     });
                 } catch (cErr) {
                     console.warn("Failed to create call log on LOST edit:", cErr);
@@ -2050,6 +2090,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                 const isSurvey = item.content.includes('نظرسنجی');
                                                 const isLostDeal = item.content.includes('علت شکست') || item.content.includes('ناموفق شدن معامله') || item.content.includes('معامله نا‌موفق');
                                                 const isNewLead = item.content.includes('سرنخ جدید') || item.content.includes('ایجاد سرنخ');
+                                                const isLeadEdit = item.content.includes('ویرایش مشخصات') || item.content.includes('به‌روزرسانی مشخصات') || item.content.includes('تغییر اطلاعات سرنخ');
 
                                                 let borderCol = 'border-r-amber-400';
                                                 let badgeText = 'گزارش فعالیت CRM';
@@ -2067,6 +2108,10 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                     borderCol = 'border-r-indigo-500';
                                                     badgeText = '✨ ایجاد سرنخ جدید';
                                                     badgeStyle = 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400 font-extrabold';
+                                                } else if (isLeadEdit) {
+                                                    borderCol = 'border-r-amber-500';
+                                                    badgeText = '✏️ ویرایش مشخصات و توضیحات';
+                                                    badgeStyle = 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 font-extrabold';
                                                 }
 
                                                 return (
@@ -2158,6 +2203,22 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                 // CALL_LOG Log
                                                 const log = item.callLog;
                                                 const isIncoming = log?.callType === 'INBOUND';
+                                                const isLeadCreationLog = log?.notes?.includes('ایجاد سرنخ جدید') || log?.notes?.includes('ایجاد و ثبت سرنخ');
+                                                const isLeadEditLog = log?.notes?.includes('تغییر اطلاعات سرنخ') || log?.notes?.includes('به‌روزرسانی مشخصات');
+
+                                                let callBorderCol = 'border-r-emerald-500';
+                                                let callBadgeText = isIncoming ? 'تماس ورودی / دایورت' : 'تماس خروجی';
+                                                let callBadgeColor = isIncoming ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30' : 'bg-sky-50 text-sky-600 dark:bg-sky-950/30';
+
+                                                if (isLeadCreationLog) {
+                                                    callBorderCol = 'border-r-indigo-500';
+                                                    callBadgeText = '✨ ثبت سرنخ جدید در CRM';
+                                                    callBadgeColor = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300';
+                                                } else if (isLeadEditLog) {
+                                                    callBorderCol = 'border-r-amber-500';
+                                                    callBadgeText = '✏️ گزارش تغییرات و مشخصات';
+                                                    callBadgeColor = 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
+                                                }
                                                 
                                                 // Status styling
                                                 let statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
@@ -2184,18 +2245,20 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                     : '';
 
                                                 return (
-                                                    <div key={item.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-r-4 border-l border-y border-r-emerald-500 border-l-slate-200 dark:border-l-slate-850 border-y-slate-200 dark:border-y-slate-850 shadow-sm flex flex-col gap-2">
+                                                    <div key={item.id} className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border-r-4 border-l border-y ${callBorderCol} border-l-slate-200 dark:border-l-slate-850 border-y-slate-200 dark:border-y-slate-850 shadow-sm flex flex-col gap-2`}>
                                                         <div className="flex justify-between items-center text-[10px] text-slate-500 border-b border-slate-50 dark:border-slate-800/40 pb-2">
                                                             <div className="flex items-center gap-2">
-                                                                <span className={`p-1 rounded-lg ${isIncoming ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30' : 'bg-sky-50 text-sky-600 dark:bg-sky-950/30'}`}>
-                                                                    {isIncoming ? <PhoneIncoming className="w-3.5 h-3.5" /> : <PhoneOutgoing className="w-3.5 h-3.5" />}
+                                                                <span className={`p-1 rounded-lg ${callBadgeColor}`}>
+                                                                    {isLeadCreationLog ? <Sparkles className="w-3.5 h-3.5" /> : isLeadEditLog ? <Edit className="w-3.5 h-3.5" /> : isIncoming ? <PhoneIncoming className="w-3.5 h-3.5" /> : <PhoneOutgoing className="w-3.5 h-3.5" />}
                                                                 </span>
                                                                 <span className="font-bold text-slate-700 dark:text-slate-300">
-                                                                    {isIncoming ? 'تماس ورودی / دایورت' : 'تماس خروجی'}
+                                                                    {callBadgeText}
                                                                 </span>
-                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${statusBadgeColor}`}>
-                                                                    {statusLabel}
-                                                                </span>
+                                                                {!isLeadCreationLog && !isLeadEditLog && (
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${statusBadgeColor}`}>
+                                                                        {statusLabel}
+                                                                    </span>
+                                                                )}
                                                                 {log?.followUpPhone && (
                                                                     <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/30 px-2 py-0.5 rounded-full">
                                                                         تلفن پیگیری: {log.followUpPhone}
@@ -2238,6 +2301,18 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                         <p className="text-xs font-extrabold text-slate-800 dark:text-white">فرم ویرایش اطلاعات و مشخصات پایه مشتری</p>
                                     </div>
 
+                                    {/* Current User Audit Banner */}
+                                    <div className="bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-150 dark:border-indigo-800/60 p-3 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            <span className="font-bold text-slate-700 dark:text-slate-300">کاربر ثبت‌کننده / ویرایش‌کننده این رکورد:</span>
+                                            <span className="font-extrabold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                                                {currentUser?.full_name || currentUser?.username || 'کاربر سیستم'}
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400">تمام تغییرات و یادداشت‌ها با نام شما در گزارش فعالیت CRM ثبت می‌شود.</span>
+                                    </div>
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {/* Full Name */}
                                         <div className="space-y-1.5">
@@ -2254,7 +2329,9 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
 
                                         {/* Phone Number */}
                                         <div className="space-y-1.5">
-                                            <label htmlFor="editNumber" className="block text-xs font-bold text-slate-700 dark:text-slate-300">شماره تماس:</label>
+                                            <label htmlFor="editNumber" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                شماره تماس: <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold mr-1">(ثبت‌کننده شماره: {currentUser?.full_name || currentUser?.username || 'کاربر جاری'})</span>
+                                            </label>
                                             <input 
                                                 type="tel" 
                                                 id="editNumber" 
@@ -2399,13 +2476,26 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
 
                                         {/* Description */}
                                         <div className="space-y-1.5 md:col-span-2">
-                                            <label htmlFor="editDescription" className="block text-xs font-bold text-slate-700 dark:text-slate-300">توضیحات تکمیلی:</label>
+                                            <div className="flex items-center justify-between">
+                                                <label htmlFor="editDescription" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                    توضیحات تکمیلی: <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mr-1">(نویسنده: {currentUser?.full_name || currentUser?.username || 'کاربر جاری'})</span>
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAppendEditSignature}
+                                                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 transition"
+                                                >
+                                                    <PlusCircle className="w-3.5 h-3.5" />
+                                                    <span>درج نام و تاریخ یادداشت من</span>
+                                                </button>
+                                            </div>
                                             <textarea 
                                                 id="editDescription" 
                                                 rows={4} 
                                                 value={editDescription} 
                                                 onChange={(e) => setEditDescription(e.target.value)}
                                                 className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white" 
+                                                placeholder="توضیحات، سوابق مذاکره و نیازمندی‌های مشتری..."
                                             />
                                         </div>
                                     </div>

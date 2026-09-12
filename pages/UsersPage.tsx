@@ -513,49 +513,109 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const handleSave = async (userData: Omit<User, 'id'>) => {
         try {
             let savedUser: User;
+            const authorName = loggedInUser?.full_name || loggedInUser?.FullName || loggedInUser?.username || 'کاربر سیستم';
+            const nowFa = new Date().toLocaleString('fa-IR');
+
             if (currentUser) {
                 savedUser = await updateUser(currentUser.id, { ...userData, id: currentUser.id });
                 showToast('کاربر با موفقیت ویرایش شد', 'success');
 
-                // If updated to LOST
-                if (savedUser.leadStatus === LeadStatus.LOST && savedUser.failReason && currentUser.leadStatus !== LeadStatus.LOST) {
-                    const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
-                    await createCustomerJournal({
-                        userId: Number(savedUser.id),
-                        content: `❌ ثبت علت شکست و ناموفق شدن معامله
-علت شکست: ${savedUser.failReason}
-${savedUser.failExplanation ? `توضیحات تکمیلی: ${savedUser.failExplanation}` : ''}`,
-                        author: authorName
-                    });
-                    await createCallLog({
-                        userId: Number(savedUser.id),
-                        customerName: savedUser.FullName || '',
-                        customerNumber: savedUser.Number || '',
-                        callType: 'OUTBOUND',
-                        callStatus: 'REJECTED',
-                        duration: 0,
-                        agentName: authorName,
-                        notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${savedUser.failReason}${savedUser.failExplanation ? ` (${savedUser.failExplanation})` : ''}`,
-                        timestamp: new Date().toLocaleString('fa-IR')
-                    });
+                try {
+                    // Diff-based change detection
+                    const changesList: string[] = [];
+
+                    // 1. Phone number change
+                    if ((currentUser.Number || '').trim() !== (userData.Number || '').trim()) {
+                        changesList.push(`📞 تغییر شماره تماس: "${currentUser.Number || '-'}" ← "${userData.Number || '-'}" (ثبت شماره جدید توسط: ${authorName})`);
+                    }
+
+                    // 2. Description change or addition
+                    const oldDesc = (currentUser.Decription || '').trim();
+                    const newDesc = (userData.Decription || '').trim();
+                    if (oldDesc !== newDesc) {
+                        if (!oldDesc && newDesc) {
+                            changesList.push(`📝 افزودن توضیحات سرنخ توسط [${authorName}]:\n${newDesc}`);
+                        } else if (oldDesc && !newDesc) {
+                            changesList.push(`📝 حذف توضیحات سرنخ توسط [${authorName}] (متن قبلی: "${oldDesc}")`);
+                        } else {
+                            changesList.push(`📝 ویرایش/به‌روزرسانی توضیحات سرنخ توسط [${authorName}]:\n${newDesc}`);
+                        }
+                    }
+
+                    // 3. Name change
+                    if ((currentUser.FullName || '').trim() !== (userData.FullName || '').trim()) {
+                        changesList.push(`👤 تغییر نام مشتری: "${currentUser.FullName || '-'}" ← "${userData.FullName || '-'}" (توسط ${authorName})`);
+                    }
+
+                    // 4. Car model change
+                    if ((currentUser.CarModel || '').trim() !== (userData.CarModel || '').trim()) {
+                        changesList.push(`🚘 تغییر خودروی درخواستی: "${currentUser.CarModel || '-'}" ← "${userData.CarModel || '-'}"`);
+                    }
+
+                    // 5. Status change
+                    if (currentUser.leadStatus !== userData.leadStatus) {
+                        changesList.push(`📊 تغییر وضعیت سرنخ: "${currentUser.leadStatus || 'نامشخص'}" ← "${userData.leadStatus || 'نامشخص'}"`);
+                    }
+
+                    // 6. Province & City
+                    if ((currentUser.Province || '').trim() !== (userData.Province || '').trim() || (currentUser.City || '').trim() !== (userData.City || '').trim()) {
+                        changesList.push(`📍 تغییر استان و شهر: "${currentUser.Province || ''} / ${currentUser.City || ''}" ← "${userData.Province || ''} / ${userData.City || ''}"`);
+                    }
+
+                    // 7. Reference
+                    if ((currentUser.reference || '').trim() !== (userData.reference || '').trim()) {
+                        changesList.push(`🏷️ تغییر مرجع جذب: "${currentUser.reference || '-'}" ← "${userData.reference || '-'}"`);
+                    }
+
+                    // 8. Fail reason
+                    if (userData.leadStatus === LeadStatus.LOST && userData.failReason && (currentUser.leadStatus !== LeadStatus.LOST || currentUser.failReason !== userData.failReason)) {
+                        changesList.push(`❌ ثبت علت شکست معامله: "${userData.failReason}"${userData.failExplanation ? ` (${userData.failExplanation})` : ''}`);
+                    }
+
+                    // Log activity & call report if changes were made
+                    if (changesList.length > 0) {
+                        await createCustomerJournal({
+                            userId: Number(savedUser.id),
+                            content: `✏️ به‌روزرسانی مشخصات سرنخ (ثبت در فعالیت‌های CRM):
+👤 کاربر ویرایش‌کننده: ${authorName}
+${changesList.join('\n')}`,
+                            author: authorName
+                        });
+
+                        await createCallLog({
+                            userId: Number(savedUser.id),
+                            customerName: savedUser.FullName || '',
+                            customerNumber: savedUser.Number || '',
+                            callType: 'OUTBOUND',
+                            callStatus: savedUser.leadStatus === LeadStatus.LOST ? 'REJECTED' : 'SUCCESSFUL',
+                            duration: 0,
+                            agentName: authorName,
+                            notes: `✏️ ثبت گزارش فعالیت و تغییر اطلاعات سرنخ (CRM) توسط ${authorName}:
+${changesList.join('\n')}`,
+                            timestamp: nowFa
+                        });
+
+                        window.dispatchEvent(new Event('crm_call_logs_updated'));
+                    }
+                } catch (actErr) {
+                    console.warn("Failed to log lead update activity:", actErr);
                 }
             } else {
                 savedUser = await createUser(userData);
                 showToast('سرنخ جدید با موفقیت اضافه شد', 'success');
 
-                // 1. Create activity and call log for new lead creation
+                // 1. Create activity and call log for new lead creation with clear user attribution
                 try {
-                    const authorName = loggedInUser?.full_name || loggedInUser?.username || 'کاربر سیستم';
                     const initialStatus = savedUser.leadStatus || 'ثبت اولیه';
 
                     await createCustomerJournal({
                         userId: Number(savedUser.id),
-                        content: `✨ ایجاد سرنخ جدید در سیستم
-👤 نام مشتری: ${savedUser.FullName || '-'}
-📞 شماره تماس: ${savedUser.Number || '-'}
-🚘 مدل خودرو: ${savedUser.CarModel || 'تعیین نشده'}
-📊 وضعیت اولیه: ${initialStatus}
-${savedUser.reference ? `🏷️ مرجع: ${savedUser.reference}\n` : ''}${savedUser.Decription ? `📝 توضیحات: ${savedUser.Decription}` : ''}`,
+                        content: `✨ ایجاد و ثبت سرنخ جدید در سیستم CRM:
+👤 کاربر ثبت‌کننده شماره و سرنخ: ${authorName}
+📞 شماره تماس ثبت‌شده: ${savedUser.Number || '-'} (ثبت توسط: ${authorName})
+🚘 خودروی درخواستی: ${savedUser.CarModel || 'تعیین نشده'}
+📊 وضعیت سرنخ: ${initialStatus}
+${savedUser.Decription ? `📝 توضیحات (نوشته‌شده توسط ${authorName}):\n${savedUser.Decription}\n` : '📝 توضیحات: فاقد توضیحات اولیه\n'}${savedUser.reference ? `🏷️ منبع/مرجع: ${savedUser.reference}\n` : ''}${savedUser.Province || savedUser.City ? `📍 استان و شهر: ${savedUser.Province || ''} - ${savedUser.City || ''}` : ''}`,
                         author: authorName
                     });
 
@@ -567,8 +627,13 @@ ${savedUser.reference ? `🏷️ مرجع: ${savedUser.reference}\n` : ''}${save
                         callStatus: 'SUCCESSFUL',
                         duration: 0,
                         agentName: authorName,
-                        notes: `📌 فعالیت جدید: ایجاد و ثبت سرنخ جدید در سیستم CRM (وضعیت: ${initialStatus})`,
-                        timestamp: new Date().toLocaleString('fa-IR')
+                        notes: `📌 ثبت گزارش تماس و فعالیت جدید (CRM) - ایجاد سرنخ جدید:
+👤 کاربر ثبت‌کننده شماره و سرنخ: ${authorName}
+📞 شماره تماس ثبت‌شده: ${savedUser.Number || '-'} (ثبت توسط: ${authorName})
+🚘 خودروی درخواستی: ${savedUser.CarModel || 'تعیین نشده'}
+📊 وضعیت اولیه: ${initialStatus}
+${savedUser.Decription ? `📝 توضیحات اولیه ثبت‌شده توسط [${authorName}]:\n${savedUser.Decription}\n` : '📝 فاقد توضیحات اولیه'}${savedUser.reference ? `🏷️ مرجع: ${savedUser.reference}` : ''}`,
+                        timestamp: nowFa
                     });
 
                     // 2. If new lead was created directly with status LOST and failReason
@@ -590,9 +655,11 @@ ${savedUser.failExplanation ? `توضیحات تکمیلی: ${savedUser.failExpl
                             duration: 0,
                             agentName: authorName,
                             notes: `❌ ثبت علت شکست و ناموفق شدن معامله: ${savedUser.failReason}${savedUser.failExplanation ? ` (${savedUser.failExplanation})` : ''}`,
-                            timestamp: new Date().toLocaleString('fa-IR')
+                            timestamp: nowFa
                         });
                     }
+
+                    window.dispatchEvent(new Event('crm_call_logs_updated'));
                 } catch (actErr) {
                     console.warn("Failed to register lead creation activity:", actErr);
                 }

@@ -146,6 +146,9 @@ export interface User {
     reservedByUserName?: string | null;
     failReason?: string;
     failExplanation?: string;
+    registeredBy?: string;
+    phoneRegisteredBy?: string;
+    lastEditedBy?: string;
 }
 
 export interface LeadMessage {
