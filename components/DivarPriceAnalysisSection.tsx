@@ -17,6 +17,7 @@ interface DivarPriceAnalysisSectionProps {
     otherPrices?: ScrapedCarPrice[];
     allSources?: string[];
     priceStats?: CarPriceStats[];
+    refreshTrigger?: number;
 }
 
 export const DIVAR_SUPPORTED_MODELS = [
@@ -220,7 +221,8 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     showToast,
     otherPrices: propOtherPrices,
     allSources,
-    priceStats
+    priceStats,
+    refreshTrigger
 }) => {
     const [items, setItems] = useState<DivarPriceItem[]>(() => {
         try {
@@ -242,7 +244,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     });
 
     const [lastUpdated, setLastUpdated] = useState<string>(() => {
-        return localStorage.getItem(STORAGE_TIME_KEY) || 'هنوز استعلام نشده';
+        return localStorage.getItem(STORAGE_TIME_KEY) || 'در حال استعلام برخط...';
     });
 
     const [activeCity, setActiveCity] = useState<string>(() => {
@@ -250,7 +252,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     });
 
     const [selectedCar, setSelectedCar] = useState<string>('kmc eagle');
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
     const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [queryingCarName, setQueryingCarName] = useState<string>('کی‌ام‌سی ایگل');
@@ -282,7 +284,6 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const timerIntervalRef = useRef<any>(null);
-    const hasInitialMountedRef = useRef<boolean>(false);
 
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [onlyZeroKm, setOnlyZeroKm] = useState<boolean>(false);
@@ -400,13 +401,18 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         if (showToast) showToast('استعلام لغو شد', 'error');
     };
 
-    // Auto-query on initial mount so fresh real-time data is loaded without any default expired prices
+    // Auto-query on mount immediately so fresh real-time data is loaded from Divar
+    // Rule: "در هنگامی که صفحه قیمت دیوار باز میشود فورا داده ها را به صورت پیفرض از دیوار استعلام کن"
     useEffect(() => {
-        if (!hasInitialMountedRef.current) {
-            hasInitialMountedRef.current = true;
+        handleQueryDivar(selectedCar, activeCity);
+    }, []);
+
+    // Also trigger query when refreshTrigger changes
+    useEffect(() => {
+        if (refreshTrigger && refreshTrigger > 0) {
             handleQueryDivar(selectedCar, activeCity);
         }
-    }, []);
+    }, [refreshTrigger]);
 
     // Filtered ads of the selected car
     const selectedCarAds = useMemo(() => {
@@ -414,7 +420,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     }, [items, selectedCar]);
 
     // Statistical Normalization Analysis for Divar Ads:
-    // Rule: "قیمت های دیوار نرمال سازی شود اگر قیمت درج شده ۵۰درصد بیشتر یا کمتر از اکثر قیمت ها بود از داده ها حذف شود"
+    // Rule: "نرمالایز بر اساس داده های خود سایت دیوار باشد"
     const normalizationAnalysis = useMemo(() => {
         const validAds = selectedCarAds.filter(
             (ad): ad is DivarPriceItem & { price: number } => typeof ad.price === 'number' && ad.price > 0
@@ -423,6 +429,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         if (validAds.length === 0) {
             return {
                 majorityPrice: 0,
+                anchorPrice: 0,
                 minAllowed: 0,
                 maxAllowed: Infinity,
                 normalAds: [] as (DivarPriceItem & { price: number })[],
@@ -438,29 +445,46 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 
         const prices = validAds.map(a => a.price);
 
-        // 1. Mode Calculation
+        // 1. Mode Calculation (نرخ پرتکرار دیوار)
         const { modePrice, count: modeCount } = calculateModePrice(prices);
 
-        // 2. Median Calculation
+        // 2. Median Calculation (میانه قیمت‌های دیوار)
         const sorted = [...prices].sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
-        const medianPrice = sorted.length % 2 !== 0 
-            ? sorted[mid] 
-            : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+        const medianPrice = sorted.length > 0 
+            ? (sorted.length % 2 !== 0 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2))
+            : 0;
 
-        // 3. Majority Price Selection ("اکثر قیمت‌ها"):
-        let majorityPrice = medianPrice;
-        let majorityLabel = `میانه قیمت‌ها (${(medianPrice / 1_000_000_000).toFixed(2)} م.ت)`;
+        // 3. Majority Price Selection ("اکثر قیمت‌های خود دیوار"):
+        let anchorPrice = medianPrice;
+        let majorityLabel = `میانه قیمت‌های دیوار (${(medianPrice / 1_000_000_000).toFixed(2)} م.ت)`;
         if (modeCount >= 2 && modePrice > 0) {
             if (medianPrice > 0 && Math.abs(modePrice - medianPrice) / medianPrice <= 0.40) {
-                majorityPrice = modePrice;
-                majorityLabel = `نرخ پرتکرار با ${modeCount} آگهی (${(modePrice / 1_000_000_000).toFixed(2)} م.ت)`;
+                anchorPrice = modePrice;
+                majorityLabel = `نرخ پرتکرار دیوار با ${modeCount} آگهی (${(modePrice / 1_000_000_000).toFixed(2)} م.ت)`;
             }
         }
 
-        // 50% Threshold Rules:
-        const minAllowed = majorityPrice * 0.5; // 50% less
-        const maxAllowed = majorityPrice * 1.5; // 50% more
+        if (anchorPrice <= 0) {
+            return {
+                majorityPrice: 0,
+                anchorPrice: 0,
+                minAllowed: 0,
+                maxAllowed: Infinity,
+                normalAds: validAds,
+                outlierAds: [] as {
+                    ad: DivarPriceItem & { price: number };
+                    reason: 'too_low' | 'too_high';
+                    deviationPct: number;
+                }[],
+                outlierCount: 0,
+                majorityLabel: majorityLabel || 'داده‌ای یافت نشد'
+            };
+        }
+
+        // Rule: 30% Threshold from Divar majority price (نرمالایز بر اساس داده‌های خود سایت دیوار)
+        const minAllowed = Math.round(anchorPrice * 0.70); // 30% less
+        const maxAllowed = Math.round(anchorPrice * 1.30); // 30% more
 
         const normalAds: (DivarPriceItem & { price: number })[] = [];
         const outlierAds: {
@@ -472,10 +496,10 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         validAds.forEach(ad => {
             const p = ad.price;
             if (p < minAllowed) {
-                const diffPct = Math.round(((majorityPrice - p) / majorityPrice) * 100);
+                const diffPct = Math.round(((anchorPrice - p) / anchorPrice) * 100);
                 outlierAds.push({ ad, reason: 'too_low', deviationPct: diffPct });
             } else if (p > maxAllowed) {
-                const diffPct = Math.round(((p - majorityPrice) / majorityPrice) * 100);
+                const diffPct = Math.round(((p - anchorPrice) / anchorPrice) * 100);
                 outlierAds.push({ ad, reason: 'too_high', deviationPct: diffPct });
             } else {
                 normalAds.push(ad);
@@ -483,7 +507,8 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         });
 
         return {
-            majorityPrice,
+            majorityPrice: anchorPrice,
+            anchorPrice,
             minAllowed,
             maxAllowed,
             normalAds,
@@ -605,9 +630,12 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
             const step = N > 0 ? (N / (count + 1)) : 1;
             const xPos = N > 0 ? Math.max(1, Math.round((idx + 1) * step)) : (idx + 1);
 
-            const baseDivar = activeCarStats.avgPrice || activeCarStats.modePrice;
-            const diffPct = baseDivar > 0 
-                ? Number((((item.price_rial - baseDivar) / baseDivar) * 100).toFixed(1))
+            // Rule: "اختلاف به جای نسبت به میانگین دیوار نسبت به سقف دیوار اندازه گیری شود"
+            const baseDivarCeiling = activeCarStats.maxPrice > 0 
+                ? activeCarStats.maxPrice 
+                : (activeCarStats.avgPrice || activeCarStats.modePrice);
+            const diffPct = baseDivarCeiling > 0 
+                ? Number((((item.price_rial - baseDivarCeiling) / baseDivarCeiling) * 100).toFixed(1))
                 : undefined;
 
             return {
@@ -623,7 +651,8 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                 textClass: style.textClass,
                 borderClass: style.borderClass,
                 capturedAt: item.captured_at,
-                diffWithDivarAvg: diffPct,
+                diffWithDivarCeiling: diffPct,
+                diffWithDivarAvg: diffPct, // backward compatibility
                 isOtherSource: true
             };
         });
@@ -689,7 +718,9 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 
     const handleCopySummary = () => {
         const cityLabel = DIVAR_SUPPORTED_CITIES.find(c => c.key === activeCity)?.label || activeCity;
-        const normStatus = isNormalized ? 'نرمال‌شده (فیلتر نوسانات ۵۰٪±)' : 'داده‌های خام (غیرنرمال)';
+        const normStatus = isNormalized 
+            ? 'نرمال‌شده (فیلتر نوسانات ۳۰٪± داده‌های دیوار)' 
+            : 'داده‌های خام (غیرنرمال)';
         const text = `📊 *تحلیل قیمت دیوار خودرو ${activeCarStats.displayName}*
 شهر استعلام: ${cityLabel}
 وضعیت نمودار: ${normStatus}
@@ -712,52 +743,40 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 
     const activeCityObj = DIVAR_SUPPORTED_CITIES.find(c => c.key === activeCity) || DIVAR_SUPPORTED_CITIES[0];
 
-    // SVG Shape Renderer for other sources in Recharts Scatter (نشانگر مثلثی ▲ برای همه مراجع + درج نام مرجع)
+    // SVG Shape Renderer for other sources in Recharts Scatter (نشانگر مثلثی کوچک ▲ برای همه مراجع + نام مرجع معمولی بدون رنگ و بدون کادر)
     const renderOtherSourceShape = (props: any) => {
         const { cx, cy, payload } = props;
         if (!cx || !cy || !payload) return null;
         const { color, sourceLabel } = payload;
 
-        // Size of the triangle marker
-        const size = 11;
+        // Size of the small triangle marker (نشانگر مثلثی کوچک)
+        const size = 5.5;
         // Clean Persian name of the source (e.g., باما، خودرو۴۵، کارنامه، کار.آی‌آر، ایران‌جیب، نرخ مصوب)
         const name = (sourceLabel || '').split('(')[0].trim();
-        const textWidth = Math.max(name.length * 8.5 + 14, 34);
 
         return (
             <g key={`marker-triangle-${cx}-${cy}`} className="cursor-pointer">
-                {/* Source Name Badge directly above the triangle marker */}
-                <rect
-                    x={cx - textWidth / 2}
-                    y={cy - size - 17}
-                    width={textWidth}
-                    height={16}
-                    rx={4}
-                    fill="#0f172a"
-                    stroke={color}
-                    strokeWidth={1.5}
-                    className="filter drop-shadow-sm opacity-95"
-                />
+                {/* Source Name without background color and without border, normal typography */}
                 <text
                     x={cx}
-                    y={cy - size - 5}
+                    y={cy - size - 4}
                     textAnchor="middle"
-                    fill="#ffffff"
-                    fontSize={9.5}
-                    fontWeight="bold"
+                    fill={color}
+                    fontSize={10}
+                    fontWeight="normal"
                     fontFamily="Vazirmatn, sans-serif"
                     className="select-none pointer-events-none"
                 >
                     {name}
                 </text>
 
-                {/* Upright Triangle Marker (همگی مثلث) */}
+                {/* Upright Small Triangle Marker (نشانگر مثلثی کوچک) */}
                 <polygon
-                    points={`${cx},${cy - size} ${cx + size},${cy + size * 0.85} ${cx - size},${cy + size * 0.85}`}
+                    points={`${cx},${cy - size} ${cx + size},${cy + size * 0.9} ${cx - size},${cy + size * 0.9}`}
                     fill={color}
                     stroke="#ffffff"
-                    strokeWidth={2}
-                    className="filter drop-shadow-md"
+                    strokeWidth={1}
+                    className="filter drop-shadow-xs"
                 />
             </g>
         );
@@ -1059,14 +1078,14 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                     >
                                         <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                                         <span>
-                                            {normalizationAnalysis.outlierCount.toLocaleString('fa-IR')} آگهی پرت (۵۰٪±) حذف شد
+                                            {normalizationAnalysis.outlierCount.toLocaleString('fa-IR')} آگهی خارج از محدوده ۳۰٪ داده‌های دیوار حذف شد
                                         </span>
                                         <span className="text-[10px] underline">جزئیات</span>
                                     </button>
                                 ) : (
                                     <div className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5">
                                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>داده‌ها یکدست و بدون انحراف ۵۰٪ است</span>
+                                        <span>داده‌ها یکدست و در محدوده ۳۰٪ اکثر قیمت‌های دیوار است</span>
                                     </div>
                                 )
                             ) : (
@@ -1105,7 +1124,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                 </h3>
                                 <p className="text-xs text-slate-400 mt-0.5">
                                     {isNormalized 
-                                        ? 'نمودار نرمال‌شده بر مبنای نرخ متمرکز (حذف خودکار داده‌های نامتعارف ±۵۰٪) همراه با نشانگر مثلثی سایر مراجع بازار'
+                                        ? `نمودار نرمال‌شده بر مبنای داده‌های خود سایت دیوار (${normalizationAnalysis.majorityLabel}) همراه با نشانگر مثلثی سایر مراجع بازار`
                                         : 'نمودار خام شامل کلیه آگهی‌های دیوار همراه با نشانگر مثلثی سایر منابع کشف قیمت'
                                     }
                                 </p>
@@ -1192,14 +1211,19 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                                                         {d.price.toLocaleString('fa-IR')} تومان
                                                                     </span>
                                                                 </div>
-                                                                {d.diffWithDivarAvg !== undefined && (
+                                                                {(d.diffWithDivarCeiling !== undefined || d.diffWithDivarAvg !== undefined) && (
                                                                     <div className="flex justify-between items-center text-[11px] mt-1 pt-1 border-t border-slate-200 dark:border-slate-800">
-                                                                        <span className="text-slate-400">اختلاف با میانگین دیوار:</span>
-                                                                        <span className={`font-mono font-bold ${
-                                                                            d.diffWithDivarAvg > 0 ? 'text-rose-600' : 'text-emerald-600'
-                                                                        }`}>
-                                                                            {d.diffWithDivarAvg > 0 ? `+${d.diffWithDivarAvg}٪ بالاتر` : `${Math.abs(d.diffWithDivarAvg)}٪ پایین‌تر`}
-                                                                        </span>
+                                                                        <span className="text-slate-400">اختلاف با سقف دیوار:</span>
+                                                                        {(() => {
+                                                                            const diff = d.diffWithDivarCeiling !== undefined ? d.diffWithDivarCeiling : d.diffWithDivarAvg;
+                                                                            return (
+                                                                                <span className={`font-mono font-bold ${
+                                                                                    diff > 0 ? 'text-rose-600' : 'text-emerald-600'
+                                                                                }`}>
+                                                                                    {diff > 0 ? `+${diff}٪ بالاتر` : `${Math.abs(diff)}٪ پایین‌تر`}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1412,7 +1436,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                 {!isNormalized && normalizationAnalysis.outlierCount > 0 && (
                                     <div className="flex items-center gap-1.5 text-orange-600 font-black">
                                         <span className="w-3 h-3 rounded-full bg-orange-600 shadow-xs"></span>
-                                        <span>آگهی‌های غیرمتعارف (۵۰٪±)</span>
+                                        <span>آگهی‌های غیرمتعارف (۳۰٪±)</span>
                                     </div>
                                 )}
                             </div>
@@ -1509,25 +1533,29 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 
                                             <div className="flex items-center justify-between text-[11px] font-bold pt-1">
                                                 <span className="text-slate-500 dark:text-slate-400">
-                                                    نسبت به میانگین دیوار:
+                                                    نسبت به سقف دیوار:
                                                 </span>
-                                                {src.diffWithDivarAvg !== undefined ? (
-                                                    <span className={`px-2 py-0.5 rounded-lg font-mono font-black ${
-                                                        src.diffWithDivarAvg > 0
-                                                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300'
-                                                            : src.diffWithDivarAvg < 0
-                                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
-                                                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                                    }`}>
-                                                        {src.diffWithDivarAvg > 0 
-                                                            ? `+${src.diffWithDivarAvg}٪ بالاتر` 
-                                                            : src.diffWithDivarAvg < 0 
-                                                            ? `${src.diffWithDivarAvg}٪ مناسب‌تر` 
-                                                            : 'برابر'}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400">-</span>
-                                                )}
+                                                {(() => {
+                                                    const diff = src.diffWithDivarCeiling !== undefined ? src.diffWithDivarCeiling : src.diffWithDivarAvg;
+                                                    if (diff === undefined) {
+                                                        return <span className="text-slate-400">-</span>;
+                                                    }
+                                                    return (
+                                                        <span className={`px-2 py-0.5 rounded-lg font-mono font-black ${
+                                                            diff > 0
+                                                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300'
+                                                                : diff < 0
+                                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
+                                                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                                        }`}>
+                                                            {diff > 0 
+                                                                ? `+${diff}٪ بالاتر` 
+                                                                : diff < 0 
+                                                                ? `${diff}٪ پایین‌تر` 
+                                                                : 'برابر'}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
 
                                             {src.capturedAt && (
@@ -1745,10 +1773,10 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                 </div>
                                 <div>
                                     <h4 className="font-black text-slate-800 dark:text-white text-sm">
-                                        آگهی‌های غیرمتعارف فیلترشده (انحراف ۵۰٪±)
+                                        آگهی‌های غیرمتعارف فیلترشده (انحراف ۳۰٪±)
                                     </h4>
                                     <p className="text-[11px] text-slate-400">
-                                        مبنای اکثر قیمت‌ها: {normalizationAnalysis.majorityPrice.toLocaleString('fa-IR')} تومان
+                                        مبنای محاسبه: {normalizationAnalysis.majorityLabel} ({normalizationAnalysis.majorityPrice.toLocaleString('fa-IR')} تومان)
                                     </p>
                                 </div>
                             </div>
@@ -1762,13 +1790,13 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                         </div>
 
                         <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl text-xs space-y-1.5 text-slate-600 dark:text-slate-300">
-                            <p className="font-bold">قاعده نرمال‌سازی سیستم:</p>
+                            <p className="font-bold">قاعده نرمال‌سازی بر مبنای داده‌های خود سایت دیوار:</p>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                                بر اساس قاعده تعریف‌شده، قیمت‌هایی که بیش از ۵۰٪ کمتر از نرخ پرتکرار (پیش‌پرداخت/وام) یا بیش از ۵۰٪ بالاتر از آن (اشتباه تایپی/قیمت کاذب) باشند، از محاسبات آماری نرمال حذف شده‌اند.
+                                بر اساس قاعده تعریف‌شده، قیمت‌هایی که بیش از ۳۰٪ کمتر از نرخ غالب و متمرکز آگهی‌های دیوار (پیش‌پرداخت/وام) یا بیش از ۳۰٪ بالاتر از آن باشند، از محاسبات آماری نرمال حذف شده‌اند.
                             </p>
                             <div className="flex justify-between items-center text-[11px] font-mono pt-1 text-rose-600 dark:text-rose-400 font-bold">
-                                <span>کف مجاز معتبر: {normalizationAnalysis.minAllowed.toLocaleString('fa-IR')} ت</span>
-                                <span>سقف مجاز معتبر: {normalizationAnalysis.maxAllowed.toLocaleString('fa-IR')} ت</span>
+                                <span>کف مجاز معتبر (۳۰٪-): {normalizationAnalysis.minAllowed.toLocaleString('fa-IR')} ت</span>
+                                <span>سقف مجاز معتبر (۳۰٪+): {normalizationAnalysis.maxAllowed.toLocaleString('fa-IR')} ت</span>
                             </div>
                         </div>
 
@@ -1783,7 +1811,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                             {item.ad.title || 'بدون عنوان'}
                                         </span>
                                         <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 shrink-0">
-                                            {item.reason === 'too_low' ? `انحراف ۵۰٪- (کف غیرمتعارف)` : `انحراف ۵۰٪+ (سقف غیرمتعارف)`}
+                                            {item.reason === 'too_low' ? `انحراف ۳۰٪- (کف غیرمتعارف)` : `انحراف ۳۰٪+ (سقف غیرمتعارف)`}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center text-xs pt-1 font-mono">

@@ -178,8 +178,9 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     
-    // Main Navigation Tab (Default is 'market_cards', Sales Manager Assistant is non-default, Divar Prices is new)
-    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'divar_prices' | 'sales_assistant'>('market_cards');
+    // Main Navigation Tab (Default is 'divar_prices' per user request)
+    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'divar_prices' | 'sales_assistant'>('divar_prices');
+    const [divarRefreshTrigger, setDivarRefreshTrigger] = useState<number>(0);
 
     // Auto Refresh State
     const [refreshInterval, setRefreshInterval] = useState<number>(0); // 0 means manual
@@ -1480,6 +1481,25 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                 <div className="flex flex-wrap p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-3xl border border-slate-200/50 dark:border-slate-800/40 gap-1">
                     <button
                         type="button"
+                        onClick={() => {
+                            if (activeMainTab === 'divar_prices') {
+                                setDivarRefreshTrigger(prev => prev + 1);
+                            } else {
+                                setActiveMainTab('divar_prices');
+                            }
+                        }}
+                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            activeMainTab === 'divar_prices'
+                                ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md shadow-rose-200 dark:shadow-none'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <TrendingUp className="w-4 h-4" />
+                        <span>قیمت دیوار (نمای پیش‌فرض) 📱</span>
+                    </button>
+
+                    <button
+                        type="button"
                         onClick={() => setActiveMainTab('market_cards')}
                         className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
                             activeMainTab === 'market_cards'
@@ -1489,19 +1509,6 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     >
                         <BarChart3 className="w-4 h-4" />
                         <span>مراجع قیمت روز 📊</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setActiveMainTab('divar_prices')}
-                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                            activeMainTab === 'divar_prices'
-                                ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md shadow-rose-200 dark:shadow-none'
-                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
-                    >
-                        <TrendingUp className="w-4 h-4" />
-                        <span>قیمت دیوار (تحلیل و نمودار) 📱</span>
                     </button>
 
                     <button
@@ -1536,6 +1543,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                         otherPrices={prices}
                         allSources={sources}
                         priceStats={priceStatsWithOverride}
+                        refreshTrigger={divarRefreshTrigger}
                     />
                 ) : (
                     <>
