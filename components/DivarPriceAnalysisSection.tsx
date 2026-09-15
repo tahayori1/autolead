@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import type { DivarPriceItem, DivarModelStats } from '../types';
 import { getDivarPrices } from '../services/api';
-import { INITIAL_DIVAR_PRICES } from '../src/data/initialDivarPrices';
 
 interface DivarPriceAnalysisSectionProps {
     showToast?: (message: string, type: 'success' | 'error') => void;
@@ -73,13 +72,18 @@ const calculateModePrice = (prices: number[]): { modePrice: number; count: numbe
     return { modePrice: mode, count: maxFreq };
 };
 
-const STORAGE_CACHE_KEY = 'divar_prices_cache_v2';
-const STORAGE_TIME_KEY = 'divar_prices_timestamp_v2';
-const STORAGE_CITY_KEY = 'divar_prices_last_city_v2';
+const STORAGE_CACHE_KEY = 'divar_live_prices_v4';
+const STORAGE_TIME_KEY = 'divar_live_timestamp_v4';
+const STORAGE_CITY_KEY = 'divar_live_last_city_v4';
 
 export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps> = ({ showToast }) => {
     const [items, setItems] = useState<DivarPriceItem[]>(() => {
         try {
+            // Remove legacy caches that held expired/dummy default prices
+            localStorage.removeItem('divar_prices_cache_v2');
+            localStorage.removeItem('divar_prices_timestamp_v2');
+            localStorage.removeItem('divar_prices_last_city_v2');
+
             const cached = localStorage.getItem(STORAGE_CACHE_KEY);
             if (cached) {
                 const parsed = JSON.parse(cached);
@@ -90,11 +94,11 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         } catch {
             // fallback
         }
-        return INITIAL_DIVAR_PRICES;
+        return [];
     });
 
     const [lastUpdated, setLastUpdated] = useState<string>(() => {
-        return localStorage.getItem(STORAGE_TIME_KEY) || 'پیش‌فرض ثبت‌شده';
+        return localStorage.getItem(STORAGE_TIME_KEY) || 'هنوز استعلام نشده';
     });
 
     const [activeCity, setActiveCity] = useState<string>(() => {
@@ -110,6 +114,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const timerIntervalRef = useRef<any>(null);
+    const hasInitialMountedRef = useRef<boolean>(false);
 
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [onlyZeroKm, setOnlyZeroKm] = useState<boolean>(false);
@@ -226,6 +231,14 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         }
         if (showToast) showToast('استعلام لغو شد', 'error');
     };
+
+    // Auto-query on initial mount so fresh real-time data is loaded without any default expired prices
+    useEffect(() => {
+        if (!hasInitialMountedRef.current) {
+            hasInitialMountedRef.current = true;
+            handleQueryDivar(selectedCar, activeCity);
+        }
+    }, []);
 
     // Group items by car
     const modelStatsList: DivarModelStats[] = useMemo(() => {
@@ -394,7 +407,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     }, [selectedCarAds, onlyZeroKm, searchQuery, sortOrder]);
 
     const formatPriceShort = (val: number) => {
-        if (!val) return '۰';
+        if (!val || val <= 0) return 'نامشخص';
         const billions = val / 1_000_000_000;
         return `${billions.toFixed(2)} م.ت`;
     };
@@ -442,8 +455,10 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 font-medium">
                                 <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                <span>آخرین استعلام:</span>
-                                <span className="font-bold text-slate-700 dark:text-slate-300">{lastUpdated}</span>
+                                <span>وضعیت استعلام:</span>
+                                <span className={`font-bold ${lastUpdated === 'هنوز استعلام نشده' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                    {lastUpdated}
+                                </span>
                                 <span className="text-slate-300 dark:text-slate-600">|</span>
                                 <span>شهر فعلی: <strong className="text-rose-600 dark:text-rose-400">{activeCityObj.label}</strong></span>
                             </p>
@@ -566,11 +581,13 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                 }`}
                             >
                                 <span>{m.label.split('(')[0].trim()}</span>
-                                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                                    isSelected ? 'bg-rose-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
-                                }`}>
-                                    {count}
-                                </span>
+                                {count > 0 && (
+                                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                                        isSelected ? 'bg-rose-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                                    }`}>
+                                        {count}
+                                    </span>
+                                )}
                             </button>
                         );
                     })}
@@ -864,15 +881,22 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                     </ScatterChart>
                                 </ResponsiveContainer>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs">
-                                    <Info className="w-8 h-8 mb-2 opacity-50" />
-                                    <span>داده‌ای برای رسم نمودار پراکندگی {activeCarStats.displayName} در {activeCityObj.label} موجود نیست</span>
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs py-10">
+                                    <Info className="w-8 h-8 mb-2 opacity-50 text-slate-400" />
+                                    <span className="font-bold text-slate-600 dark:text-slate-300 text-sm">
+                                        هیچ قیمت پیش‌فرضی ثبت نشده است
+                                    </span>
+                                    <p className="text-slate-400 text-xs mt-1 max-w-sm text-center">
+                                        برای جلوگیری از نمایش اعداد منقضی، کلیه قیمت‌ها مستقیماً و برخط از دیوار استعلام می‌شوند.
+                                    </p>
                                     <button
                                         type="button"
+                                        disabled={isLoading}
                                         onClick={() => handleQueryDivar(selectedCar, activeCity)}
-                                        className="mt-3 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                                        className="mt-3.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-rose-200 dark:shadow-none"
                                     >
-                                        استعلام برخط این خودرو از دیوار
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                        <span>استعلام زنده {activeCarStats.displayName} در {activeCityObj.label}</span>
                                     </button>
                                 </div>
                             )}
@@ -1047,8 +1071,16 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                         })
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} className="p-8 text-center text-slate-400">
-                                                آگهی منطبق با فیلترها یافت نشد.
+                                            <td colSpan={6} className="p-10 text-center text-slate-400">
+                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                    <Info className="w-6 h-6 text-slate-400" />
+                                                    <span className="font-bold text-slate-600 dark:text-slate-300 text-xs">
+                                                        هیچ آگهی پیش‌فرضی در سیستم وجود ندارد.
+                                                    </span>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        جهت مشاهده آگهی‌های واقعی، استعلام برخط خودرو را از دیوار انجام دهید.
+                                                    </span>
+                                                </div>
                                             </td>
                                         </tr>
                                     )}
