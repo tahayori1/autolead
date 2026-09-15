@@ -35,7 +35,8 @@ import type {
     CrmCallLog,
     SalaryAdvanceRequest,
     CrmMeeting,
-    AdvertisementReport
+    AdvertisementReport,
+    DivarPriceItem
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -1453,6 +1454,85 @@ export const getScrapedCarPrices = async (): Promise<ScrapedCarPrice[]> => {
     const SCRAPED_PRICES_URL = `${API_BASE_URL}/car_price`;
     const response = await fetch(SCRAPED_PRICES_URL);
     return handleScrapedApiResponse(response);
+};
+
+export const getDivarPrices = async (
+    model?: string,
+    city?: string,
+    signal?: AbortSignal
+): Promise<DivarPriceItem[]> => {
+    // 150-second timeout because user indicated scraper requires time
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 150000);
+
+    if (signal) {
+        signal.addEventListener('abort', () => controller.abort());
+    }
+
+    const baseUrl = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/divar-prices';
+    const params = new URLSearchParams();
+    if (model && model.trim()) {
+        params.set('model', model.trim());
+    }
+    if (city && city.trim()) {
+        params.set('city', city.trim());
+    }
+
+    const queryString = params.toString();
+    const primaryUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl;
+    const fallbackUrl = queryString ? `${API_BASE_URL}/divar-prices?${queryString}` : `${API_BASE_URL}/divar-prices`;
+
+    try {
+        let response: Response;
+        try {
+            // First try GET on the user's primary webhook endpoint
+            response = await fetch(primaryUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: controller.signal
+            });
+
+            // If GET returned 404 with indication to use POST, retry with POST
+            if (!response.ok && response.status === 404) {
+                const clone = response.clone();
+                try {
+                    const text = await clone.text();
+                    if (text.includes('POST') || text.includes('webhook')) {
+                        response = await fetch(primaryUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({}),
+                            signal: controller.signal
+                        });
+                    }
+                } catch {
+                    // ignore error and proceed
+                }
+            }
+        } catch (fetchErr: any) {
+            // If primary endpoint failed or timed out, try fallback URL
+            if (controller.signal.aborted) throw fetchErr;
+            response = await fetch(fallbackUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: controller.signal
+            });
+        }
+
+        if (!response.ok) {
+            throw new Error(`دریافت قیمت‌های دیوار ناموفق بود (کد: ${response.status})`);
+        }
+
+        const data = await response.json();
+        if (Array.isArray(data)) {
+            return data;
+        } else if (data && Array.isArray(data.data)) {
+            return data.data;
+        }
+        return [];
+    } finally {
+        clearTimeout(timeoutId);
+    }
 };
 
 export const addCustomPrice = async (payload: {

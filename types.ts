@@ -228,6 +228,31 @@ export interface CarPriceStats {
     lowestLimit?: number;
 }
 
+export interface DivarPriceItem {
+    title: string | null;
+    price: number | null;
+    km: string | null;
+    desc: string | null;
+    car_name: string;
+    href: string | null;
+}
+
+export interface DivarModelStats {
+    car_name: string;
+    displayName: string;
+    totalListings: number;
+    validPriceCount: number;
+    minPrice: number;
+    maxPrice: number;
+    avgPrice: number;
+    modePrice: number;
+    modeCount: number;
+    priceSpread: number;
+    zeroKmCount: number;
+    usedCount: number;
+    items: DivarPriceItem[];
+}
+
 export interface ActiveLead {
     FullName: string;
     CarModel: string | null;

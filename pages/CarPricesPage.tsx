@@ -10,6 +10,7 @@ import { EyeIcon } from '../components/icons/EyeIcon';
 import CarPriceCopySettingsModal, { PRIORITY_MODELS, getModelPriorityIndex } from '../components/CarPriceCopySettingsModal';
 import AddCustomPriceModal from '../components/AddCustomPriceModal';
 import SalesManagerPriceAssistant from '../components/SalesManagerPriceAssistant';
+import DivarPriceAnalysisSection from '../components/DivarPriceAnalysisSection';
 import { 
     Plus, Clock, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, 
     TrendingUp, Search, Filter, ArrowUpDown, X, Car, Sparkles, Layers, Calendar, Target, ShieldCheck, BarChart3, TableProperties, ShieldAlert, CheckCircle2, Scale
@@ -177,8 +178,8 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     
-    // Main Navigation Tab (Default is 'market_cards', Sales Manager Assistant is non-default)
-    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'sales_assistant'>('market_cards');
+    // Main Navigation Tab (Default is 'market_cards', Sales Manager Assistant is non-default, Divar Prices is new)
+    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'divar_prices' | 'sales_assistant'>('market_cards');
 
     // Auto Refresh State
     const [refreshInterval, setRefreshInterval] = useState<number>(0); // 0 means manual
@@ -1476,31 +1477,44 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
         <>
             <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
                 {/* Tab Navigation Selector */}
-                <div className="flex flex-wrap p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-2xl border border-slate-200/50 dark:border-slate-800/40 gap-1">
+                <div className="flex flex-wrap p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-3xl border border-slate-200/50 dark:border-slate-800/40 gap-1">
                     <button
                         type="button"
                         onClick={() => setActiveMainTab('market_cards')}
-                        className={`flex-1 min-w-[160px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
                             activeMainTab === 'market_cards'
                                 ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/40 dark:border-slate-700/50'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                     >
                         <BarChart3 className="w-4 h-4" />
-                        <span>کارت‌ها و مراجع قیمت روز 📊</span>
+                        <span>مراجع قیمت روز 📊</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setActiveMainTab('divar_prices')}
+                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            activeMainTab === 'divar_prices'
+                                ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md shadow-rose-200 dark:shadow-none'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <TrendingUp className="w-4 h-4" />
+                        <span>قیمت دیوار (تحلیل و نمودار) 📱</span>
                     </button>
 
                     <button
                         type="button"
                         onClick={() => setActiveMainTab('sales_assistant')}
-                        className={`flex-1 min-w-[180px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
                             activeMainTab === 'sales_assistant'
                                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-200 dark:shadow-none'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                     >
                         <Target className={`w-4 h-4 ${activeMainTab === 'sales_assistant' ? 'text-amber-300 animate-pulse' : 'text-indigo-500'}`} />
-                        <span>دستیار و ابزار کمکی مدیر فروش 🎯</span>
+                        <span>دستیار مدیر فروش 🎯</span>
                     </button>
                 </div>
 
@@ -1514,6 +1528,10 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                         lastUpdated={lastUpdated}
                         onSelectApprovedPrice={handleSelectAsApprovedPrice}
                         onAddCustomPriceSubmit={handleAddCustomPriceSubmit}
+                        showToast={showToast}
+                    />
+                ) : activeMainTab === 'divar_prices' ? (
+                    <DivarPriceAnalysisSection
                         showToast={showToast}
                     />
                 ) : (
