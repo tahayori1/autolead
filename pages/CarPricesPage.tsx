@@ -1533,6 +1533,9 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                 ) : activeMainTab === 'divar_prices' ? (
                     <DivarPriceAnalysisSection
                         showToast={showToast}
+                        otherPrices={prices}
+                        allSources={sources}
+                        priceStats={priceStatsWithOverride}
                     />
                 ) : (
                     <>
