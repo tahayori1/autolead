@@ -277,7 +277,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             } finally {
                 setIsFetchingUsers(false);
             }
-        }, filters.query ? 350 : 30);
+        }, 10);
 
         return () => clearTimeout(timer);
     }, [
