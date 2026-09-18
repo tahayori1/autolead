@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { Clock } from 'lucide-react';
 import { LeadStatus } from '../types';
 import type { User, MyProfile } from '../types';
 import { EditIcon } from './icons/EditIcon';
@@ -96,15 +97,55 @@ const UserTable: React.FC<UserTableProps> = ({
         );
     }
 
-    const formatDate = (dateString: string) => {
+    const formatDate = (dateString?: string) => {
+        if (!dateString) return '-';
         try {
             const parsableDateString = dateString.replace(' ', 'T');
-            return new Intl.DateTimeFormat('fa-IR', {
+            const dateObj = new Date(parsableDateString);
+            if (isNaN(dateObj.getTime())) return dateString;
+
+            const datePart = new Intl.DateTimeFormat('fa-IR', {
                 month: 'short',
                 day: 'numeric',
-            }).format(new Date(parsableDateString));
+            }).format(dateObj);
+
+            const timePart = new Intl.DateTimeFormat('fa-IR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(dateObj);
+
+            return `${timePart} - ${datePart}`;
         } catch (e) {
             return dateString;
+        }
+    };
+    
+    const formatDateTimeParts = (dateString?: string) => {
+        if (!dateString) return { date: '-', time: '', full: '-' };
+        try {
+            const parsableDateString = dateString.replace(' ', 'T');
+            const dateObj = new Date(parsableDateString);
+            if (isNaN(dateObj.getTime())) return { date: dateString, time: '', full: dateString };
+
+            const datePart = new Intl.DateTimeFormat('fa-IR', {
+                month: 'short',
+                day: 'numeric',
+            }).format(dateObj);
+
+            const timePart = new Intl.DateTimeFormat('fa-IR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(dateObj);
+
+            return {
+                date: datePart,
+                time: timePart,
+                full: `${timePart} - ${datePart}`
+            };
+        } catch (e) {
+            return { date: dateString, time: '', full: dateString };
         }
     };
     
@@ -235,7 +276,23 @@ const UserTable: React.FC<UserTableProps> = ({
                                     {getStatusBadge(user.leadStatus)}
                                 </td>
                                 <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{user.City || user.Province || '-'}</td>
-                                <td className="px-6 py-4 text-xs text-slate-400 dark:text-slate-500">{formatDate(user.updatedAt)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap" title={formatDateForTooltip(user.updatedAt)}>
+                                    {(() => {
+                                        const dt = formatDateTimeParts(user.updatedAt);
+                                        if (!dt.time) {
+                                            return <span className="text-xs text-slate-400 dark:text-slate-500">{dt.date}</span>;
+                                        }
+                                        return (
+                                            <div className="flex flex-col text-[11px] leading-tight font-mono" dir="rtl">
+                                                <div className="flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200">
+                                                    <Clock className="w-3 h-3 text-sky-500 shrink-0" />
+                                                    <span>{dt.time}</span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 pr-4">{dt.date}</span>
+                                            </div>
+                                        );
+                                    })()}
+                                </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center justify-end gap-1">
                                         <button 
@@ -312,7 +369,10 @@ const UserTable: React.FC<UserTableProps> = ({
                                             return null;
                                         })()}
                                     </h3>
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-700 px-2 py-0.5 rounded-full flex-shrink-0 font-mono">{formatDate(user.updatedAt)}</span>
+                                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/80 px-2 py-0.5 rounded-full flex-shrink-0 font-mono font-bold" dir="rtl">
+                                        <Clock className="w-2.5 h-2.5 text-sky-500 shrink-0" />
+                                        <span>{formatDate(user.updatedAt)}</span>
+                                    </span>
                                 </div>
                                 
                                 <div className="flex items-center gap-2 mt-1">
