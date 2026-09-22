@@ -30,6 +30,7 @@ import {
     formatCurrencyWithCommas,
     toPersianDigits 
 } from '../services/bankLetterValidation';
+import { exportPeaceContractToWord, exportBankLetterToWord } from '../services/wordExportService';
 import { BankLetterOfficialView } from '../components/bankLetter/BankLetterOfficialView';
 import { BankLetterFillableTemplate } from '../components/bankLetter/BankLetterFillableTemplate';
 import { PeaceContractFillableTemplate } from '../components/bankLetter/PeaceContractFillableTemplate';
@@ -50,7 +51,9 @@ import {
     RotateCcw,
     FileSignature,
     Scale,
-    Car
+    Car,
+    FileDown,
+    Printer
 } from 'lucide-react';
 
 interface BankLetterPageProps {
@@ -283,6 +286,28 @@ const BankLetterPage: React.FC<BankLetterPageProps> = ({ isAdmin = false, logged
         setDocMode('PEACE_CONTRACT');
         setActiveTab('create');
         setToast({ message: `قرارداد صلح ${contract.releaseeName} بارگذاری شد.`, type: 'info' });
+    };
+
+    // Export Peace Contract to Word from Archive
+    const handleExportContractWord = async (contract: CarPeaceContract) => {
+        try {
+            await exportPeaceContractToWord(contract);
+            setToast({ message: `فایل Word صلح‌نامه برای «${contract.releaseeName || 'مشتری'}» دانلود شد.`, type: 'success' });
+        } catch (error) {
+            console.error('Word export error:', error);
+            setToast({ message: 'خطا در ایجاد فایل Word', type: 'error' });
+        }
+    };
+
+    // Export Bank Letter to Word from Archive
+    const handleExportLetterWord = async (letter: BankLetter) => {
+        try {
+            await exportBankLetterToWord(letter);
+            setToast({ message: `فایل Word نامه بانک برای «${letter.customerName || 'مشتری'}» دانلود شد.`, type: 'success' });
+        } catch (error) {
+            console.error('Word export error:', error);
+            setToast({ message: 'خطا در ایجاد فایل Word', type: 'error' });
+        }
     };
 
     // Copy formatted text for current letter
@@ -582,6 +607,13 @@ const BankLetterPage: React.FC<BankLetterPageProps> = ({ isAdmin = false, logged
                                                             {copiedItemId === contract.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                                         </button>
                                                         <button
+                                                            onClick={() => handleExportContractWord(contract)}
+                                                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 rounded-lg transition-colors cursor-pointer"
+                                                            title="دانلود مستقیم فایل Word (.docx)"
+                                                        >
+                                                            <FileDown className="w-4 h-4" />
+                                                        </button>
+                                                        <button
                                                             onClick={() => handleEditContractFromArchive(contract)}
                                                             className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-lg transition-colors cursor-pointer"
                                                             title="مشاهده، ویرایش و چاپ"
@@ -785,6 +817,13 @@ const BankLetterPage: React.FC<BankLetterPageProps> = ({ isAdmin = false, logged
                                                             title="کپی متن نامه"
                                                         >
                                                             {copiedItemId === letter.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleExportLetterWord(letter)}
+                                                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 rounded-lg transition-colors cursor-pointer"
+                                                            title="دانلود مستقیم فایل Word (.docx)"
+                                                        >
+                                                            <FileDown className="w-4 h-4" />
                                                         </button>
                                                         <button
                                                             onClick={() => handleEditLetterFromArchive(letter)}

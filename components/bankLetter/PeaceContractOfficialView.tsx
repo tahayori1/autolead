@@ -1,11 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import type { CarPeaceContract } from '../../types/bankLetter';
 import { 
     formatCurrencyWithCommas, 
     numberToPersianWords, 
     toPersianDigits 
 } from '../../services/bankLetterValidation';
-import { Printer, Copy, Check, ShieldCheck, Building2, Car, Scale, FileText } from 'lucide-react';
+import { exportPeaceContractToWord } from '../../services/wordExportService';
+import { printDocumentElement } from '../../services/documentPrintService';
+import { Printer, Copy, Check, ShieldCheck, Building2, Car, Scale, FileText, FileDown, Loader2 } from 'lucide-react';
 
 interface PeaceContractOfficialViewProps {
     contract: CarPeaceContract;
@@ -19,9 +21,24 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
     isCopied
 }) => {
     const printRef = useRef<HTMLDivElement>(null);
+    const [isExportingWord, setIsExportingWord] = useState(false);
 
     const handlePrint = () => {
-        window.print();
+        printDocumentElement('printable-peace-contract', {
+            title: `قرارداد صلح خودرو - ${contract.releaseeName || 'مشتری'} - ${contract.contractNumber || ''}`,
+            documentType: 'PEACE_CONTRACT'
+        });
+    };
+
+    const handleExportWord = async () => {
+        try {
+            setIsExportingWord(true);
+            await exportPeaceContractToWord(contract);
+        } catch (error) {
+            console.error('Error generating Word document for peace contract:', error);
+        } finally {
+            setIsExportingWord(false);
+        }
     };
 
     const totalAmountWords = contract.totalAmountRials > 0 ? numberToPersianWords(contract.totalAmountRials) : '';
@@ -42,7 +59,7 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         onClick={onCopyText}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                        className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
                             isCopied
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 hover:shadow-md'
@@ -54,9 +71,23 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
                     </button>
 
                     <button
+                        onClick={handleExportWord}
+                        disabled={isExportingWord}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-60"
+                        title="دانلود فایل Word رسمی با فونت Arial، راست به چپ، سربرگ و پانوشت"
+                    >
+                        {isExportingWord ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <FileDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        )}
+                        <span>خروجی Word (.docx)</span>
+                    </button>
+
+                    <button
                         onClick={handlePrint}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        title="چاپ یا ذخیره به صورت PDF"
+                        title="چاپ مستقیم یا ذخیره تمیز به صورت PDF (بدون منوها)"
                     >
                         <Printer className="w-3.5 h-3.5" />
                         <span>چاپ رسمی (A4) / PDF</span>
@@ -66,6 +97,7 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
 
             {/* Official Legal A4 Sheet */}
             <div 
+                id="printable-peace-contract"
                 ref={printRef}
                 className="bank-letter-print-container bg-white text-slate-900 rounded-3xl p-8 sm:p-12 shadow-sm border border-slate-200 dark:border-slate-800 max-w-[850px] mx-auto min-h-[1050px] flex flex-col justify-between relative overflow-hidden"
                 style={{ direction: 'rtl', fontFamily: 'inherit' }}
@@ -253,6 +285,12 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
                             </span>
                         </div>
                     </div>
+                </div>
+
+                {/* Official Legal Footer */}
+                <div className="mt-8 pt-3 border-t border-slate-300 text-center text-[10px] text-slate-500 flex items-center justify-between">
+                    <span>شیراز، چهارراه بنفشه، روبروی کوچه ۱۸ استقلال - نمایندگی ۲۶۰۶ کرمان موتور (حسینی خودرو)</span>
+                    <span>تلفن: ۰۹۳۷۰۵۱۸۵۳۸ | سامانه فروش اتولید</span>
                 </div>
             </div>
         </div>

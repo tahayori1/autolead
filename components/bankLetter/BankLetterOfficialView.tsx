@@ -1,7 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import type { BankLetter } from '../../types/bankLetter';
 import { formatCurrencyWithCommas, numberToPersianWords, toPersianDigits, formatShebaBlocks } from '../../services/bankLetterValidation';
-import { Printer, Copy, Check, ShieldCheck, Building2, Car, QrCode } from 'lucide-react';
+import { exportBankLetterToWord } from '../../services/wordExportService';
+import { printDocumentElement } from '../../services/documentPrintService';
+import { Printer, Copy, Check, ShieldCheck, Building2, Car, QrCode, FileDown, Loader2 } from 'lucide-react';
 
 interface BankLetterOfficialViewProps {
     letter: BankLetter;
@@ -15,6 +17,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
     isCopied = false
 }) => {
     const printRef = useRef<HTMLDivElement>(null);
+    const [isExportingWord, setIsExportingWord] = useState(false);
 
     const formattedAmount = formatCurrencyWithCommas(letter.amountRials);
     const amountInWords = letter.amountWords || (numberToPersianWords(letter.amountRials) + ' ریال');
@@ -23,7 +26,21 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
     const yearText = letter.carModelYear ? ` مدل ${letter.carModelYear}` : '';
 
     const handlePrint = () => {
-        window.print();
+        printDocumentElement('printable-bank-letter', {
+            title: `نامه بانک - ${letter.customerName || 'مشتری'} - ${letter.letterNumber || ''}`,
+            documentType: 'BANK_LETTER'
+        });
+    };
+
+    const handleExportWord = async () => {
+        try {
+            setIsExportingWord(true);
+            await exportBankLetterToWord(letter);
+        } catch (error) {
+            console.error('Error generating Word document for bank letter:', error);
+        } finally {
+            setIsExportingWord(false);
+        }
     };
 
     return (
@@ -43,7 +60,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         onClick={onCopyText}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                        className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
                             isCopied
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 hover:shadow-md'
@@ -55,9 +72,23 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                     </button>
 
                     <button
+                        onClick={handleExportWord}
+                        disabled={isExportingWord}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-60"
+                        title="دانلود فایل Word رسمی با فونت Arial و سربرگ"
+                    >
+                        {isExportingWord ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <FileDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        )}
+                        <span>خروجی Word (.docx)</span>
+                    </button>
+
+                    <button
                         onClick={handlePrint}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        title="چاپ یا ذخیره به صورت PDF"
+                        title="چاپ مستقیم یا ذخیره تمیز به صورت PDF (بدون منوها)"
                     >
                         <Printer className="w-3.5 h-3.5" />
                         <span>چاپ / PDF</span>
@@ -67,6 +98,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
 
             {/* Official Letter Paper Layout (A4 Style) */}
             <div 
+                id="printable-bank-letter"
                 ref={printRef}
                 className="bank-letter-print-area relative bg-white text-slate-900 p-8 sm:p-12 md:p-14 rounded-3xl border border-slate-200 shadow-xl max-w-4xl mx-auto font-vazir leading-loose select-text overflow-hidden"
                 style={{ minHeight: '800px' }}
