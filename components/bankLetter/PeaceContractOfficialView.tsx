@@ -23,8 +23,8 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
     const printRef = useRef<HTMLDivElement>(null);
     const [isExportingWord, setIsExportingWord] = useState(false);
 
-    const handlePrint = () => {
-        printDocumentElement('printable-peace-contract', {
+    const handlePrint = async () => {
+        await printDocumentElement('printable-peace-contract', {
             title: `قرارداد صلح خودرو - ${contract.releaseeName || 'مشتری'} - ${contract.contractNumber || ''}`,
             documentType: 'PEACE_CONTRACT'
         });
@@ -103,7 +103,7 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
                 style={{ direction: 'rtl', fontFamily: 'inherit' }}
             >
                 {/* Background Seal Watermark */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-[0.025] pointer-events-none select-none">
+                <div className="watermark-container absolute inset-0 flex items-center justify-center opacity-[0.025] pointer-events-none select-none">
                     <Scale className="w-[450px] h-[450px] text-slate-900" />
                 </div>
 
@@ -254,7 +254,7 @@ export const PeaceContractOfficialView: React.FC<PeaceContractOfficialViewProps>
                 </div>
 
                 {/* Signatures & Seals Block */}
-                <div className="mt-8 pt-4 border-t-2 border-slate-800">
+                <div className="avoid-break mt-8 pt-4 border-t-2 border-slate-800">
                     <div className="grid grid-cols-3 gap-4 text-center">
                         <div className="space-y-8">
                             <span className="font-black text-xs text-slate-800 block">

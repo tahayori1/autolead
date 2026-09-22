@@ -25,8 +25,8 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
     const colorText = letter.carColor ? ` به رنگ ${letter.carColor}` : '';
     const yearText = letter.carModelYear ? ` مدل ${letter.carModelYear}` : '';
 
-    const handlePrint = () => {
-        printDocumentElement('printable-bank-letter', {
+    const handlePrint = async () => {
+        await printDocumentElement('printable-bank-letter', {
             title: `نامه بانک - ${letter.customerName || 'مشتری'} - ${letter.letterNumber || ''}`,
             documentType: 'BANK_LETTER'
         });
@@ -104,7 +104,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                 style={{ minHeight: '800px' }}
             >
                 {/* Background Watermark */}
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] select-none">
+                <div className="watermark-container absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] select-none">
                     <div className="text-center transform -rotate-12">
                         <div className="text-8xl font-black tracking-widest text-slate-900">HOSEINI KHODRO</div>
                         <div className="text-4xl font-bold mt-2 text-slate-700">KERMAN MOTOR 2606</div>
@@ -203,7 +203,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                 </div>
 
                 {/* Footer Signature & Stamp Box */}
-                <div className="mt-16 pt-8 flex items-end justify-between">
+                <div className="avoid-break mt-16 pt-8 flex items-end justify-between">
                     {/* Security Verification & QR */}
                     <div className="flex items-center gap-3 text-slate-500 text-[11px] bg-slate-50 p-3 rounded-2xl border border-slate-200">
                         <QrCode className="w-10 h-10 text-slate-700 shrink-0" />

@@ -89,7 +89,7 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm 14mm 12mm 14mm;
+    margin: 10mm 12mm 10mm 12mm;
   }
 
   /* Reset body and hide all application shell UI */
@@ -98,13 +98,19 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     overflow: visible !important;
     background: #ffffff !important;
     background-color: #ffffff !important;
-    color: #000000 !important;
+    color: #0f172a !important;
     margin: 0 !important;
     padding: 0 !important;
-    font-family: Arial, "Vazirmatn", Tahoma, sans-serif !important;
+    font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif !important;
     direction: rtl !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Force Vazirmatn font on all print elements */
+  body, h1, h2, h3, h4, h5, h6, p, span, div, strong, b, td, th {
+    font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif !important;
   }
 
   /* Hide app navigation, sidebars, header bars, action buttons, notifications and modals */
@@ -139,7 +145,7 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     visibility: visible !important;
   }
 
-  /* Expand the printable document to full page */
+  /* Expand the printable document to full page without mockup borders or shadows */
   .bank-letter-print-area,
   .bank-letter-print-container {
     position: absolute !important;
@@ -153,7 +159,30 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     box-shadow: none !important;
     border-radius: 0 !important;
     background: #ffffff !important;
-    color: #000000 !important;
+  }
+
+  /* Preserve badges and high-contrast color highlights */
+  .bg-blue-50\/70, .bg-blue-50 {
+    background-color: #eff6ff !important;
+    border-color: #dbeafe !important;
+    color: #1e3a8a !important;
+  }
+  .bg-emerald-50 {
+    background-color: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+    color: #065f46 !important;
+  }
+  .bg-amber-50 {
+    background-color: #fffbeb !important;
+    border-color: #fde68a !important;
+    color: #0f172a !important;
+  }
+  .bg-slate-50 {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+  }
+  .bg-slate-100 {
+    background-color: #f1f5f9 !important;
   }
 
   /* Avoid page breaks inside paragraphs, signature boxes and tables */
