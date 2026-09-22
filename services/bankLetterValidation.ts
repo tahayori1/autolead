@@ -2,7 +2,9 @@ import type {
     ShebaValidationResult, 
     NationalCodeValidationResult,
     PostalCodeValidationResult,
-    MobileValidationResult
+    MobileValidationResult,
+    IranianPlateParts,
+    PlateValidationResult
 } from '../types/bankLetter';
 
 // --- Iranian Banks Directory based on Sheba 3-digit bank code ---
@@ -586,5 +588,338 @@ export function getAmountDisplaySummary(amountRials: number | string): {
         formattedTomans,
         rialsInWords,
         tomansInWords
+    };
+}
+
+// --- Iranian License Plate Constants & Validation ---
+
+export interface IranianPlateLetterOption {
+    letter: string;
+    label: string;
+    type: 'PRIVATE' | 'TAXI' | 'COMMERCIAL' | 'GOVERNMENT' | 'POLICE' | 'CORPS' | 'SPECIAL' | 'TRANSIT';
+    bgClass?: string;
+    textClass?: string;
+}
+
+export const IRANIAN_PLATE_LETTERS: IranianPlateLetterOption[] = [
+    { letter: 'ب', label: 'ب (شخصی)', type: 'PRIVATE' },
+    { letter: 'ج', label: 'ج (شخصی)', type: 'PRIVATE' },
+    { letter: 'د', label: 'د (شخصی)', type: 'PRIVATE' },
+    { letter: 'س', label: 'س (شخصی)', type: 'PRIVATE' },
+    { letter: 'ص', label: 'ص (شخصی)', type: 'PRIVATE' },
+    { letter: 'ط', label: 'ط (شخصی)', type: 'PRIVATE' },
+    { letter: 'ق', label: 'ق (شخصی)', type: 'PRIVATE' },
+    { letter: 'ل', label: 'ل (شخصی)', type: 'PRIVATE' },
+    { letter: 'م', label: 'م (شخصی)', type: 'PRIVATE' },
+    { letter: 'ن', label: 'ن (شخصی)', type: 'PRIVATE' },
+    { letter: 'و', label: 'و (شخصی)', type: 'PRIVATE' },
+    { letter: 'ه', label: 'هـ (شخصی)', type: 'PRIVATE' },
+    { letter: 'ی', label: 'ی (شخصی)', type: 'PRIVATE' },
+    { letter: 'ت', label: 'ت (تاکسی)', type: 'TAXI' },
+    { letter: 'ع', label: 'ع (عمومی / باری / ون)', type: 'COMMERCIAL' },
+    { letter: 'ک', label: 'ک (کشاورزی / ادوات)', type: 'COMMERCIAL' },
+    { letter: 'الف', label: 'الف (دولتی)', type: 'GOVERNMENT' },
+    { letter: 'پ', label: 'پ (پلیس)', type: 'POLICE' },
+    { letter: 'ث', label: 'ث (سپاه)', type: 'CORPS' },
+    { letter: 'ز', label: 'ز (وزارت دفاع)', type: 'SPECIAL' },
+    { letter: 'ف', label: 'ف (ستاد کل نیروهای مسلح)', type: 'SPECIAL' },
+    { letter: 'ش', label: 'ش (ارتش)', type: 'SPECIAL' },
+    { letter: 'ژ', label: 'ژ (معلولین و جانبازان)', type: 'SPECIAL' },
+    { letter: 'گ', label: 'گ (گذر موقت)', type: 'TRANSIT' },
+    { letter: 'D', label: 'D (دیپلماتیک)', type: 'SPECIAL' },
+    { letter: 'S', label: 'S (سرویس سفارت)', type: 'SPECIAL' }
+];
+
+export const IRANIAN_PLATE_PROVINCE_CODES: Record<string, string> = {
+    // تهران
+    '11': 'تهران (مرکزی)',
+    '22': 'تهران',
+    '33': 'تهران',
+    '44': 'تهران',
+    '55': 'تهران',
+    '66': 'تهران',
+    '77': 'تهران',
+    '88': 'تهران',
+    '99': 'تهران',
+    '10': 'تهران',
+    '20': 'تهران',
+    '30': 'تهران',
+    '40': 'تهران',
+    '50': 'تهران',
+    '60': 'تهران',
+    '70': 'تهران',
+    '80': 'تهران',
+    '90': 'تهران',
+    '21': 'تهران (شهریار/شهر قدس)',
+    '78': 'تهران (اسلامشهر/رباط کریم)',
+    // فارس (شیراز و شهرستان‌ها)
+    '63': 'فارس (شیراز)',
+    '73': 'فارس (جهرم/فسا/لار/کازرون)',
+    '83': 'فارس (مرودشت/آباده/اقلید)',
+    '93': 'فارس (فارس جنوبی/ممسنی/داراب)',
+    // البرز (کرج)
+    '68': 'البرز (کرج/فردیس)',
+    // خراسان رضوی (مشهد)
+    '12': 'خراسان رضوی (مشهد)',
+    '32': 'خراسان رضوی (نیشابور/سبزوار)',
+    '36': 'خراسان رضوی (تربت حیدریه/کاشمر)',
+    '42': 'خراسان رضوی (تربت جام/قوچان)',
+    '74': 'خراسان رضوی (چناران/گناباد)',
+    // اصفهان
+    '13': 'اصفهان (مرکزی)',
+    '23': 'اصفهان (کاشان/نجف‌آباد)',
+    '43': 'اصفهان (شهرضا/لنجان)',
+    '53': 'اصفهان (فلاورجان/خمینی‌شهر)',
+    '67': 'اصفهان (شاهین‌شهر)',
+    // آذربایجان شرقی (تبریز)
+    '15': 'آذربایجان شرقی (تبریز)',
+    '25': 'آذربایجان شرقی (مراغه/مرند)',
+    '35': 'آذربایجان شرقی (میانه/اهر)',
+    // آذربایجان غربی (ارومیه)
+    '17': 'آذربایجان غربی (ارومیه)',
+    '27': 'آذربایجان غربی (خوی/مهاباد)',
+    '37': 'آذربایجان غربی (میاندوآب/ماکو)',
+    // خوزستان
+    '14': 'خوزستان (اهواز)',
+    '24': 'خوزستان (آبادان/خرمشهر/دزفول)',
+    '34': 'خوزستان (ماهشهر/بهبهان)',
+    // مازندران
+    '62': 'مازندران (ساری)',
+    '72': 'مازندران (بابل/آمل)',
+    '82': 'مازندران (قائم‌شهر/تنکابن/چالوس)',
+    '92': 'مازندران (نور/نوشهر/رامسر)',
+    // گیلان
+    '46': 'گیلان (رشت)',
+    '56': 'گیلان (انزلی/لاهیجان)',
+    '76': 'گیلان (تالش/لنگرود/رودسر)',
+    // بوشهر
+    '48': 'بوشهر (مرکزی)',
+    '58': 'بوشهر (دشتستان/گناوه/کنگان)',
+    // کرمان
+    '45': 'کرمان (مرکزی)',
+    '65': 'کرمان (سیرجان/رفسنجان/جیرفت)',
+    '75': 'کرمان (بم/کهنوج)',
+    // قم
+    '16': 'قم',
+    // کرمانشاه
+    '19': 'کرمانشاه',
+    '29': 'کرمانشاه (اسلام‌آباد/کنگاور)',
+    // لرستان
+    '31': 'لرستان (خرم‌آباد)',
+    '41': 'لرستان (بروجرد/دورود)',
+    // یزد
+    '54': 'یزد',
+    '64': 'یزد (میبد/اردکان)',
+    // هرمزگان
+    '84': 'هرمزگان (بندرعباس)',
+    '94': 'هرمزگان (میناب/قشم/کیش)',
+    // سیستان و بلوچستان
+    '85': 'سیستان و بلوچستان (زاهدان)',
+    '95': 'سیستان و بلوچستان (زابل/ایرانشهر/چابهار)',
+    // کردستان
+    '51': 'کردستان (سنندج)',
+    '61': 'کردستان (سقز/بانه/مریوان)',
+    // همدان
+    '18': 'همدان',
+    '28': 'همدان (ملایر/نهاوند)',
+    // مرکزی
+    '47': 'مرکزی (اراک)',
+    '57': 'مرکزی (ساوه/خمین)',
+    // گلستان
+    '59': 'گلستان (گرگان)',
+    '69': 'گلستان (گنبد کاووس)',
+    // قزوین
+    '79': 'قزوین',
+    '89': 'قزوین (تاکستان/بویین‌زهرا)',
+    // اردبیل
+    '91': 'اردبیل',
+    // ایلام
+    '98': 'ایلام',
+    // چهارمحال و بختیاری
+    '71': 'چهارمحال و بختیاری (شهرکرد)',
+    '81': 'چهارمحال و بختیاری',
+    // کهگیلویه و بویراحمد
+    '49': 'کهگیلویه و بویراحمد (یاسوج/گچساران)',
+    // سمنان
+    '86': 'سمنان',
+    '96': 'سمنان (شاهرود/دامغان)',
+    // زنجان
+    '87': 'زنجان',
+    '97': 'زنجان (ابهر/خرمدره)',
+    // خراسان شمالی
+    '26': 'خراسان شمالی (بجنورد/شیروان)',
+    // خراسان جنوبی
+    '52': 'خراسان جنوبی (بیرجند/قائن)'
+};
+
+/**
+ * Parses an Iranian plate string into individual components
+ * Supports: "12 ل 345 ایران 63", "12ل345ایران63", "۱۲ ل ۳۴۵ ایران ۶۳", partial entries, "فاقد پلاک", "پلاک صفر"
+ */
+export function parseIranianPlate(plateStr: string): IranianPlateParts {
+    if (!plateStr) {
+        return { part1: '', letter: 'ب', part2: '', iranCode: '' };
+    }
+
+    const trimmed = plateStr.trim();
+    if (trimmed.includes('صفر') || trimmed.includes('فاقد') || trimmed.includes('بدون پلاک')) {
+        return { part1: '', letter: 'ب', part2: '', iranCode: '', isZeroOrFree: true, freeText: trimmed };
+    }
+
+    // Convert digits to English
+    const eng = toEnglishDigits(trimmed);
+
+    // Check flexible partial/complete match: (1-2 digits) + (letter) + (1-3 digits) + (iran 1-2 digits)
+    const match = eng.match(/^(\d{1,2})?\s*([^\d\s\-_]+)?\s*(\d{1,3})?\s*(?:ایران|Iran|-)?\s*(\d{1,2})?$/i);
+    if (match && (match[1] || match[2] || match[3] || match[4])) {
+        let letter = (match[2] || '').trim();
+        if (!letter || letter === 'ایران') letter = 'ب';
+        if (letter === 'الف' || letter === 'ا') letter = 'الف';
+        if (letter === 'ه' || letter === 'هـ') letter = 'ه';
+        return {
+            part1: match[1] || '',
+            letter,
+            part2: match[3] || '',
+            iranCode: match[4] || ''
+        };
+    }
+
+    // Fallback: extract digits and letter
+    const digitsOnly = eng.replace(/\D/g, '');
+    const lettersOnly = eng.replace(/[\d\s\-_]/g, '').replace('ایران', '');
+    const letter = lettersOnly ? lettersOnly.charAt(0) : 'ب';
+
+    return { 
+        part1: digitsOnly.slice(0, 2), 
+        letter, 
+        part2: digitsOnly.slice(2, 5), 
+        iranCode: digitsOnly.slice(5, 7), 
+        freeText: trimmed 
+    };
+}
+
+/**
+ * Builds standard Iranian plate string
+ * Format: "۱۲ ل ۳۴۵ ایران ۶۳"
+ */
+export function buildIranianPlateString(parts: IranianPlateParts): string {
+    if (parts.isZeroOrFree) {
+        return parts.freeText || 'پلاک صفر کیلومتر (فاقد پلاک انتظامی)';
+    }
+
+    const p1 = toPersianDigits(parts.part1 ? parts.part1.trim() : '');
+    const lettr = (parts.letter || 'ب').trim();
+    const p2 = toPersianDigits(parts.part2 ? parts.part2.trim() : '');
+    const iran = toPersianDigits(parts.iranCode ? parts.iranCode.trim() : '');
+
+    if (!parts.part1 && !parts.part2 && !parts.iranCode) {
+        return parts.freeText || '';
+    }
+
+    const elements: string[] = [];
+    if (p1) elements.push(p1);
+    if (lettr) elements.push(lettr);
+    if (p2) elements.push(p2);
+    if (iran) {
+        elements.push(`ایران ${iran}`);
+    }
+
+    return elements.join(' ').trim();
+}
+
+/**
+ * Validates Iranian License Plate
+ */
+export function validateIranianLicensePlate(plateInput: string | IranianPlateParts): PlateValidationResult {
+    let parts: IranianPlateParts;
+    if (typeof plateInput === 'string') {
+        parts = parseIranianPlate(plateInput);
+    } else {
+        parts = plateInput;
+    }
+
+    if (parts.isZeroOrFree) {
+        return {
+            isValid: true,
+            formattedPlate: parts.freeText || 'پلاک صفر کیلومتر (فاقد پلاک انتظامی)',
+            plateType: 'ZERO_KM',
+            provinceHint: 'خودروی صفر کیلومتر',
+            parts
+        };
+    }
+
+    const p1 = toEnglishDigits(parts.part1).replace(/\D/g, '');
+    const p2 = toEnglishDigits(parts.part2).replace(/\D/g, '');
+    const iran = toEnglishDigits(parts.iranCode).replace(/\D/g, '');
+    const letter = (parts.letter || '').trim();
+
+    if (!p1 && !p2 && !iran) {
+        return {
+            isValid: false,
+            formattedPlate: '',
+            plateType: 'NATIONAL_PRIVATE',
+            errorMessage: 'شماره پلاک انتظامی وارد نشده است.'
+        };
+    }
+
+    if (p1.length !== 2) {
+        return {
+            isValid: false,
+            formattedPlate: buildIranianPlateString(parts),
+            plateType: 'NATIONAL_PRIVATE',
+            errorMessage: `بخش دو رقمی اول پلاک باید دقیقاً ۲ رقم باشد (وارد شده: ${p1.length} رقم)`,
+            parts
+        };
+    }
+
+    if (!letter) {
+        return {
+            isValid: false,
+            formattedPlate: buildIranianPlateString(parts),
+            plateType: 'NATIONAL_PRIVATE',
+            errorMessage: 'حرف فارسی وسط پلاک انتخاب نشده است.',
+            parts
+        };
+    }
+
+    if (p2.length !== 3) {
+        return {
+            isValid: false,
+            formattedPlate: buildIranianPlateString(parts),
+            plateType: 'NATIONAL_PRIVATE',
+            errorMessage: `بخش سه رقمی وسط پلاک باید دقیقاً ۳ رقم باشد (وارد شده: ${p2.length} رقم)`,
+            parts
+        };
+    }
+
+    if (iran.length !== 2) {
+        return {
+            isValid: false,
+            formattedPlate: buildIranianPlateString(parts),
+            plateType: 'NATIONAL_PRIVATE',
+            errorMessage: `کد دو رقمی شهر/استان پلاک (کد ایران) باید دقیقاً ۲ رقم باشد (وارد شده: ${iran.length} رقم)`,
+            parts
+        };
+    }
+
+    const provinceHint = IRANIAN_PLATE_PROVINCE_CODES[iran] || `ایران کد ${iran}`;
+    let plateType: PlateValidationResult['plateType'] = 'NATIONAL_PRIVATE';
+
+    if (letter === 'ت') plateType = 'TAXI';
+    else if (letter === 'ع' || letter === 'ک') plateType = 'NATIONAL_COMMERCIAL';
+    else if (letter === 'الف') plateType = 'GOVERNMENT';
+    else if (letter === 'گ') plateType = 'TEMPORARY';
+
+    return {
+        isValid: true,
+        formattedPlate: `${toPersianDigits(p1)} ${letter} ${toPersianDigits(p2)} ایران ${toPersianDigits(iran)}`,
+        plateType,
+        provinceHint,
+        parts: {
+            part1: p1,
+            letter,
+            part2: p2,
+            iranCode: iran
+        }
     };
 }

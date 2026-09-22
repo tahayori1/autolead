@@ -5,10 +5,12 @@ import {
     validateIranianPostalCode,
     validateIranianMobile,
     validateIranianSheba, 
+    validateIranianLicensePlate,
     formatCurrencyWithCommas, 
     numberToPersianWords, 
     toPersianDigits 
 } from '../../services/bankLetterValidation';
+import { IranLicensePlateInput } from './IranLicensePlateInput';
 import { 
     CheckCircle2, 
     AlertCircle, 
@@ -22,7 +24,9 @@ import {
     MapPin,
     CreditCard,
     Check,
-    AlertTriangle
+    AlertTriangle,
+    Landmark,
+    Gauge
 } from 'lucide-react';
 
 interface PeaceContractFillableTemplateProps {
@@ -54,6 +58,7 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
     const postalCodeVal = validateIranianPostalCode(contract.releaseePostalCode);
     const mobileVal = validateIranianMobile(contract.releaseePhone);
     const shebaVal = validateIranianSheba(contract.releaseeShebaNumber);
+    const plateVal = validateIranianLicensePlate(contract.plateNumber);
 
     const handleTotalAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value.replace(/\D/g, '');
@@ -99,7 +104,7 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                             تکمیل تعاملی قرارداد صلح خودرو
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                            جاهای خالی قرارداد صلح را تکمیل نمایید؛ صحت کد ملی، کد پستی و شماره موبایل بی‌درنگ بررسی می‌شود.
+                            جاهای خالی قرارداد صلح را تکمیل نمایید؛ صحت کد ملی، کد پستی، شماره موبایل، شماره شبا و پلاک خودرو بی‌درنگ بررسی می‌شود.
                         </p>
                     </div>
                 </div>
@@ -110,18 +115,18 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                 </div>
             </div>
 
-            {/* Real-time Validation Summary Dashboard */}
-            <div className="bg-gradient-to-r from-slate-50 to-slate-100/60 dark:from-slate-800/40 dark:to-slate-900/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+            {/* Real-time Validation Summary Dashboard (5 Key Pillars) */}
+            <div className="bg-gradient-to-r from-slate-50 to-slate-100/60 dark:from-slate-800/40 dark:to-slate-900/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3">
                 <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                         <ShieldCheck className="w-4 h-4 text-blue-600" />
-                        <span>بررسی و صحت‌سنجی اطلاعات متصالح:</span>
+                        <span>میز صحت‌سنجی و بررسی اعتبارسنجی زنده:</span>
                     </span>
-                    <span className="text-[11px] text-slate-500">اعتبارسنجی خودکار زنده</span>
+                    <span className="text-[11px] text-slate-500 font-bold">۵ اعتبارسنجی رسمی فعال</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    {/* National Code Validation Badge */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {/* 1. National Code Validation Badge */}
                     <div className={`p-2.5 rounded-xl border transition-all text-xs ${
                         nationalCodeVal.isValid 
                             ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
@@ -157,7 +162,7 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                         </div>
                     </div>
 
-                    {/* Postal Code Validation Badge */}
+                    {/* 2. Postal Code Validation Badge */}
                     <div className={`p-2.5 rounded-xl border transition-all text-xs ${
                         postalCodeVal.isValid 
                             ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
@@ -193,7 +198,7 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                         </div>
                     </div>
 
-                    {/* Mobile Number Validation Badge */}
+                    {/* 3. Mobile Number Validation Badge */}
                     <div className={`p-2.5 rounded-xl border transition-all text-xs ${
                         mobileVal.isValid 
                             ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
@@ -225,6 +230,78 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                                 <span>{mobileVal.errorMessage}</span>
                             ) : (
                                 <span>شماره موبایل ۱۱ رقمی با پیشوند ۰۹</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 4. License Plate Validation Badge */}
+                    <div className={`p-2.5 rounded-xl border transition-all text-xs ${
+                        plateVal.isValid 
+                            ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                            : contract.plateNumber.length > 0
+                            ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}>
+                        <div className="flex items-center justify-between font-bold mb-1">
+                            <span className="flex items-center gap-1">
+                                <Car className="w-3.5 h-3.5" />
+                                <span>پلاک خودرو:</span>
+                            </span>
+                            {plateVal.isValid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded-md font-bold">
+                                    <Check className="w-3 h-3" /> {plateVal.provinceHint || 'تایید شد'}
+                                </span>
+                            ) : contract.plateNumber.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded-md font-bold">
+                                    <AlertTriangle className="w-3 h-3" /> نامعتبر
+                                </span>
+                            ) : (
+                                <span className="text-[10px] text-slate-400">پلاک ملی</span>
+                            )}
+                        </div>
+                        <div className="text-[11px] leading-tight font-medium">
+                            {plateVal.isValid ? (
+                                <span>{plateVal.formattedPlate} ({plateVal.provinceHint})</span>
+                            ) : contract.plateNumber.length > 0 ? (
+                                <span>{plateVal.errorMessage}</span>
+                            ) : (
+                                <span>پلاک انتظامی ملی یا صفر کیلومتر</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 5. Sheba Validation Badge */}
+                    <div className={`p-2.5 rounded-xl border transition-all text-xs ${
+                        shebaVal.isValid 
+                            ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                            : contract.releaseeShebaNumber.length > 0
+                            ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}>
+                        <div className="flex items-center justify-between font-bold mb-1">
+                            <span className="flex items-center gap-1">
+                                <Landmark className="w-3.5 h-3.5" />
+                                <span>شماره شبا (IBAN):</span>
+                            </span>
+                            {shebaVal.isValid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded-md font-bold">
+                                    <Check className="w-3 h-3" /> {shebaVal.bankInfo?.name || 'تایید شد'}
+                                </span>
+                            ) : contract.releaseeShebaNumber.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded-md font-bold">
+                                    <AlertTriangle className="w-3 h-3" /> نامعتبر
+                                </span>
+                            ) : (
+                                <span className="text-[10px] text-slate-400">۲۴ رقمی IR</span>
+                            )}
+                        </div>
+                        <div className="text-[11px] leading-tight font-medium">
+                            {shebaVal.isValid ? (
+                                <span>{shebaVal.bankInfo?.name} (الگوریتم بین‌المللی شبا تایید شد)</span>
+                            ) : contract.releaseeShebaNumber.length > 0 ? (
+                                <span>{shebaVal.errorMessage}</span>
+                            ) : (
+                                <span>شماره ۲۴ رقمی شبا خریدار</span>
                             )}
                         </div>
                     </div>
@@ -389,11 +466,18 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                     </div>
                 </div>
 
-                {/* Vehicle Details */}
+                {/* Vehicle Details with Interactive Iran License Plate Picker */}
                 <div className="space-y-4 pt-2 border-t border-slate-200 dark:border-slate-800">
-                    <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                        <Car className="w-4 h-4 text-emerald-600" />
-                        <span>مورد صلح (مشخصات خودرو):</span>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                            <Car className="w-4 h-4 text-emerald-600" />
+                            <span>مورد صلح (مشخصات خودرو و پلاک):</span>
+                        </div>
+                        {plateVal.provinceHint && (
+                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                📍 {plateVal.provinceHint}
+                            </span>
+                        )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -421,17 +505,6 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                             className="w-48 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-500 uppercase"
                         />
 
-                        <span className="font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">به شماره پلاک انتظامی:</span>
-                        <input
-                            type="text"
-                            placeholder="مثلاً ۱۲ ل ۳۴۵ ایران ۶۳ یا پلاک صفر"
-                            value={contract.plateNumber}
-                            onChange={(e) => onChange({ plateNumber: e.target.value })}
-                            className="w-48 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-500"
-                        />
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">مدل:</span>
                         <input
                             type="text"
@@ -455,10 +528,26 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                                 {COMMON_COLORS.map(col => <option key={col} value={col} />)}
                             </datalist>
                         </div>
+                    </div>
 
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
-                            به همراه کلیه متعلقات طبق چک لیست تحویل خودرو که پیوست این قرارداد و جزء لاینفک آن است.
-                        </span>
+                    {/* Interactive Iranian Plate Input Component */}
+                    <div className="p-3.5 bg-slate-100/70 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                <Gauge className="w-3.5 h-3.5 text-blue-600" />
+                                <span>شماره پلاک انتظامی رسمی خودرو:</span>
+                            </span>
+                            <span className="text-[11px] text-slate-500">طرح پلاک ملی ایران</span>
+                        </div>
+
+                        <IranLicensePlateInput
+                            value={contract.plateNumber}
+                            onChange={(formattedPlate) => onChange({ plateNumber: formattedPlate })}
+                        />
+                    </div>
+
+                    <div className="text-xs text-slate-600 dark:text-slate-400">
+                        به همراه کلیه متعلقات طبق چک لیست تحویل خودرو که پیوست این قرارداد و جزء لاینفک آن است.
                     </div>
                 </div>
 
@@ -507,13 +596,14 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                     )}
                 </div>
 
-                {/* Section 5: Motasaleh Bank Account Info */}
+                {/* Section 5: Motasaleh Bank Account Info & Sheba Validation */}
                 <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
                     <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
                         <span>۵- اطلاعات حساب بانکی متصالح (جهت انجام کلیه تراکنش‌ها):</span>
                         {shebaVal.bankInfo && (
-                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                                بانک تشخیص داده شده: {shebaVal.bankInfo.name}
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                <Landmark className="w-3.5 h-3.5" />
+                                <span>بانک تشخیص داده شده: {shebaVal.bankInfo.name}</span>
                             </span>
                         )}
                     </div>
@@ -528,6 +618,7 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                             className="w-40 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-500"
                         />
 
+                        {/* Sheba input with real-time feedback */}
                         <span className="font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">شماره شبا:</span>
                         <div className="relative inline-flex items-center">
                             <span className="absolute left-3 text-xs font-bold text-slate-400">IR</span>
@@ -537,14 +628,17 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                                 placeholder="24 رقمی بدون IR"
                                 value={contract.releaseeShebaNumber}
                                 onChange={handleShebaChange}
-                                className={`w-52 bg-white dark:bg-slate-900 border rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-hidden ${
+                                className={`w-56 bg-white dark:bg-slate-900 border rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-hidden ${
                                     shebaVal.isValid
-                                        ? 'border-emerald-500 bg-emerald-50/30'
+                                        ? 'border-emerald-500 bg-emerald-50/30 focus:ring-1 focus:ring-emerald-500'
                                         : contract.releaseeShebaNumber.length > 0
-                                        ? 'border-amber-400 bg-amber-50/30'
+                                        ? 'border-amber-400 bg-amber-50/30 focus:ring-1 focus:ring-amber-400'
                                         : 'border-slate-300 dark:border-slate-700 focus:border-amber-500'
                                 }`}
                             />
+                            {shebaVal.isValid && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 absolute left-8 pointer-events-none" />
+                            )}
                         </div>
 
                         <span className="font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">بانک:</span>
@@ -556,6 +650,33 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                             className="w-36 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-500"
                         />
                     </div>
+
+                    {/* Sheba Extra helper line */}
+                    {contract.releaseeShebaNumber && (
+                        <div className={`text-xs px-3 py-1.5 rounded-xl border flex items-center justify-between ${
+                            shebaVal.isValid
+                                ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                                : 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                        }`}>
+                            <div className="flex items-center gap-1.5">
+                                {shebaVal.isValid ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                )}
+                                <span>
+                                    {shebaVal.isValid
+                                        ? `شماره شبا متعلق به ${shebaVal.bankInfo?.name} با فرمت IR${shebaVal.rawDigits} تایید شد.`
+                                        : shebaVal.errorMessage}
+                                </span>
+                            </div>
+                            {shebaVal.formattedSheba && (
+                                <span className="font-mono text-[11px] font-bold">
+                                    IR-{shebaVal.formattedSheba}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Explanations and Legal Conditions Read-only Preview */}

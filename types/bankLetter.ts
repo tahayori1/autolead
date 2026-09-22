@@ -96,6 +96,24 @@ export interface MobileValidationResult {
     errorMessage?: string;
 }
 
+export interface IranianPlateParts {
+    part1: string; // 2 digits (e.g. "12")
+    letter: string; // Persian letter (e.g. "ل" or "ب")
+    part2: string; // 3 digits (e.g. "345")
+    iranCode: string; // 2 digits (e.g. "63")
+    isZeroOrFree?: boolean; // پلاک صفر یا فاقد پلاک
+    freeText?: string;
+}
+
+export interface PlateValidationResult {
+    isValid: boolean;
+    formattedPlate: string;
+    plateType: 'NATIONAL_PRIVATE' | 'NATIONAL_COMMERCIAL' | 'TAXI' | 'GOVERNMENT' | 'ZERO_KM' | 'TEMPORARY' | 'CUSTOM';
+    provinceHint?: string;
+    parts?: IranianPlateParts;
+    errorMessage?: string;
+}
+
 // --- قرارداد صلح خودرو (Vehicle Peace Agreement) ---
 export interface CarPeaceContract {
     id: string;

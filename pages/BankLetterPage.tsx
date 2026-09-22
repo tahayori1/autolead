@@ -464,18 +464,18 @@ const BankLetterPage: React.FC<BankLetterPageProps> = ({ isAdmin = false, logged
                         </div>
                     </div>
 
-                    {/* Main Workspace Layout */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                        {/* Right: Interactive Fillable Template */}
-                        <div className="no-print lg:col-span-5 space-y-4">
+                    {/* Main Workspace Layout (Single Column) */}
+                    <div className="space-y-6 max-w-4xl mx-auto">
+                        {/* 1. Interactive Fillable Template */}
+                        <div className="no-print space-y-4">
                             <PeaceContractFillableTemplate
                                 contract={currentContract}
                                 onChange={handleUpdateContract}
                             />
                         </div>
 
-                        {/* Left: Official Printable View & 1-Click Copy */}
-                        <div className="lg:col-span-7 space-y-4">
+                        {/* 2. Official Printable View & 1-Click Copy */}
+                        <div className="space-y-4">
                             <PeaceContractOfficialView
                                 contract={currentContract}
                                 onCopyText={handleCopyContractText}
@@ -639,10 +639,10 @@ const BankLetterPage: React.FC<BankLetterPageProps> = ({ isAdmin = false, logged
                         </div>
                     </div>
 
-                    {/* Main Workspace Layout */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                        {/* Right: Input & Template Fill Form */}
-                        <div className="no-print lg:col-span-5 space-y-4">
+                    {/* Main Workspace Layout (Single Column) */}
+                    <div className="space-y-6 max-w-4xl mx-auto">
+                        {/* 1. Input & Template Fill Form */}
+                        <div className="no-print space-y-4">
                             <BankLetterFillableTemplate
                                 letter={currentLetter}
                                 savedAccounts={savedAccounts}
@@ -680,8 +680,8 @@ const BankLetterPage: React.FC<BankLetterPageProps> = ({ isAdmin = false, logged
                             </div>
                         </div>
 
-                        {/* Left: Live Official Printable Letterhead View */}
-                        <div className="lg:col-span-7 space-y-4">
+                        {/* 2. Live Official Printable Letterhead View */}
+                        <div className="space-y-4">
                             <BankLetterOfficialView
                                 letter={currentLetter}
                                 onCopyText={handleCopyLetterText}

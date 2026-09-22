@@ -74,6 +74,41 @@ export const BankLetterFillableTemplate: React.FC<BankLetterFillableTemplateProp
                 </div>
             </div>
 
+            {/* Quick Validation Indicators */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs">
+                {/* National Code check */}
+                <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                    nationalCodeVal.isValid
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                        : letter.customerNationalCode.length > 0
+                        ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'
+                }`}>
+                    <div className="flex items-center gap-1.5 font-bold">
+                        <User className="w-4 h-4" />
+                        <span>کد ملی مشتری:</span>
+                        <span>{nationalCodeVal.isValid ? 'معتبر (۱۰ رقمی تایید شد)' : (letter.customerNationalCode ? nationalCodeVal.errorMessage : 'وارد نشده')}</span>
+                    </div>
+                    {nationalCodeVal.isValid && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                </div>
+
+                {/* Sheba check */}
+                <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                    shebaVal.isValid
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                        : letter.shebaNumber.length > 0
+                        ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'
+                }`}>
+                    <div className="flex items-center gap-1.5 font-bold">
+                        <Landmark className="w-4 h-4" />
+                        <span>شماره شبا حساب واریزی:</span>
+                        <span>{shebaVal.isValid ? `${shebaVal.bankInfo?.name} (تایید شد)` : (letter.shebaNumber ? shebaVal.errorMessage : 'وارد نشده')}</span>
+                    </div>
+                    {shebaVal.isValid && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                </div>
+            </div>
+
             {/* Visual Interactive Text Template */}
             <div className="bg-slate-50/70 dark:bg-slate-950/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-6 text-sm leading-[2.8]">
                 {/* Bismillah */}
