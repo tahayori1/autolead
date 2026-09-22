@@ -1483,7 +1483,7 @@ export const getDivarPrices = async (
     city?: string,
     signal?: AbortSignal
 ): Promise<DivarPriceItem[]> => {
-    // 150-second timeout because user indicated scraper requires time
+    // 150-second timeout because scraper webhook may take time to collect live data
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 150000);
 
@@ -1491,67 +1491,112 @@ export const getDivarPrices = async (
         signal.addEventListener('abort', () => controller.abort());
     }
 
-    const baseUrl = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/divar-prices';
+    const webhookUrl = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/divar-prices';
     const params = new URLSearchParams();
     if (model && model.trim()) {
-        params.set('model', model.trim());
+        params.set('mode', model.trim());
     }
     if (city && city.trim()) {
         params.set('city', city.trim());
     }
 
     const queryString = params.toString();
-    const primaryUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl;
+    const primaryUrl = queryString ? `${webhookUrl}?${queryString}` : webhookUrl;
     const fallbackUrl = queryString ? `${API_BASE_URL}/divar-prices?${queryString}` : `${API_BASE_URL}/divar-prices`;
 
+    const normalizeItems = (rawData: any, defaultCarName?: string): DivarPriceItem[] => {
+        let items: any[] = [];
+        if (Array.isArray(rawData)) {
+            items = rawData;
+        } else if (rawData && typeof rawData === 'object') {
+            if (Array.isArray(rawData.data)) items = rawData.data;
+            else if (Array.isArray(rawData.items)) items = rawData.items;
+            else if (Array.isArray(rawData.result)) items = rawData.result;
+            else if (Array.isArray(rawData.prices)) items = rawData.prices;
+            else if (Array.isArray(rawData.listings)) items = rawData.listings;
+            else if (Array.isArray(rawData.body)) items = rawData.body;
+            else if (rawData.title || rawData.price) items = [rawData];
+        }
+
+        return items.map(item => {
+            let rawPrice = item.price ?? item.price_rial ?? item.price_toman ?? item.amount ?? item.cost;
+            let numPrice: number | null = null;
+            if (typeof rawPrice === 'number' && !isNaN(rawPrice)) {
+                numPrice = rawPrice;
+            } else if (typeof rawPrice === 'string') {
+                const digitsOnly = rawPrice.replace(/[^\d]/g, '');
+                if (digitsOnly) numPrice = parseInt(digitsOnly, 10);
+            }
+
+            return {
+                title: item.title ?? item.name ?? item.subject ?? null,
+                price: numPrice,
+                km: item.km ?? item.kilometer ?? item.mileage ?? item.usage ?? null,
+                desc: item.desc ?? item.description ?? item.details ?? null,
+                car_name: item.car_name ?? item.model ?? item.car_model ?? item.model_name ?? defaultCarName ?? '',
+                href: item.href ?? item.link ?? item.url ?? null
+            };
+        });
+    };
+
     try {
-        let response: Response;
+        let response: Response | null = null;
+
+        // Step 1: Try GET on primary webhook endpoint with mode and city query params
         try {
-            // First try GET on the user's primary webhook endpoint
             response = await fetch(primaryUrl, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: controller.signal
             });
 
-            // If GET returned 404 with indication to use POST, retry with POST
-            if (!response.ok && response.status === 404) {
-                const clone = response.clone();
-                try {
-                    const text = await clone.text();
-                    if (text.includes('POST') || text.includes('webhook')) {
-                        response = await fetch(primaryUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                            body: JSON.stringify({}),
-                            signal: controller.signal
-                        });
-                    }
-                } catch {
-                    // ignore error and proceed
-                }
+            // If GET returns 404 or 405, fallback to POST with JSON body
+            if (!response.ok && (response.status === 404 || response.status === 405)) {
+                response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        mode: model?.trim() || '',
+                        model: model?.trim() || '',
+                        city: city?.trim() || '',
+                        car_model: model?.trim() || ''
+                    }),
+                    signal: controller.signal
+                });
             }
         } catch (fetchErr: any) {
-            // If primary endpoint failed or timed out, try fallback URL
             if (controller.signal.aborted) throw fetchErr;
-            response = await fetch(fallbackUrl, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                signal: controller.signal
-            });
+
+            // Step 2: Fallback to fallbackUrl
+            try {
+                response = await fetch(fallbackUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    signal: controller.signal
+                });
+            } catch (fallbackErr: any) {
+                if (controller.signal.aborted) throw fallbackErr;
+                // Retry POST on webhook
+                response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        mode: model?.trim() || '',
+                        model: model?.trim() || '',
+                        city: city?.trim() || ''
+                    }),
+                    signal: controller.signal
+                });
+            }
         }
 
-        if (!response.ok) {
-            throw new Error(`دریافت قیمت‌های دیوار ناموفق بود (کد: ${response.status})`);
+        if (!response || !response.ok) {
+            const status = response ? response.status : 'No Response';
+            throw new Error(`دریافت قیمت‌های دیوار ناموفق بود (کد: ${status})`);
         }
 
         const data = await response.json();
-        if (Array.isArray(data)) {
-            return data;
-        } else if (data && Array.isArray(data.data)) {
-            return data.data;
-        }
-        return [];
+        return normalizeItems(data, model);
     } finally {
         clearTimeout(timeoutId);
     }

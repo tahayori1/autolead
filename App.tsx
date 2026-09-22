@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone, Landmark } from 'lucide-react';
+import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone, Landmark, Bot } from 'lucide-react';
 import HomePage from './pages/HomePage';
+import AiAssistantPage from './pages/AiAssistantPage';
 import ConditionsPage from './pages/ConditionsPage';
 import InventoryPage from './pages/InventoryPage';
 import AnnouncementsHubPage from './pages/AnnouncementsHubPage';
@@ -58,7 +59,7 @@ import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './serv
 import type { MyProfile } from './types';
 import AutoRefreshWidget from './components/AutoRefreshWidget';
 
-export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
+export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
 
 interface MenuItemProps {
     label: string;
@@ -276,6 +277,7 @@ const App: React.FC = () => {
     // Flat list of all available menu items for mobile more menu mapping
     const flatMenuItems = [
         { view: 'home' as ActiveView, label: 'داشبورد', icon: <HomeIcon className="w-5 h-5" /> },
+        { view: 'ai-assistant' as ActiveView, label: 'چت هوشمند با مشتری', icon: <Bot className="w-5 h-5 text-indigo-500" /> },
         { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
         { view: 'bank-letter' as ActiveView, label: 'صدور نامه بانک (ساتنا)', icon: <Landmark className="w-5 h-5 text-blue-500" /> },
         { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
@@ -313,10 +315,11 @@ const App: React.FC = () => {
     const menuGroups = [
         {
             id: 'home-group',
-            label: 'داشبورد پیشخوان',
+            label: 'پیشخوان و دستیار هوشمند',
             isCollapsible: false,
             items: [
                 { view: 'home' as ActiveView, label: 'پیشخوان اصلی', icon: <HomeIcon className="w-5 h-5" /> },
+                { view: 'ai-assistant' as ActiveView, label: 'چت هوشمند با مشتری', icon: <Bot className="w-5 h-5 text-indigo-500" /> },
             ]
         },
         {
@@ -612,6 +615,7 @@ const App: React.FC = () => {
             {/* Main Content Area */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden pt-16 lg:pt-0 pb-20 lg:pb-0">
                 {activeView === 'home' && <HomePage onNavigate={handleNavigate} />}
+                {activeView === 'ai-assistant' && <AiAssistantPage loggedInUser={currentUser} />}
                 {activeView === 'announcements' && <AnnouncementsHubPage loggedInUser={currentUser} />}
                 {activeView === 'conditions' && <ConditionsPage />}
                 {activeView === 'inventory' && <InventoryPage />}

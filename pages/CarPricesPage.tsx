@@ -11,9 +11,10 @@ import CarPriceCopySettingsModal, { PRIORITY_MODELS, getModelPriorityIndex } fro
 import AddCustomPriceModal from '../components/AddCustomPriceModal';
 import SalesManagerPriceAssistant from '../components/SalesManagerPriceAssistant';
 import DivarPriceAnalysisSection from '../components/DivarPriceAnalysisSection';
+import { CarArbitrageSection } from '../components/CarArbitrageSection';
 import { 
     Plus, Clock, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, 
-    TrendingUp, Search, Filter, ArrowUpDown, X, Car, Sparkles, Layers, Calendar, Target, ShieldCheck, BarChart3, TableProperties, ShieldAlert, CheckCircle2, Scale
+    TrendingUp, Search, Filter, ArrowUpDown, X, Car, Sparkles, Layers, Calendar, Target, ShieldCheck, BarChart3, TableProperties, ShieldAlert, CheckCircle2, Scale, ArrowRightLeft
 } from 'lucide-react';
 
 export interface ModelYearParsed {
@@ -179,7 +180,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     
     // Main Navigation Tab (Default is 'divar_prices' per user request)
-    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'divar_prices' | 'sales_assistant'>('divar_prices');
+    const [activeMainTab, setActiveMainTab] = useState<'market_cards' | 'divar_prices' | 'sales_assistant' | 'arbitrage'>('divar_prices');
     const [divarRefreshTrigger, setDivarRefreshTrigger] = useState<number>(0);
 
     // Auto Refresh State
@@ -1478,7 +1479,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
         <>
             <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
                 {/* Tab Navigation Selector */}
-                <div className="flex flex-wrap p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-3xl border border-slate-200/50 dark:border-slate-800/40 gap-1">
+                <div className="flex flex-wrap p-1.5 bg-slate-100 dark:bg-slate-900/60 rounded-2xl max-w-4xl border border-slate-200/50 dark:border-slate-800/40 gap-1">
                     <button
                         type="button"
                         onClick={() => {
@@ -1488,7 +1489,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                 setActiveMainTab('divar_prices');
                             }
                         }}
-                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
                             activeMainTab === 'divar_prices'
                                 ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md shadow-rose-200 dark:shadow-none'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
@@ -1500,8 +1501,21 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
 
                     <button
                         type="button"
+                        onClick={() => setActiveMainTab('arbitrage')}
+                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            activeMainTab === 'arbitrage'
+                                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-200 dark:shadow-none'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <Sparkles className={`w-4 h-4 ${activeMainTab === 'arbitrage' ? 'text-amber-300 animate-pulse' : 'text-emerald-500'}`} />
+                        <span>فرصت‌های خرید و آربیتراژ 💎</span>
+                    </button>
+
+                    <button
+                        type="button"
                         onClick={() => setActiveMainTab('market_cards')}
-                        className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
                             activeMainTab === 'market_cards'
                                 ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/40 dark:border-slate-700/50'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
@@ -1514,7 +1528,7 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                     <button
                         type="button"
                         onClick={() => setActiveMainTab('sales_assistant')}
-                        className={`flex-1 min-w-[170px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
                             activeMainTab === 'sales_assistant'
                                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-200 dark:shadow-none'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
@@ -1535,6 +1549,13 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                         lastUpdated={lastUpdated}
                         onSelectApprovedPrice={handleSelectAsApprovedPrice}
                         onAddCustomPriceSubmit={handleAddCustomPriceSubmit}
+                        showToast={showToast}
+                    />
+                ) : activeMainTab === 'arbitrage' ? (
+                    <CarArbitrageSection
+                        scrapedPrices={prices}
+                        priceStats={priceStatsWithOverride}
+                        onRefresh={fetchAllData}
                         showToast={showToast}
                     />
                 ) : activeMainTab === 'divar_prices' ? (

@@ -4,7 +4,7 @@ import {
     Users, ShoppingCart, Percent,
     ChevronLeft, ChevronRight, LayoutGrid, FileText, Megaphone,
     Clock, RefreshCw, CheckCircle2, ShieldCheck, CarFront,
-    ArrowRightLeft, FileSpreadsheet, Coins
+    ArrowRightLeft, FileSpreadsheet, Coins, Bot
 } from 'lucide-react';
 import type { ActiveView } from '../App';
 import { getConditions, getCarPriceStats, formatConditionDateTime } from '../services/api';
@@ -148,10 +148,17 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                         </button>
                         <button
                             onClick={() => onNavigate('car-prices')}
-                            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/30"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold transition-all border border-white/15 backdrop-blur-sm"
                         >
                             <TrendingUp className="w-4 h-4" />
                             <span>قیمت روز بازار</span>
+                        </button>
+                        <button
+                            onClick={() => onNavigate('ai-assistant')}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 active:scale-95 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/30"
+                        >
+                            <Bot className="w-4 h-4" />
+                            <span>چت هوشمند با مشتری</span>
                         </button>
                     </div>
                 </div>
