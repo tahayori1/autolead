@@ -76,6 +76,24 @@ export interface NationalCodeValidationResult {
     isValid: boolean;
     cleanCode: string;
     errorMessage?: string;
+    cityHint?: string;
+}
+
+export interface PostalCodeValidationResult {
+    isValid: boolean;
+    cleanCode: string;
+    formattedCode: string;
+    provinceHint?: string;
+    errorMessage?: string;
+}
+
+export interface MobileValidationResult {
+    isValid: boolean;
+    cleanNumber: string;
+    formattedNumber: string;
+    operatorName?: string;
+    operatorColor?: string;
+    errorMessage?: string;
 }
 
 // --- قرارداد صلح خودرو (Vehicle Peace Agreement) ---

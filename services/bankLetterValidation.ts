@@ -1,4 +1,9 @@
-import type { ShebaValidationResult, NationalCodeValidationResult } from '../types/bankLetter';
+import type { 
+    ShebaValidationResult, 
+    NationalCodeValidationResult,
+    PostalCodeValidationResult,
+    MobileValidationResult
+} from '../types/bankLetter';
 
 // --- Iranian Banks Directory based on Sheba 3-digit bank code ---
 export interface BankDirectoryItem {
@@ -278,6 +283,284 @@ export function numberToPersianWords(input: number | string): string {
     }
 
     return wordsParts.join(' و ');
+}
+
+// --- Province zones based on 2-digit postal prefix ---
+const IRAN_POSTAL_PROVINCES: Record<string, string> = {
+    '11': 'تهران (مرکزی)',
+    '12': 'تهران',
+    '13': 'تهران (جنوب)',
+    '14': 'تهران (شمال و غرب)',
+    '15': 'تهران (شرق)',
+    '16': 'تهران (شمیرانات)',
+    '17': 'تهران (جنوب شرق)',
+    '18': 'تهران (شهر ری)',
+    '19': 'تهران (شمال)',
+    '31': 'البرز (کرج)',
+    '32': 'البرز',
+    '33': 'البرز (هشتگرد/نظرآباد)',
+    '34': 'قزوین',
+    '35': 'سمنان',
+    '36': 'سمنان (شاهرود)',
+    '37': 'قم',
+    '38': 'مرکزی (اراک)',
+    '39': 'مرکزی (ساوه)',
+    '41': 'گیلان (رشت)',
+    '42': 'گیلان',
+    '43': 'گیلان (لاهیجان/انزلی)',
+    '44': 'گلستان (گرگان)',
+    '45': 'زنجان',
+    '46': 'گلستان (گنبد کاووس)',
+    '47': 'مازندران (ساری)',
+    '48': 'مازندران (بابل/آمل)',
+    '49': 'مازندران (غرب استان)',
+    '51': 'آذربایجان شرقی (تبریز)',
+    '52': 'آذربایجان شرقی (مراغه)',
+    '53': 'آذربایجان شرقی (مرند)',
+    '54': 'اردبیل',
+    '55': 'اردبیل (پارس‌آباد)',
+    '56': 'اردبیل (مشگین‌شهر)',
+    '57': 'آذربایجان غربی (ارومیه)',
+    '58': 'آذربایجان غربی (خوی/ماکو)',
+    '59': 'آذربایجان غربی (مهاباد)',
+    '61': 'خوزستان (اهواز)',
+    '62': 'خوزستان (آبادان/خرمشهر)',
+    '63': 'خوزستان (دزفول)',
+    '64': 'خوزستان (ماهشهر)',
+    '65': 'همدان',
+    '66': 'کرمانشاه',
+    '67': 'کرمانشاه',
+    '68': 'لرستان (خرم‌آباد)',
+    '69': 'لرستان (بروجرد)',
+    '71': 'فارس (شیراز)',
+    '72': 'فارس (کازرون/مرودشت)',
+    '73': 'فارس (جهرم/فسا/لارستان)',
+    '74': 'فارس (آباده/اقلید)',
+    '75': 'بوشهر',
+    '76': 'کرمان',
+    '77': 'هرمزگان (بندرعباس)',
+    '78': 'یزد',
+    '79': 'کهگیلویه و بویراحمد (یاسوج)',
+    '81': 'اصفهان',
+    '82': 'اصفهان (کاشان)',
+    '83': 'اصفهان (نجف‌آباد)',
+    '84': 'ایلام',
+    '85': 'سیستان و بلوچستان (زاهدان)',
+    '86': 'چهارمحال و بختیاری (شهرکرد)',
+    '87': 'کردستان (سنندج)',
+    '88': 'چهارمحال و بختیاری',
+    '91': 'خراسان رضوی (مشهد)',
+    '92': 'خراسان رضوی (نیشابور/سبزوار)',
+    '93': 'خراسان رضوی (تربت حیدریه)',
+    '94': 'خراسان شمالی (بجنورد)',
+    '97': 'خراسان جنوبی (بیرجند)',
+    '98': 'سیستان و بلوچستان (زابل)',
+    '99': 'سیستان و بلوچستان (چابهار/ایرانشهر)'
+};
+
+/**
+ * Validate Iranian 10-Digit Postal Code (کد پستی ۱۰ رقمی)
+ * Rules:
+ * - Exactly 10 digits
+ * - Does not start with '0' or '2'
+ * - 5th digit is not '0' or '2'
+ * - Not all identical digits
+ */
+export function validateIranianPostalCode(postalCode: string): PostalCodeValidationResult {
+    if (!postalCode) {
+        return {
+            isValid: false,
+            cleanCode: '',
+            formattedCode: '',
+            errorMessage: 'کد پستی وارد نشده است.'
+        };
+    }
+
+    const raw = toEnglishDigits(postalCode).trim().replace(/\D/g, '');
+
+    if (!raw) {
+        return {
+            isValid: false,
+            cleanCode: '',
+            formattedCode: '',
+            errorMessage: 'کد پستی باید تنها شامل اعداد باشد.'
+        };
+    }
+
+    if (raw.length !== 10) {
+        return {
+            isValid: false,
+            cleanCode: raw,
+            formattedCode: raw,
+            errorMessage: `کد پستی باید دقیقاً ۱۰ رقم باشد (وارد شده: ${raw.length} رقم)`
+        };
+    }
+
+    // Check repeated digits (e.g. 1111111111)
+    if (/^(\d)\1{9}$/.test(raw)) {
+        return {
+            isValid: false,
+            cleanCode: raw,
+            formattedCode: raw,
+            errorMessage: 'کد پستی نامعتبر است (تمام ارقام یکسان هستند).'
+        };
+    }
+
+    // First digit cannot be 0 or 2 in Iran Post
+    const firstDigit = raw.charAt(0);
+    if (firstDigit === '0' || firstDigit === '2') {
+        return {
+            isValid: false,
+            cleanCode: raw,
+            formattedCode: raw,
+            errorMessage: `کد پستی نمی‌تواند با رقم '${firstDigit}' شروع شود (رقم اول باید از ۱، ۳ تا ۹ باشد).`
+        };
+    }
+
+    // 5th digit (divider between zone and house code) is not 0 or 2
+    const fifthDigit = raw.charAt(4);
+    if (fifthDigit === '0' || fifthDigit === '2') {
+        return {
+            isValid: false,
+            cleanCode: raw,
+            formattedCode: raw,
+            errorMessage: `رقم پنجم کد پستی نمی‌تواند '${fifthDigit}' باشد.`
+        };
+    }
+
+    const prefix2 = raw.substring(0, 2);
+    const provinceHint = IRAN_POSTAL_PROVINCES[prefix2] || 'ایران';
+    const formattedCode = `${raw.substring(0, 5)}-${raw.substring(5)}`;
+
+    return {
+        isValid: true,
+        cleanCode: raw,
+        formattedCode,
+        provinceHint
+    };
+}
+
+/**
+ * Validate Iranian Mobile Phone Number (شماره موبایل ایران)
+ * Accepts formats: 0917..., +98917..., 0098917..., 98917..., 917...
+ * Returns valid status, normalized 11-digit number, formatted view, and operator name.
+ */
+export function validateIranianMobile(mobile: string): MobileValidationResult {
+    if (!mobile) {
+        return {
+            isValid: false,
+            cleanNumber: '',
+            formattedNumber: '',
+            errorMessage: 'شماره موبایل وارد نشده است.'
+        };
+    }
+
+    let clean = toEnglishDigits(mobile).trim().replace(/[^\d+]/g, '');
+
+    // Normalize international prefixes
+    if (clean.startsWith('+98')) {
+        clean = '0' + clean.substring(3);
+    } else if (clean.startsWith('0098')) {
+        clean = '0' + clean.substring(4);
+    } else if (clean.startsWith('98') && clean.length === 12) {
+        clean = '0' + clean.substring(2);
+    } else if (clean.startsWith('9') && clean.length === 10) {
+        clean = '0' + clean;
+    }
+
+    // Strip any remaining non-digits
+    clean = clean.replace(/\D/g, '');
+
+    if (!clean) {
+        return {
+            isValid: false,
+            cleanNumber: '',
+            formattedNumber: '',
+            errorMessage: 'شماره موبایل باید شامل ارقام باشد.'
+        };
+    }
+
+    if (clean.length !== 11) {
+        return {
+            isValid: false,
+            cleanNumber: clean,
+            formattedNumber: clean,
+            errorMessage: `شماره موبایل باید ۱۱ رقم باشد (وارد شده: ${clean.length} رقم)`
+        };
+    }
+
+    if (!clean.startsWith('09')) {
+        return {
+            isValid: false,
+            cleanNumber: clean,
+            formattedNumber: clean,
+            errorMessage: 'شماره تلفن همراه در ایران باید با ۰۹ شروع شود.'
+        };
+    }
+
+    // Check for repetitive/fake numbers (e.g. 09111111111, 09000000000)
+    const afterPrefix = clean.substring(2);
+    if (/^(\d)\1{8}$/.test(afterPrefix)) {
+        return {
+            isValid: false,
+            cleanNumber: clean,
+            formattedNumber: clean,
+            errorMessage: 'شماره موبایل وارد شده فاقد ساختار معتبر است.'
+        };
+    }
+
+    // Operator Detection
+    const prefix4 = clean.substring(0, 4);
+    let operatorName = 'اپراتور همراه';
+    let operatorColor = '#3b82f6';
+
+    const mciPrefixes = [
+        '0910', '0911', '0912', '0913', '0914', '0915', '0916', '0917', '0918', '0919',
+        '0990', '0991', '0992', '0993', '0994', '0996'
+    ];
+    const mtnPrefixes = [
+        '0930', '0933', '0935', '0936', '0937', '0938', '0939',
+        '0901', '0902', '0903', '0904', '0905', '0941'
+    ];
+    const rightelPrefixes = ['0920', '0921', '0922', '0923'];
+    const otherPrefixes: Record<string, string> = {
+        '0998': 'شاتل موبایل',
+        '0999': 'سامانتل / آپتل',
+        '0932': 'تالیا'
+    };
+
+    if (mciPrefixes.includes(prefix4)) {
+        operatorName = 'همراه اول (MCI)';
+        operatorColor = '#0284c7';
+    } else if (mtnPrefixes.includes(prefix4)) {
+        operatorName = 'ایرانسل (Irancell)';
+        operatorColor = '#ca8a04';
+    } else if (rightelPrefixes.includes(prefix4)) {
+        operatorName = 'رایتل (Rightel)';
+        operatorColor = '#9333ea';
+    } else if (otherPrefixes[prefix4]) {
+        operatorName = otherPrefixes[prefix4];
+        operatorColor = '#0d9488';
+    } else {
+        // Unknown 09xx prefix
+        return {
+            isValid: false,
+            cleanNumber: clean,
+            formattedNumber: clean,
+            errorMessage: `پیش‌شماره ${prefix4} در میان پیش‌شماره‌های معتبر اپراتورهای ایران تعریف نشده است.`
+        };
+    }
+
+    // Formatted: 0917 123 4567
+    const formattedNumber = `${clean.substring(0, 4)} ${clean.substring(4, 7)} ${clean.substring(7)}`;
+
+    return {
+        isValid: true,
+        cleanNumber: clean,
+        formattedNumber,
+        operatorName,
+        operatorColor
+    };
 }
 
 /**
