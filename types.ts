@@ -77,8 +77,10 @@ export interface Announcement {
 }
 
 export interface CustomerJournal {
-    id: number;
-    userId: number;
+    id?: number | string;
+    userId?: number;
+    number?: string;
+    customerNumber?: string;
     author: string;
     content: string;
     createdAt: string;
@@ -343,6 +345,7 @@ export type AppModule =
     | 'corrective-actions'
     | 'meeting-minutes'
     | 'leave-requests'
+    | 'attendance'
     | 'anonymous-feedback'
     | 'zero-car-delivery'
     | 'customer-club'
@@ -350,6 +353,7 @@ export type AppModule =
     | 'used-cars'
     | 'salary-advance'
     | 'overtime'
+    | 'bank-letter'
     | 'advertising-report'
     | 'poll'
     | 'access-control';
@@ -933,6 +937,69 @@ export interface CommissionBackupData {
     periods: CommissionPeriod[];
     deals: CommissionDeal[];
     yardItems: CarYardItem[];
+}
+
+// --- Attendance / Timesheet Types (حضور و غیاب) ---
+export interface TimesheetDayRecord {
+    id: string;
+    dayOfWeek: string;           // روز هفته
+    date: string;                // تاریخ (مثلاً 1405/06/01)
+    morningEntry: string;        // ورود صبح
+    morningExit: string;         // خروج صبح
+    afternoonEntry: string;      // ورود عصر
+    afternoonExit: string;       // خروج عصر
+    dutyHours: string;           // موظفی
+    presence: string;            // حضور
+    workTime: string;            // کارکرد
+    morningDelay: string;        // تاخیر صبح
+    morningEarlyExit: string;    // تعجیل خروج صبح
+    afternoonEarlyExit: string;  // تعجیل خروج عصر
+    unauthorizedDelay: string;   // تاخیر غیر مجاز
+    holidayOvertime: string;     // اضافه کاری تعطیلی
+    finalWorkTime: string;       // کارکرد نهایی
+    leaveDuty: string;           // موظفی مرخصی
+    leaveTime: string;           // مرخصی
+    missionTime: string;         // ماموریت
+    punchesCount: number;        // تعداد تردد
+    status: string;              // وضعیت: کاری / تعطیل / مرخصی استحقاقی / غیبت
+    overtime: string;            // مجموع اضافه کار
+    deficit: string;             // مجموع کسر کار
+    notes?: string;
+}
+
+export interface TimesheetSummary {
+    totalDuty: string;
+    totalPresence: string;
+    totalWorkTime: string;
+    totalMorningDelay: string;
+    totalMorningEarlyExit: string;
+    totalAfternoonEarlyExit: string;
+    totalUnauthorizedDelay: string;
+    totalHolidayOvertime: string;
+    totalFinalWorkTime: string;
+    totalLeaveDuty: string;
+    totalLeaveTime: string;
+    totalMissionTime: string;
+    totalOvertime: string;
+    totalDeficit: string;
+    workDaysCount: number;
+    holidayDaysCount: number;
+    leaveDaysCount: number;
+    totalPunches: number;
+}
+
+export interface EmployeeTimesheet {
+    id: string;
+    organization: string;
+    title: string;
+    startDate: string;
+    endDate: string;
+    employeeName: string;
+    employeeCode: string;
+    records: TimesheetDayRecord[];
+    summary: TimesheetSummary;
+    lastUpdated: string;
+    source: 'api' | 'csv_import' | 'manual' | 'sample';
 }
 
 

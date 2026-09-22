@@ -1316,19 +1316,39 @@ export const deleteAnnouncement = async (id: number): Promise<void> => {
 
 const JOURNALS_URL = `${API_BASE_URL}/CustomerJournals`;
 
-export const getCustomerJournals = async (userId: number | string): Promise<CustomerJournal[]> => {
-    const response = await fetch(`${JOURNALS_URL}?userId=${userId}`, { headers: getAuthHeaders() });
-    let data = await handleResponse(response);
+export const getCustomerJournals = async (userNumberOrId: number | string): Promise<CustomerJournal[]> => {
+    const rawValue = String(userNumberOrId || '').trim();
+    if (!rawValue) return [];
+
+    // Normalize Persian and Arabic digits
+    const normalizedDigits = rawValue
+        .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+        .trim();
+
+    // Query CustomerJournals using GET method with ?number= parameter
+    const queryNumber = normalizedDigits || rawValue;
+    const response = await fetch(`${JOURNALS_URL}?number=${encodeURIComponent(queryNumber)}`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+    });
+    const data = await handleResponse(response);
     
-    // Fallback client-side filtering in case the API ignores the query parameter
-    if(Array.isArray(data)) {
-        data = data.filter((j: CustomerJournal) => String(j.userId) === String(userId));
-        return data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    let list: CustomerJournal[] = [];
+    if (Array.isArray(data)) {
+        list = data;
+    } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+    } else if (data && Array.isArray(data.items)) {
+        list = data.items;
+    } else if (data && typeof data === 'object' && (data.content || data.id)) {
+        list = [data as CustomerJournal];
     }
-    return [];
+
+    return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 };
 
-export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' | 'createdAt'>): Promise<CustomerJournal> => {
+export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' | 'createdAt'> & { number?: string; customerNumber?: string }): Promise<CustomerJournal> => {
     ensureOnline();
     const payload = {
         ...journal,
@@ -1342,10 +1362,12 @@ export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' 
     const result = await handleResponse(response);
     
     // Register lock/activity on local Express server
-    try {
-        await registerCrmActivity(Number(journal.userId), journal.author, journal.author);
-    } catch (e) {
-        console.warn("Failed to register CRM activity for journal:", e);
+    if (journal.userId) {
+        try {
+            await registerCrmActivity(Number(journal.userId), journal.author, journal.author);
+        } catch (e) {
+            console.warn("Failed to register CRM activity for journal:", e);
+        }
     }
     
     return result;
@@ -1833,6 +1855,7 @@ const OVERTIME_URL = `${API_BASE_URL}/overtime`;
 const CRM_URL = `${API_BASE_URL}/crm`;
 const CALLOG_URL = `${API_BASE_URL}/calllog`;
 const SALARY_ADVANCE_URL = `${API_BASE_URL}/SalaryAdvance`;
+export const TIMESHEET_URL = `${API_BASE_URL}/timesheet`;
 
 // Helper to sanitize payload and prevent MySQL ER_TRUNCATED_WRONG_VALUE on empty date strings or syntax errors from unquoted arrays
 const sanitizePayload = <T>(item: Partial<T>): any => {
@@ -2650,6 +2673,9 @@ export const clearAllCrmLocks = async (): Promise<void> => {
         headers: getAuthHeaders(),
     });
 };
+
+// --- Attendance / Timesheet Services ---
+export * from './timesheetService';
 
 
 

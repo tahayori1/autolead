@@ -566,16 +566,16 @@ ${changes.join('\n')}`,
     };
 
     const fetchJournals = useCallback(async () => {
-        const userId = fullUserDetails?.id || lead?.id;
-        const userNumber = fullUserDetails?.Number || lead?.Number;
-        const leadName = fullUserDetails?.FullName || lead?.FullName || '';
-        if (!userId) return;
+        const userId = fullUserDetails?.id || lead?.id || targetUser?.id;
+        const userNumber = fullUserDetails?.Number || lead?.Number || targetUser?.Number || '';
+        const leadName = fullUserDetails?.FullName || lead?.FullName || targetUser?.FullName || '';
+        if (!userId && !userNumber) return;
         setIsJournalLoading(true);
         setIsCallLogsLoading(true);
         setIsCrmMeetingsLoading(true);
         try {
             const [journalData, callLogData, meetingData] = await Promise.all([
-                getCustomerJournals(userId),
+                getCustomerJournals(userNumber || userId),
                 getCallLogs(userNumber || undefined),
                 getCrmMeetings(userId).catch(err => {
                     console.error("Failed to fetch CRM meetings:", err);
@@ -654,13 +654,16 @@ ${changes.join('\n')}`,
 
     const handleAddJournal = async () => {
         if (!newJournalContent.trim() || isJournalSending) return;
-        const userId = fullUserDetails?.id || lead?.id;
-        if (!userId) return;
+        const userId = fullUserDetails?.id || lead?.id || targetUser?.id;
+        const userNumber = fullUserDetails?.Number || lead?.Number || targetUser?.Number || '';
+        if (!userId && !userNumber) return;
 
         setIsJournalSending(true);
         try {
             await createCustomerJournal({
-                userId,
+                userId: userId ? Number(userId) : undefined,
+                number: userNumber,
+                customerNumber: userNumber,
                 content: newJournalContent,
                 author: currentUser?.full_name || currentUser?.username || 'کاربر سیستم'
             });

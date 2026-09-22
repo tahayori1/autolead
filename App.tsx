@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone } from 'lucide-react';
+import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone, Landmark } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import ConditionsPage from './pages/ConditionsPage';
 import InventoryPage from './pages/InventoryPage';
@@ -17,7 +17,6 @@ import ReportsPage from './pages/ReportsPage';
 import CommissionPage from './pages/CommissionPage';
 import CorrectiveActionsPage from './pages/CorrectiveActionsPage';
 import MeetingMinutesPage from './pages/MeetingMinutesPage';
-import LeaveRequestsPage from './pages/LeaveRequestsPage';
 import AnonymousFeedbackPage from './pages/AnonymousFeedbackPage';
 import ZeroCarDeliveryPage from './pages/ZeroCarDeliveryPage';
 import MyProfilePage from './pages/MyProfilePage';
@@ -25,10 +24,11 @@ import NotificationCenterPage from './pages/NotificationCenterPage';
 import UsedCarPage from './pages/UsedCarPage';
 import CarOrderPage from './pages/CarOrderPage';
 import SalaryAdvancePage from './pages/SalaryAdvancePage';
-import OvertimePage from './pages/OvertimePage';
 import { AdvertisingPage } from './pages/AdvertisingPage';
 import MarketingReportManager from './components/MarketingReportManager';
 import AboutPage from './pages/AboutPage';
+import AttendancePage from './pages/AttendancePage';
+import BankLetterPage from './pages/BankLetterPage';
 import Spinner from './components/Spinner';
 import { LogoutIcon } from './components/icons/LogoutIcon';
 import { SettingsIcon } from './components/icons/SettingsIcon';
@@ -47,7 +47,6 @@ import { ChartBarIcon } from './components/icons/ChartBarIcon';
 import { CalculatorIcon } from './components/icons/CalculatorIcon';
 import { ClipboardCheckIcon } from './components/icons/ClipboardCheckIcon';
 import { CalendarIcon } from './components/icons/CalendarIcon';
-import { UserMinusIcon } from './components/icons/UserMinusIcon';
 import { SpeakerphoneIcon } from './components/icons/SpeakerphoneIcon';
 import { TruckIcon } from './components/icons/TruckIcon';
 import { UserIcon } from './components/icons/UserIcon';
@@ -59,7 +58,7 @@ import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './serv
 import type { MyProfile } from './types';
 import AutoRefreshWidget from './components/AutoRefreshWidget';
 
-export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
+export type ActiveView = 'home' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'about';
 
 interface MenuItemProps {
     label: string;
@@ -278,6 +277,7 @@ const App: React.FC = () => {
     const flatMenuItems = [
         { view: 'home' as ActiveView, label: 'داشبورد', icon: <HomeIcon className="w-5 h-5" /> },
         { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
+        { view: 'bank-letter' as ActiveView, label: 'صدور نامه بانک (ساتنا)', icon: <Landmark className="w-5 h-5 text-blue-500" /> },
         { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
         { view: 'conditions' as ActiveView, label: 'بخشنامه‌ها فروش', icon: <ConditionsIcon className="w-5 h-5" /> },
         { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
@@ -300,8 +300,7 @@ const App: React.FC = () => {
         { view: 'reports' as ActiveView, label: 'آمار و گزارشات', icon: <ChartBarIcon className="w-5 h-5" /> },
         { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
         { view: 'meeting-minutes' as ActiveView, label: 'صورت‌جلسات اداری', icon: <CalendarIcon className="w-5 h-5" /> },
-        { view: 'leave-requests' as ActiveView, label: 'درخواست‌های مرخصی', icon: <UserMinusIcon className="w-5 h-5" /> },
-        { view: 'overtime' as ActiveView, label: 'درخواست اضافه کاری', icon: <Clock className="w-5 h-5 text-amber-500" /> },
+        { view: 'attendance' as ActiveView, label: 'حضور و غیاب، مرخصی و اضافه کار', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
         { view: 'anonymous-feedback' as ActiveView, label: 'صندوق انتقادات', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
         { view: 'salary-advance' as ActiveView, label: 'امور مساعده کارمندان', icon: <Wallet className="w-5 h-5" /> },
         { view: 'my-profile' as ActiveView, label: 'پروفایل کاربری من', icon: <UserIcon className="w-5 h-5" /> },
@@ -327,6 +326,7 @@ const App: React.FC = () => {
             icon: <ClipboardListIcon className="w-5 h-5" />,
             items: [
                 { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
+                { view: 'bank-letter' as ActiveView, label: 'قرارداد صلح و نامه بانک', icon: <Landmark className="w-5 h-5 text-amber-500" /> },
                 { view: 'conditions' as ActiveView, label: 'بخشنامه‌ها فروش', icon: <ConditionsIcon className="w-5 h-5" /> },
                 { view: 'inventory' as ActiveView, label: 'لیست موجودی خودروها', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
                 { view: 'car-prices' as ActiveView, label: 'قیمت روز خودروها', icon: <PriceIcon className="w-5 h-5" /> },
@@ -391,8 +391,7 @@ const App: React.FC = () => {
                 { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
                 { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
                 { view: 'meeting-minutes' as ActiveView, label: 'صورت‌جلسات اداری', icon: <CalendarIcon className="w-5 h-5" /> },
-                { view: 'leave-requests' as ActiveView, label: 'درخواست‌های مرخصی', icon: <UserMinusIcon className="w-5 h-5" /> },
-                { view: 'overtime' as ActiveView, label: 'درخواست اضافه کاری', icon: <Clock className="w-5 h-5 text-amber-500 font-bold" /> },
+                { view: 'attendance' as ActiveView, label: 'حضور و غیاب، مرخصی و اضافه کار', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
                 { view: 'salary-advance' as ActiveView, label: 'درخواست‌های مساعده', icon: <Wallet className="w-5 h-5 text-sky-500" /> },
                 { view: 'anonymous-feedback' as ActiveView, label: 'صندوق انتقادات', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
             ]
@@ -639,8 +638,9 @@ const App: React.FC = () => {
                 {activeView === 'commission' && <CommissionPage />}
                 {activeView === 'corrective-actions' && <CorrectiveActionsPage />}
                 {activeView === 'meeting-minutes' && <MeetingMinutesPage />}
-                {activeView === 'leave-requests' && <LeaveRequestsPage />}
-                {activeView === 'overtime' && <OvertimePage />}
+                {(activeView === 'attendance' || activeView === 'leave-requests' || activeView === 'overtime') && (
+                    <AttendancePage isAdmin={currentUser?.isAdmin === 1} loggedInUser={currentUser} />
+                )}
                 {activeView === 'salary-advance' && <SalaryAdvancePage />}
                 {activeView === 'anonymous-feedback' && <AnonymousFeedbackPage />}
                 {activeView === 'zero-car-delivery' && <ZeroCarDeliveryPage />}
@@ -655,6 +655,7 @@ const App: React.FC = () => {
                 {activeView === 'advertising-ctas' && <AdvertisingPage loggedInUser={currentUser} initialTab="ctas" />}
                 {activeView === 'advertising-contact' && <AdvertisingPage loggedInUser={currentUser} initialTab="contact" />}
                 {activeView === 'car-orders' && <CarOrderPage isAdmin={currentUser?.isAdmin === 1} />}
+                {activeView === 'bank-letter' && <BankLetterPage isAdmin={currentUser?.isAdmin === 1} loggedInUser={currentUser} />}
                 {activeView === 'about' && <AboutPage />}
             </main>
         </div>

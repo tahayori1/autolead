@@ -60,6 +60,7 @@ const MODULE_LABELS: Record<string, string> = {
     'commission': 'کمیسیون',
     'corrective-actions': 'اقدامات اصلاحی',
     'meeting-minutes': 'صورتجلسات',
+    'attendance': 'حضور و غیاب و مرخصی',
     'leave-requests': 'مرخصی‌ها',
     'anonymous-feedback': 'صدای همکار',
     'zero-car-delivery': 'تحویل خودرو',

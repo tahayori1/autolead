@@ -11,9 +11,11 @@ import {
     Warehouse, 
     Bell, 
     Calendar, 
+    Clock,
     BarChart3, 
     Settings, 
-    Check 
+    Check,
+    Landmark 
 } from 'lucide-react';
 
 interface PermissionMatrixProps {
@@ -35,11 +37,12 @@ const MODULES: ModuleMeta[] = [
     { key: 'cars', label: 'کاتالوگ خودروها', description: 'مشخصات فنی و گالری محصولات', icon: <Car className="w-4 h-4" />, category: 'sales' },
     { key: 'prices', label: 'قیمت روز بازار', description: 'استعلام و به‌روزرسانی نرخ‌های روزانه', icon: <TrendingUp className="w-4 h-4" />, category: 'sales' },
     { key: 'orders', label: 'سفارشات فروش', description: 'قراردادها و پیش‌فاکتورهای تحویل', icon: <ShoppingBag className="w-4 h-4" />, category: 'sales' },
+    { key: 'bank-letter', label: 'صدور نامه بانک (ساتنا)', description: 'صدور، اعتبارسنجی شبا و تکمیل نامه‌های بانکی', icon: <Landmark className="w-4 h-4" />, category: 'sales' },
     { key: 'vehicle-exit', label: 'فرم خروج خودرو', description: 'مجوز ترخیص و خروج از نمایندگی', icon: <LogOut className="w-4 h-4" />, category: 'inventory' },
     { key: 'zero-car-delivery', label: 'تحویل خودرو صفر', description: 'تحویل و ثبت پرونده‌های تحویل', icon: <Truck className="w-4 h-4" />, category: 'inventory' },
     { key: 'inventory', label: 'انبار و موجودی', description: 'رهگیری خودروهای موجود در پارکینگ', icon: <Warehouse className="w-4 h-4" />, category: 'inventory' },
     { key: 'announcements', label: 'بخشنامه‌های فروش', description: 'ابلاغیه‌ها و دستورالعمل‌های رسمی', icon: <Bell className="w-4 h-4" />, category: 'system' },
-    { key: 'leave-requests', label: 'درخواست‌های مرخصی', description: 'مرخصی‌های ساعتی و روزانه پرسنل', icon: <Calendar className="w-4 h-4" />, category: 'hr' },
+    { key: 'attendance', label: 'حضور و غیاب، مرخصی و اضافه کار', description: 'تردد، کارکرد، مرخصی‌ها و اضافه کاری پرسنل', icon: <Clock className="w-4 h-4" />, category: 'hr' },
     { key: 'reports', label: 'گزارشات و آمار', description: 'داشبوردهای مدیریتی و عملکردی', icon: <BarChart3 className="w-4 h-4" />, category: 'system' },
     { key: 'settings', label: 'تنظیمات سامانه', description: 'پیکربندی عمومی و دسترسی‌ها', icon: <Settings className="w-4 h-4" />, category: 'system' },
 ];
