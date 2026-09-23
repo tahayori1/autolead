@@ -35,6 +35,7 @@ import {
 import { getUsers } from '../services/api';
 import { CommissionDealModal } from '../components/commission/CommissionDealModal';
 import { CommissionExcelImportModal } from '../components/commission/CommissionExcelImportModal';
+import { CommissionBulkEditModal } from '../components/commission/CommissionBulkEditModal';
 import { CommissionJsonModal } from '../components/commission/CommissionJsonModal';
 import { CommissionSettingsModal } from '../components/commission/CommissionSettingsModal';
 import { CommissionPersonnelReport } from '../components/commission/CommissionPersonnelReport';
@@ -105,13 +106,17 @@ type ActiveSheetTab = 'analytics' | 'summary' | 'ANBAR' | 'AZAD' | 'HAVALEH' | '
 
 const CommissionPage: React.FC = () => {
     // --- States ---
-    const [currentPerspective, setCurrentPerspective] = useState<MainPerspective>('CEO');
-    const [activeTab, setActiveTab] = useState<ActiveSheetTab>('analytics');
+    const [currentPerspective, setCurrentPerspective] = useState<MainPerspective>('OPERATIONS');
+    const [activeTab, setActiveTab] = useState<ActiveSheetTab>('all');
     const [periods, setPeriods] = useState<CommissionPeriod[]>([]);
     const [activePeriodId, setActivePeriodId] = useState<string>('1405-05');
     const [deals, setDeals] = useState<CommissionDeal[]>([]);
     const [yardItems, setYardItems] = useState<CarYardItem[]>([]);
     const [crmUsers, setCrmUsers] = useState<User[]>([]);
+
+    // Bulk selection state
+    const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
+    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
 
     // Currency mode: Rials (Excel raw) or Tomans
     const [currencyUnit, setCurrencyUnit] = useState<'RIAL' | 'TOMAN'>('RIAL');
@@ -465,6 +470,52 @@ const CommissionPage: React.FC = () => {
         if (!confirm('آیا از حذف این ردیف کمیسیون و معامله اطمینان دارید؟')) return;
         const updated = deals.filter(d => d.id !== id);
         handleUpdateDeals(updated);
+        setSelectedDealIds(prev => prev.filter(i => i !== id));
+    };
+
+    // Bulk selection handlers
+    const toggleSelectDeal = (id: string) => {
+        setSelectedDealIds(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedDealIds.length === filteredDeals.length) {
+            setSelectedDealIds([]);
+        } else {
+            setSelectedDealIds(filteredDeals.map(d => d.id));
+        }
+    };
+
+    const handleBulkUpdateDeals = (updatedDeals: CommissionDeal[]) => {
+        const map = new Map(updatedDeals.map(d => [d.id, d]));
+        const updated = deals.map(d => map.get(d.id) || d);
+        handleUpdateDeals(updated);
+        setSelectedDealIds([]);
+    };
+
+    const handleBulkDeleteDeals = (dealIds: string[]) => {
+        const idSet = new Set(dealIds);
+        const updated = deals.filter(d => !idSet.has(d.id));
+        handleUpdateDeals(updated);
+        setSelectedDealIds([]);
+    };
+
+    const handleBulkChangePaymentStatus = (status: CommissionPaymentStatus) => {
+        const idSet = new Set(selectedDealIds);
+        const updated = deals.map(d => {
+            if (idSet.has(d.id)) {
+                return {
+                    ...d,
+                    paymentStatus: status,
+                    paidAt: status === 'PAID' ? new Date().toISOString() : d.paidAt
+                };
+            }
+            return d;
+        });
+        handleUpdateDeals(updated);
+        setSelectedDealIds([]);
     };
 
     // Handle Quick Payment Status Toggle
@@ -718,7 +769,7 @@ const CommissionPage: React.FC = () => {
                     <div>
                         <div className="flex flex-wrap items-center gap-2">
                             <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                                سیستم کمیسیون و ارزیابی تیم فروش
+                                کمسیون و پاداش
                             </h1>
                             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                                 دوره فعال: {activePeriod.title} ({periodDeals.length} معامله)
@@ -729,9 +780,6 @@ const CommissionPage: React.FC = () => {
                                 </span>
                             )}
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            ثبت سریع معاملات، محاسبه خودکار سود ناخالص و پورسانت، رتبه‌بندی مشاوران و صدور اسناد رسمی
-                        </p>
                     </div>
                 </div>
 
@@ -934,10 +982,10 @@ const CommissionPage: React.FC = () => {
                         </span>
 
                         {[
-                            { id: 'CEO', label: '👔 دیدگاه مدیرعامل', desc: 'سودآوری کل و مارجین شرکت' },
+                            { id: 'OPERATIONS', label: '📑 کار دفاتر و ثبت معاملات', desc: 'جداول ۵ گانه اکسل' },
+                            { id: 'STAFF', label: '👤 کارنامه پرسنل و پاداش', desc: 'فیش انفرادی و ریز قراردادها' },
                             { id: 'SALES_MANAGER', label: '📊 دیدگاه مدیر فروش', desc: 'تارگت، لیدربورد و پاداش' },
-                            { id: 'STAFF', label: '👤 کارنامه پرسنل فروش', desc: 'فیش انفرادی و ریز قراردادها' },
-                            { id: 'OPERATIONS', label: '📑 دفاتر و ثبت معاملات', desc: 'جداول ۵ گانه اکسل' },
+                            { id: 'CEO', label: '👔 دیدگاه مدیرعامل', desc: 'سودآوری کل و مارجین شرکت' },
                         ].map(role => (
                             <button
                                 key={role.id}
@@ -1374,12 +1422,67 @@ const CommissionPage: React.FC = () => {
 
                                     </div>
 
+                                    {/* Bulk Action Bar */}
+                                    {selectedDealIds.length > 0 && (
+                                        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in text-xs font-bold text-emerald-900 dark:text-emerald-200 mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-mono text-xs">
+                                                    {selectedDealIds.length}
+                                                </span>
+                                                <span>معامله انتخاب شده</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <button
+                                                    onClick={() => setIsBulkEditModalOpen(true)}
+                                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                                                >
+                                                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                                                    <span>ویرایش گروهی اطلاعات و پورسانت</span>
+                                                </button>
+
+                                                <button
+                                                    onClick={() => handleBulkChangePaymentStatus('PAID')}
+                                                    className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl transition-all"
+                                                >
+                                                    تغییر وضعیت: تسویه شد ✅
+                                                </button>
+
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm(`آیا از حذف ${selectedDealIds.length} معامله انتخاب شده اطمینان دارید؟`)) {
+                                                            handleBulkDeleteDeals(selectedDealIds);
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition-all flex items-center gap-1"
+                                                >
+                                                    حذف گروهی
+                                                </button>
+
+                                                <button
+                                                    onClick={() => setSelectedDealIds([])}
+                                                    className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-300 transition-all"
+                                                >
+                                                    لغو انتخاب
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Data Table */}
                                     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs overflow-hidden">
                                         <div className="overflow-x-auto">
                                             <table className="w-full text-xs text-right border-collapse">
                                                 <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-800">
                                                     <tr>
+                                                        <th className="py-3 px-3 text-center w-10">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={filteredDeals.length > 0 && selectedDealIds.length === filteredDeals.length}
+                                                                onChange={toggleSelectAll}
+                                                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                                                title="انتخاب همه"
+                                                            />
+                                                        </th>
                                                         <th className="py-3 px-3 text-center">ردیف</th>
                                                         <th className="py-3 px-3">تاریخ فروش</th>
                                                         <th className="py-3 px-3.5">نام پرسنل فروش</th>
@@ -1951,6 +2054,14 @@ const CommissionPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Bulk Edit Modal */}
+            <CommissionBulkEditModal
+                isOpen={isBulkEditModalOpen}
+                onClose={() => setIsBulkEditModalOpen(false)}
+                selectedDeals={deals.filter(d => selectedDealIds.includes(d.id))}
+                onSave={handleBulkUpdateDeals}
+            />
 
         </div>
     );

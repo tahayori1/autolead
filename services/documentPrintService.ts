@@ -5,10 +5,10 @@
  * Features:
  *  - Exact visual clone of the on-screen preview (colors, badges, gradients, watermarks, borders)
  *  - Enforces Vazirmatn font with comprehensive Google Fonts preloading & font-face embedding
- *  - Awaits document.fonts.ready to prevent font fallback rasterization in PDFs
- *  - Injects all parent application Tailwind and theme stylesheets into the print iframe
- *  - Standard A4 portrait sizing with precise print-color-adjust for vector PDF export
- *  - Strips all surrounding application shell UI, buttons, sidebars, and modals
+ *  - Clones source element attributes and inner nodes while stripping interactive buttons and shadows
+ *  - Inlines all application stylesheet rules directly to eliminate any external network delays in iframe
+ *  - Off-screen standard A4 viewport dimensions (800x1130px) to guarantee Chromium prints vector content, never blank pages
+ *  - Explicitly ensures visibility: visible !important on all elements inside print scope
  */
 
 export interface PrintOptions {
@@ -29,12 +29,34 @@ function collectParentStyles(): string {
         <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     `);
 
-    // Copy all <link rel="stylesheet"> elements (Tailwind, fontsource, etc.)
+    // Inlining all loaded rules directly from in-memory stylesheets
+    let inlinedRules = '';
+    try {
+        for (let i = 0; i < document.styleSheets.length; i++) {
+            const sheet = document.styleSheets[i];
+            try {
+                if (sheet.cssRules) {
+                    for (let j = 0; j < sheet.cssRules.length; j++) {
+                        inlinedRules += sheet.cssRules[j].cssText + '\n';
+                    }
+                }
+            } catch {
+                // Cross origin or inaccessible stylesheets are ignored here and caught below
+            }
+        }
+    } catch (e) {
+        console.warn('Stylesheet read note:', e);
+    }
+
+    if (inlinedRules.length > 0) {
+        styleChunks.push(`<style id="inlined-app-styles">${inlinedRules}</style>`);
+    }
+
+    // Also include link tags just in case
     document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
         try {
             const href = link.getAttribute('href');
             if (href) {
-                // Ensure absolute URL resolution for iframe
                 const absoluteHref = new URL(href, window.location.href).href;
                 styleChunks.push(`<link rel="stylesheet" href="${absoluteHref}">`);
             }
@@ -43,9 +65,9 @@ function collectParentStyles(): string {
         }
     });
 
-    // Copy all <style> tags (inline Tailwind styles, Vite CSS modules, custom rules)
+    // Also copy custom style tags from host document
     document.querySelectorAll('style').forEach((style) => {
-        if (style.textContent && style.textContent.trim().length > 0) {
+        if (style.id !== 'inlined-app-styles' && style.textContent && style.textContent.trim().length > 0) {
             styleChunks.push(`<style>${style.textContent}</style>`);
         }
     });
@@ -74,14 +96,15 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
 
     const iframe = document.createElement('iframe');
     iframe.id = iframeId;
+    // CRITICAL FIX: Set real dimensions off-screen so Chromium never computes a 0x0 viewport or blank pages!
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    iframe.style.opacity = '0';
-    iframe.style.pointerEvents = 'none';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '0';
+    iframe.style.width = '800px';
+    iframe.style.height = '1130px';
+    iframe.style.border = 'none';
+    iframe.style.opacity = '1';
+    iframe.style.visibility = 'visible';
     iframe.style.zIndex = '-9999';
     document.body.appendChild(iframe);
 
@@ -94,7 +117,27 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
 
     const title = options.title || 'سند رسمی - شرکت حسینی خودرو شیراز';
     const parentStyles = collectParentStyles();
-    const contentHtml = sourceElement.innerHTML;
+
+    // Deep clone source element so we don't mutate the DOM on screen
+    const clonedElement = sourceElement.cloneNode(true) as HTMLElement;
+
+    // Remove buttons, toolbars, and no-print UI elements from the clone
+    clonedElement.querySelectorAll('button, .no-print, input[type="file"]').forEach((el) => el.remove());
+
+    // Normalize styles for official A4 printing (strip screen box-shadows, fixed max-widths, screen overflow)
+    clonedElement.style.maxWidth = '100%';
+    clonedElement.style.width = '100%';
+    clonedElement.style.margin = '0';
+    clonedElement.style.padding = '0';
+    clonedElement.style.border = 'none';
+    clonedElement.style.boxShadow = 'none';
+    clonedElement.style.borderRadius = '0';
+    clonedElement.style.visibility = 'visible';
+    clonedElement.style.backgroundColor = '#ffffff';
+    clonedElement.style.color = '#0f172a';
+    clonedElement.style.overflow = 'visible';
+
+    const contentHtml = clonedElement.outerHTML;
 
     // Build the complete standalone HTML document for the iframe
     iframeDoc.open();
@@ -131,18 +174,26 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
                     background-color: #ffffff !important;
                     color: #0f172a !important;
                     direction: rtl !important;
-                    font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+                    font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
                     font-feature-settings: "jnum", "tnum";
                     text-rendering: optimizeLegibility;
                     width: 100% !important;
+                    height: auto !important;
                     min-height: auto !important;
+                    visibility: visible !important;
+                    overflow: visible !important;
+                }
+
+                /* Enforce visibility on all document elements inside iframe */
+                body, body * {
+                    visibility: visible !important;
                 }
 
                 /* Enforce Vazirmatn on all text elements */
                 body, h1, h2, h3, h4, h5, h6, p, span, div, strong, b, td, th {
-                    font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+                    font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
                 }
 
                 /* Remove on-screen mock card wrapper artifacts (rounded borders, drop-shadows) */
@@ -159,6 +210,7 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
                     min-height: auto !important;
                     background: #ffffff !important;
                     overflow: visible !important;
+                    visibility: visible !important;
                 }
 
                 /* Explicitly protect badge colors and highlighted sections from being washed out */
@@ -202,7 +254,7 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
                     color: #475569 !important;
                 }
                 .text-slate-500 {
-                    color: #64748B !important;
+                    color: #64748b !important;
                 }
 
                 /* Hide all non-printable elements */
@@ -218,7 +270,8 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
                 /* Prevent awkward page-splitting inside cards and signature boxes */
                 .avoid-break,
                 .signature-box,
-                .contract-clause {
+                .contract-clause,
+                tr {
                     page-break-inside: avoid !important;
                     break-inside: avoid !important;
                 }
@@ -230,9 +283,7 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
             </style>
         </head>
         <body>
-            <div class="print-paper-root relative">
-                ${contentHtml}
-            </div>
+            ${contentHtml}
         </body>
         </html>
     `);
@@ -247,12 +298,23 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
         console.warn('Font loading wait warning:', fontErr);
     }
 
+    try {
+        if (document.fonts) {
+            await document.fonts.ready;
+        }
+    } catch {}
+
     // Safety settle delay to allow images, SVGs, and stylesheets to render
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
+        const win = iframe.contentWindow;
+        if (win) {
+            win.focus();
+            win.print();
+        } else {
+            window.print();
+        }
     } catch (e) {
         console.error('Error triggering iframe print:', e);
         window.print();
@@ -262,6 +324,6 @@ export async function printDocumentElement(elementId: string, options: PrintOpti
             if (iframe && iframe.parentNode) {
                 iframe.parentNode.removeChild(iframe);
             }
-        }, 5000);
+        }, 10000);
     }
 }

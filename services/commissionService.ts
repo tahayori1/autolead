@@ -8,7 +8,19 @@ export const DEFAULT_COMMISSION_SETTINGS: CommissionSettings = {
     havalehRate: 0.05, // 0.05% از نرخ فروش
     leasingRate: 0.1, // 0.1% از پیش‌پرداخت
     registrationRate: 0.1, // 0.1% از پیش‌پرداخت
-    lossPenaltyRate: 0.25 // 0.25% از نرخ فروش در صورت منفی شدن سود/زیان روز
+    lossPenaltyRate: 0.25, // 0.25% از نرخ فروش در صورت منفی شدن سود/زیان روز
+
+    // حالت‌های پورسانت با عدد ثابت (Fixed Amount)
+    anbarCalcType: 'PERCENT',
+    anbarFixedAmount: 0,
+    azadCalcType: 'PERCENT',
+    azadFixedAmount: 0,
+    havalehCalcType: 'PERCENT',
+    havalehFixedAmount: 0,
+    leasingCalcType: 'PERCENT',
+    leasingFixedAmount: 0,
+    registrationCalcType: 'PERCENT',
+    registrationFixedAmount: 0
 };
 
 export const INITIAL_COMMISSION_PERIODS: CommissionPeriod[] = [];
@@ -580,7 +592,10 @@ export function calculateCommissionForCategory(
         case 'ANBAR': {
             dailyProfitLoss = dailyPrice > 0 ? (salePrice - dailyPrice) : 0;
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
-            if (dailyProfitLoss < 0) {
+            if (settings.anbarCalcType === 'FIXED' && (settings.anbarFixedAmount ?? 0) > 0) {
+                effectiveRate = 0;
+                commissionAmount = Math.round(settings.anbarFixedAmount!);
+            } else if (dailyProfitLoss < 0) {
                 // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه درصد جریمه زیان روز (پیش‌فرض ۰.۲۵٪)
                 isLossPenalty = true;
                 effectiveRate = settings.lossPenaltyRate;
@@ -596,7 +611,10 @@ export function calculateCommissionForCategory(
             // در معاملات فروش آزاد، سوددهی بر اساس اختلاف بین نرخ فروش نهایی و نرخ خرید است
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : (dailyPrice > 0 ? salePrice - dailyPrice : 0);
             dailyProfitLoss = grossProfit; // سوددهی فروش آزاد بر پایه اختلاف نرخ فروش و خرید
-            if (grossProfit > 0) {
+            if (settings.azadCalcType === 'FIXED' && (settings.azadFixedAmount ?? 0) > 0) {
+                effectiveRate = 0;
+                commissionAmount = Math.round(settings.azadFixedAmount!);
+            } else if (grossProfit > 0) {
                 // در صورت سوددهی: ۱۰٪ سود کمیسیون (یا درصد تنظیم‌شده برای فروش آزاد)
                 effectiveRate = settings.azadRate;
                 commissionAmount = Math.round(grossProfit * (settings.azadRate / 100));
@@ -615,7 +633,10 @@ export function calculateCommissionForCategory(
         case 'HAVALEH': {
             dailyProfitLoss = nextBasketAmount > 0 ? (salePrice - nextBasketAmount) : (salePrice - dailyPrice);
             grossProfit = purchasePrice > 0 ? (salePrice - purchasePrice) : 0;
-            if (dailyProfitLoss < 0) {
+            if (settings.havalehCalcType === 'FIXED' && (settings.havalehFixedAmount ?? 0) > 0) {
+                effectiveRate = 0;
+                commissionAmount = Math.round(settings.havalehFixedAmount!);
+            } else if (dailyProfitLoss < 0) {
                 // وقتی سود و زیان روز منفی می‌شود: فرمول محاسبه درصد زیان روز
                 isLossPenalty = true;
                 effectiveRate = settings.lossPenaltyRate;
@@ -630,18 +651,28 @@ export function calculateCommissionForCategory(
         case 'LEASING': {
             grossProfit = 0;
             dailyProfitLoss = 0;
-            effectiveRate = settings.leasingRate;
-            commissionAmount = Math.round(downPayment * (settings.leasingRate / 100));
+            if (settings.leasingCalcType === 'FIXED' && (settings.leasingFixedAmount ?? 0) > 0) {
+                effectiveRate = 0;
+                commissionAmount = Math.round(settings.leasingFixedAmount!);
+            } else {
+                effectiveRate = settings.leasingRate;
+                commissionAmount = Math.round(downPayment * (settings.leasingRate / 100));
+            }
             break;
         }
 
         case 'REGISTRATION': {
             grossProfit = 0;
             dailyProfitLoss = 0;
-            effectiveRate = settings.registrationRate;
-            commissionAmount = downPayment > 0 
-                ? Math.round(downPayment * (settings.registrationRate / 100)) 
-                : 4510000;
+            if (settings.registrationCalcType === 'FIXED' && (settings.registrationFixedAmount ?? 0) > 0) {
+                effectiveRate = 0;
+                commissionAmount = Math.round(settings.registrationFixedAmount!);
+            } else {
+                effectiveRate = settings.registrationRate;
+                commissionAmount = downPayment > 0 
+                    ? Math.round(downPayment * (settings.registrationRate / 100)) 
+                    : 4510000;
+            }
             break;
         }
 

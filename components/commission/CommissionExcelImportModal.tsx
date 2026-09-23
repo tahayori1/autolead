@@ -8,6 +8,7 @@ import {
     CheckCircle, 
     AlertTriangle, 
     ArrowRight, 
+    ArrowLeft,
     Layers, 
     Table, 
     Building2, 
@@ -22,7 +23,10 @@ import {
     Database,
     Calendar,
     Plus,
-    Info
+    Info,
+    SlidersHorizontal,
+    Eye,
+    Check
 } from 'lucide-react';
 
 interface CommissionExcelImportModalProps {
@@ -32,6 +36,39 @@ interface CommissionExcelImportModalProps {
     periods: CommissionPeriod[];
     activePeriodId: string;
     onAddNewPeriod?: (title: string) => string; // returns new period id
+}
+
+interface SheetColumn {
+    index: number;
+    label: string; // e.g. "ستون A: نام پرسنل"
+    headerText: string;
+    sampleValues: string[];
+}
+
+interface FieldMappingConfig {
+    salesPersonCol: number;
+    customerNameCol: number;
+    sellerNameCol: number;
+    carModelCol: number;
+    salePriceCol: number;
+    purchasePriceCol: number;
+    dailyPriceCol: number;
+    saleDateCol: number;
+    purchaseDateCol: number;
+    commissionAmountCol: number;
+    dailyProfitLossCol: number;
+    grossProfitCol: number;
+    paymentNotesCol: number;
+    nextBasketAmountCol: number;
+    headerRowIndex: number;
+}
+
+interface RawSheetData {
+    sheetName: string;
+    category: CommissionCategory;
+    rawRows: any[][];
+    columns: SheetColumn[];
+    mapping: FieldMappingConfig;
 }
 
 interface DetectedSheet {
@@ -68,11 +105,12 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
     // File & Parse States
     const [fileName, setFileName] = useState<string>('');
     const [fileSize, setFileSize] = useState<string>('');
+    const [rawSheets, setRawSheets] = useState<RawSheetData[]>([]);
     const [detectedSheets, setDetectedSheets] = useState<DetectedSheet[]>([]);
     const [activePreviewSheetIndex, setActivePreviewSheetIndex] = useState<number>(0);
     const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
     const [parseError, setParseError] = useState<string | null>(null);
-    const [step, setStep] = useState<'upload' | 'review'>('upload');
+    const [step, setStep] = useState<'upload' | 'mapping' | 'review'>('upload');
     const [isDragging, setIsDragging] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -123,12 +161,11 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
         return isNaN(num) ? 0 : num;
     };
 
-    // Parse dates (supports Excel serial numbers, formatted strings, etc.)
+    // Parse dates
     const parseExcelDate = (val: any, defaultMonthPrefix: string): string => {
         if (!val) return `${defaultMonthPrefix}/01`;
         
         if (typeof val === 'number' && val > 30000 && val < 60000) {
-            // Excel serial date number
             const date = new Date((val - (25567 + 2)) * 86400 * 1000);
             if (!isNaN(date.getTime())) {
                 const y = date.getFullYear();
@@ -157,31 +194,214 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
         return 'ANBAR';
     };
 
-    // Process Workbook using SheetJS
-    const processExcelWorkbook = (workbook: XLSX.WorkBook) => {
-        const sheetsResult: DetectedSheet[] = [];
+    // Helper to get Excel column letter (0 -> A, 1 -> B, ...)
+    const getColLetter = (index: number) => {
+        let letter = '';
+        let temp = index;
+        while (temp >= 0) {
+            letter = String.fromCharCode((temp % 26) + 65) + letter;
+            temp = Math.floor(temp / 26) - 1;
+        }
+        return letter;
+    };
+
+    // Auto-detect best column for keywords
+    const detectBestColumn = (columns: SheetColumn[], keywords: string[], defaultFallbackIdx: number = -1): number => {
+        for (const kw of keywords) {
+            const exact = columns.find(c => c.headerText.toLowerCase().includes(kw.toLowerCase()));
+            if (exact) return exact.index;
+        }
+        return defaultFallbackIdx >= 0 && defaultFallbackIdx < columns.length ? defaultFallbackIdx : -1;
+    };
+
+    // Build default mapping for a sheet
+    const createInitialMapping = (columns: SheetColumn[], headerRowIndex: number): FieldMappingConfig => {
+        return {
+            headerRowIndex,
+            salesPersonCol: detectBestColumn(columns, ['پرسنل', 'مشاور', 'کارشناس', 'فروشنده', 'مسئول'], 3),
+            customerNameCol: detectBestColumn(columns, ['مشتری', 'خریدار', 'متقاضی', 'طرف حساب'], 4),
+            sellerNameCol: detectBestColumn(columns, ['فروشنده', 'مالک', 'صاحب'], 14),
+            carModelCol: detectBestColumn(columns, ['خودرو', 'مدل', 'تیپ', 'اتومبیل'], 5),
+            salePriceCol: detectBestColumn(columns, ['نرخ فروش', 'مبلغ فروش', 'قیمت فروش', 'پیش پرداخت', 'فروش'], 8),
+            purchasePriceCol: detectBestColumn(columns, ['نرخ خرید', 'قیمت خرید', 'مبلغ خرید'], 6),
+            dailyPriceCol: detectBestColumn(columns, ['قیمت روز', 'نرخ روز', 'ارزش روز'], 7),
+            saleDateCol: detectBestColumn(columns, ['تاریخ فروش', 'تاریخ معامله', 'تاریخ'], 2),
+            purchaseDateCol: detectBestColumn(columns, ['تاریخ خرید', 'خرید تاریخ'], 1),
+            commissionAmountCol: detectBestColumn(columns, ['پورسانت', 'مبلغ پورسانت', 'کمیسیون مشاور'], 11),
+            dailyProfitLossCol: detectBestColumn(columns, ['سود یا زیان روز', 'سود روز', 'زیان روز', 'سود یا زیان'], 9),
+            grossProfitCol: detectBestColumn(columns, ['سود ناخالص', 'کمیسیون کل', 'کمیسیون آزاد', 'مارجین'], 10),
+            paymentNotesCol: detectBestColumn(columns, ['توضیحات واریز', 'وضعیت واریز', 'توضیحات', 'وضعیت'], 13),
+            nextBasketAmountCol: detectBestColumn(columns, ['سبد بعدی', 'مبلغ سبد', 'سبد'], -1)
+        };
+    };
+
+    // Parse deals from raw rows given mapping
+    const parseDealsFromRawData = (
+        rawRows: any[][], 
+        mapping: FieldMappingConfig, 
+        category: CommissionCategory, 
+        sheetName: string
+    ): CommissionDeal[] => {
         const monthNum = selectedTargetPeriodId.includes('-') ? selectedTargetPeriodId.split('-')[1] : '05';
         const defaultDatePrefix = `1405/${monthNum}`;
+        const deals: CommissionDeal[] = [];
+        const startRow = Math.max(0, mapping.headerRowIndex + 1);
+
+        for (let r = startRow; r < rawRows.length; r++) {
+            const row = rawRows[r];
+            if (!row || !Array.isArray(row)) continue;
+
+            const firstColStr = String(row[0] || '').trim();
+            const allRowStr = row.map(c => String(c || '')).join(' ');
+            if (
+                firstColStr.includes('جمع') || 
+                firstColStr.includes('کل') || 
+                allRowStr.includes('جمع کل') ||
+                allRowStr.includes('مجموع')
+            ) {
+                continue;
+            }
+
+            const getCell = (colIdx: number) => {
+                if (colIdx < 0 || colIdx === undefined || colIdx === null) return '';
+                return row[colIdx] !== undefined && row[colIdx] !== null ? row[colIdx] : '';
+            };
+
+            const salesPersonRaw = String(getCell(mapping.salesPersonCol) || '').trim();
+            const customerName = String(getCell(mapping.customerNameCol) || '').trim();
+            const sellerName = String(getCell(mapping.sellerNameCol) || '').trim();
+            const carModel = String(getCell(mapping.carModelCol) || '').trim();
+
+            const salePrice = cleanNumber(getCell(mapping.salePriceCol));
+            const purchasePrice = cleanNumber(getCell(mapping.purchasePriceCol));
+            const dailyPrice = cleanNumber(getCell(mapping.dailyPriceCol));
+            const nextBasketAmount = cleanNumber(getCell(mapping.nextBasketAmountCol));
+
+            if (!salesPersonRaw && !customerName && !carModel && salePrice === 0) {
+                continue;
+            }
+
+            let salesPerson = salesPersonRaw || 'تیم فروش عمومی';
+            let contractWriter = '';
+            let sharedPersons: string[] = [];
+
+            if (salesPersonRaw.includes('/')) {
+                const parts = salesPersonRaw.split('/').map(p => p.trim());
+                salesPerson = parts[0].replace('قولنامه', '').trim();
+                if (parts[1]) {
+                    contractWriter = parts[1].replace('قولنامه', '').trim();
+                    sharedPersons = [salesPerson, contractWriter].filter(Boolean);
+                }
+            } else if (salesPersonRaw.includes(' و ')) {
+                const parts = salesPersonRaw.split(' و ').map(p => p.trim());
+                if (parts.length > 1) {
+                    sharedPersons = parts;
+                    salesPerson = parts.join(' و ');
+                }
+            }
+
+            const purchaseDate = parseExcelDate(getCell(mapping.purchaseDateCol), defaultDatePrefix);
+            const saleDate = parseExcelDate(getCell(mapping.saleDateCol), defaultDatePrefix);
+
+            let dailyProfitLoss = cleanNumber(getCell(mapping.dailyProfitLossCol));
+            if (dailyProfitLoss === 0 && salePrice > 0 && dailyPrice > 0) {
+                dailyProfitLoss = salePrice - dailyPrice;
+            }
+
+            const grossProfit = cleanNumber(getCell(mapping.grossProfitCol)) || 
+                (salePrice > 0 && purchasePrice > 0 ? (salePrice - purchasePrice) : 0);
+
+            let commissionRate = category === 'ANBAR' ? 0.05 : (category === 'AZAD' ? 10 : (category === 'LEASING' ? 0.1 : 0.05));
+            if (dailyProfitLoss < 0) {
+                commissionRate = 0.25;
+            }
+
+            let commissionAmount = cleanNumber(getCell(mapping.commissionAmountCol));
+            if (commissionAmount === 0) {
+                if (dailyProfitLoss < 0) {
+                    commissionAmount = Math.round(salePrice * 0.0025);
+                } else if (category === 'AZAD') {
+                    commissionAmount = Math.round(grossProfit * (commissionRate / 100));
+                } else {
+                    commissionAmount = Math.round(salePrice * (commissionRate / 100));
+                }
+            }
+
+            const notesVal = String(getCell(mapping.paymentNotesCol) || '').trim();
+            let paymentStatus: CommissionPaymentStatus = 'PENDING';
+            if (notesVal.includes('واریز شد') || notesVal.includes('تسویه') || notesVal.includes('پرداخت شد')) {
+                paymentStatus = 'PAID';
+            }
+
+            deals.push({
+                id: `xlsx-${sheetName}-${Date.now()}-${r}-${Math.random().toString(36).substr(2, 5)}`,
+                category,
+                rowNumber: deals.length + 1,
+                periodId: selectedTargetPeriodId,
+                periodName: targetPeriod.title,
+                purchaseDate: purchaseDate || undefined,
+                saleDate,
+                salesPerson,
+                contractWriter: contractWriter || undefined,
+                sharedPersons: sharedPersons.length > 0 ? sharedPersons : undefined,
+                customerName: customerName || 'مشتری بدون نام',
+                sellerName: sellerName || undefined,
+                carModel: carModel || 'خودرو متفرقه',
+                purchasePrice: purchasePrice || undefined,
+                dailyPrice: dailyPrice || undefined,
+                salePrice: salePrice || 0,
+                downPayment: category === 'LEASING' || category === 'REGISTRATION' ? salePrice : undefined,
+                nextBasketAmount: nextBasketAmount || undefined,
+                dailyProfitLoss: dailyProfitLoss || undefined,
+                grossProfit: grossProfit || undefined,
+                commissionRate,
+                commissionAmount,
+                paymentStatus,
+                paymentNotes: notesVal || undefined
+            });
+        }
+
+        return deals;
+    };
+
+    // Recompute detected sheets from rawSheets
+    const refreshDetectedSheets = (sheets: RawSheetData[]) => {
+        const computed: DetectedSheet[] = sheets.map(s => {
+            const deals = parseDealsFromRawData(s.rawRows, s.mapping, s.category, s.sheetName);
+            const totalSales = deals.reduce((sum, d) => sum + (d.salePrice || 0), 0);
+            const totalCommission = deals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
+
+            return {
+                sheetName: s.sheetName,
+                category: s.category,
+                deals,
+                selected: deals.length > 0,
+                totalSales,
+                totalCommission,
+                rawRowCount: s.rawRows.length
+            };
+        });
+
+        setDetectedSheets(computed);
+    };
+
+    // Process Workbook using SheetJS
+    const processExcelWorkbook = (workbook: XLSX.WorkBook) => {
+        const rawSheetsList: RawSheetData[] = [];
 
         workbook.SheetNames.forEach((sheetName) => {
             const worksheet = workbook.Sheets[sheetName];
             if (!worksheet) return;
 
-            // Convert worksheet to 2D array of rows
             const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false });
             if (!rows || rows.length === 0) return;
 
-            // 1. Detect Header Row across first 25 rows
-            let headerRowIndex = -1;
-            const headerMap: Record<string, number> = {};
-
+            // Detect header row index
+            let headerRowIndex = 0;
             for (let r = 0; r < Math.min(rows.length, 25); r++) {
                 const row = rows[r];
                 if (!Array.isArray(row)) continue;
-
                 const rowStr = row.map(c => toAsciiDigits(c || '').trim()).join(' ');
-                
-                // Match common Persian column header keywords
                 if (
                     rowStr.includes('پرسنل') || 
                     rowStr.includes('خودرو') || 
@@ -193,317 +413,138 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                     rowStr.includes('ردیف')
                 ) {
                     headerRowIndex = r;
-                    row.forEach((colName, colIdx) => {
-                        const cName = String(colName || '').trim();
-                        if (cName) {
-                            headerMap[cName] = colIdx;
-                        }
-                    });
                     break;
                 }
             }
 
+            const headerRow = rows[headerRowIndex] || [];
+            const maxCols = Math.max(...rows.slice(0, 10).map(r => (Array.isArray(r) ? r.length : 0)), 1);
+
+            const columns: SheetColumn[] = [];
+            for (let c = 0; c < maxCols; c++) {
+                const hText = String(headerRow[c] || '').trim();
+                const letter = getColLetter(c);
+                const sampleVals: string[] = [];
+                for (let r = headerRowIndex + 1; r < Math.min(rows.length, headerRowIndex + 4); r++) {
+                    const v = rows[r]?.[c];
+                    if (v !== undefined && v !== '') {
+                        sampleVals.push(String(v).trim());
+                    }
+                }
+
+                columns.push({
+                    index: c,
+                    headerText: hText || `(ستون ${letter})`,
+                    label: `ستون ${letter}: ${hText ? hText : 'بدون عنوان'}`,
+                    sampleValues: sampleVals
+                });
+            }
+
             const category = guessCategoryFromSheetName(sheetName);
-            const deals: CommissionDeal[] = [];
-            const startRow = headerRowIndex >= 0 ? headerRowIndex + 1 : 0;
+            const mapping = createInitialMapping(columns, headerRowIndex);
 
-            for (let r = startRow; r < rows.length; r++) {
-                const row = rows[r];
-                if (!row || !Array.isArray(row)) continue;
-
-                // Skip summary/footer rows
-                const firstColStr = String(row[0] || '').trim();
-                const allRowStr = row.map(c => String(c || '')).join(' ');
-                if (
-                    firstColStr.includes('جمع') || 
-                    firstColStr.includes('کل') || 
-                    allRowStr.includes('جمع کل') ||
-                    allRowStr.includes('مجموع')
-                ) {
-                    continue;
-                }
-
-                // Value extractor with keywords and fallback index
-                const getVal = (possibleHeaders: string[], fallbackIdx: number): any => {
-                    for (const h of possibleHeaders) {
-                        for (const key of Object.keys(headerMap)) {
-                            if (key.includes(h)) {
-                                const val = row[headerMap[key]];
-                                if (val !== undefined && val !== '') return val;
-                            }
-                        }
-                    }
-                    return row[fallbackIdx] !== undefined ? row[fallbackIdx] : '';
-                };
-
-                const salesPersonRaw = String(getVal(['پرسنل', 'کارشناس', 'فروشنده', 'مشاور', 'مسئول'], 3) || '').trim();
-                const customerName = String(getVal(['مشتری', 'خریدار', 'متقاضی', 'طرف حساب'], 4) || '').trim();
-                const carModel = String(getVal(['خودرو', 'مدل', 'تیپ', 'اتومبیل'], 5) || '').trim();
-                const sellerName = String(getVal(['فروشنده', 'مالک', 'صاحب'], 14) || '').trim();
-
-                const purchasePrice = cleanNumber(getVal(['نرخ خرید', 'قیمت خرید', 'مبلغ خرید'], 6));
-                const dailyPrice = cleanNumber(getVal(['قیمت روز', 'نرخ روز', 'ارزش روز'], 7));
-                const salePrice = cleanNumber(getVal(['نرخ فروش', 'مبلغ فروش', 'قیمت فروش', 'پیش پرداخت', 'فروش'], 8));
-
-                // If row has no personnel, customer, car model, or price, skip empty row
-                if (!salesPersonRaw && !customerName && !carModel && salePrice === 0) {
-                    continue;
-                }
-
-                // Parse shared sales personnel
-                let salesPerson = salesPersonRaw || 'تیم فروش عمومی';
-                let contractWriter = '';
-                let sharedPersons: string[] = [];
-
-                if (salesPersonRaw.includes('/')) {
-                    const parts = salesPersonRaw.split('/').map(p => p.trim());
-                    salesPerson = parts[0].replace('قولنامه', '').trim();
-                    if (parts[1]) {
-                        contractWriter = parts[1].replace('قولنامه', '').trim();
-                        sharedPersons = [salesPerson, contractWriter].filter(Boolean);
-                    }
-                } else if (salesPersonRaw.includes(' و ')) {
-                    const parts = salesPersonRaw.split(' و ').map(p => p.trim());
-                    if (parts.length > 1) {
-                        sharedPersons = parts;
-                        salesPerson = parts.join(' و ');
-                    }
-                }
-
-                const purchaseDate = parseExcelDate(getVal(['تاریخ خرید', 'خرید تاریخ'], 1), defaultDatePrefix);
-                const saleDate = parseExcelDate(getVal(['تاریخ فروش', 'تاریخ معامله', 'تاریخ'], 2), defaultDatePrefix);
-
-                // Daily Profit/Loss
-                let dailyProfitLoss = cleanNumber(getVal(['سود یا زیان روز', 'سود روز', 'زیان روز', 'سود یا زیان'], 9));
-                if (dailyProfitLoss === 0 && salePrice > 0 && dailyPrice > 0) {
-                    dailyProfitLoss = salePrice - dailyPrice;
-                }
-
-                // Gross Profit
-                const grossProfit = cleanNumber(getVal(['سود ناخالص', 'کمیسیون کل', 'کمیسیون آزاد', 'مارجین'], 10)) || 
-                    (salePrice > 0 && purchasePrice > 0 ? (salePrice - purchasePrice) : 0);
-
-                // Commission Rate & Amount
-                let commissionRate = category === 'ANBAR' ? 0.05 : (category === 'AZAD' ? 10 : (category === 'LEASING' ? 0.1 : 0.05));
-                if (dailyProfitLoss < 0) {
-                    // در صورت منفی بودن سود و زیان روز، ضریب ۰.۲۵٪ نرخ فروش است
-                    commissionRate = 0.25;
-                }
-
-                const rateFromCell = getVal(['درصد پورسانت', 'درصد کمیسیون', 'درصد'], 10);
-                if (rateFromCell) {
-                    const parsedRate = cleanNumber(rateFromCell);
-                    if (parsedRate > 0) {
-                        commissionRate = parsedRate > 1 && category !== 'AZAD' ? parsedRate / 100 : parsedRate;
-                    }
-                }
-
-                // Commission Amount
-                let commissionAmount = cleanNumber(getVal(['پورسانت', 'کمیسیون', 'مبلغ پورسانت'], 11));
-                if (commissionAmount === 0) {
-                    if (dailyProfitLoss < 0) {
-                        // فرمول زیان روز: ۰.۲۵ درصد نرخ فروش
-                        commissionAmount = Math.round(salePrice * 0.0025);
-                    } else if (category === 'AZAD') {
-                        commissionAmount = Math.round(grossProfit * (commissionRate / 100));
-                    } else {
-                        commissionAmount = Math.round(salePrice * (commissionRate / 100));
-                    }
-                }
-
-                // Paid Share & Payment Notes
-                const paidVal = getVal(['سهم پورسانت', 'پرداختی', 'واریز', 'مبلغ پرداختی'], 12);
-                const notesVal = String(getVal(['توضیحات واریز', 'وضعیت واریز', 'توضیحات', 'وضعیت'], 13) || '').trim();
-
-                let paidCommissionShare: number | undefined = undefined;
-                let paymentNotes = notesVal;
-
-                if (paidVal !== undefined && paidVal !== '') {
-                    const numShare = cleanNumber(paidVal);
-                    if (numShare > 0) {
-                        paidCommissionShare = numShare;
-                    } else if (String(paidVal).trim().length > 2 && String(paidVal).trim() !== '-') {
-                        paymentNotes = paymentNotes ? `${paymentNotes} | ${String(paidVal).trim()}` : String(paidVal).trim();
-                    }
-                }
-
-                let paymentStatus: CommissionPaymentStatus = 'PENDING';
-                if (paymentNotes.includes('واریز شد') || paymentNotes.includes('تسویه') || paymentNotes.includes('پرداخت شد')) {
-                    paymentStatus = 'PAID';
-                } else if (paidCommissionShare && paidCommissionShare < commissionAmount && paidCommissionShare > 0) {
-                    paymentStatus = 'PARTIAL';
-                }
-
-                deals.push({
-                    id: `xlsx-${sheetName}-${Date.now()}-${r}-${Math.random().toString(36).substr(2, 5)}`,
-                    category,
-                    rowNumber: deals.length + 1,
-                    periodId: selectedTargetPeriodId,
-                    periodName: targetPeriod.title,
-                    purchaseDate: purchaseDate || undefined,
-                    saleDate,
-                    salesPerson,
-                    contractWriter: contractWriter || undefined,
-                    sharedPersons: sharedPersons.length > 0 ? sharedPersons : undefined,
-                    customerName: customerName || 'مشتری بدون نام',
-                    sellerName: sellerName || undefined,
-                    carModel: carModel || 'خودرو متفرقه',
-                    purchasePrice,
-                    dailyPrice,
-                    salePrice,
-                    dailyProfitLoss,
-                    grossProfit,
-                    commissionRate,
-                    commissionAmount,
-                    paidCommissionShare: paidCommissionShare ?? (paymentStatus === 'PAID' ? commissionAmount : 0),
-                    paymentStatus,
-                    paymentNotes: paymentNotes || undefined,
-                    createdAt: new Date().toISOString()
-                });
-            }
-
-            if (deals.length > 0) {
-                const totalSales = deals.reduce((sum, d) => sum + (d.salePrice || 0), 0);
-                const totalCommission = deals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
-
-                sheetsResult.push({
-                    sheetName,
-                    category,
-                    deals,
-                    selected: true,
-                    totalSales,
-                    totalCommission,
-                    rawRowCount: rows.length
-                });
-            }
+            rawSheetsList.push({
+                sheetName,
+                category,
+                rawRows: rows,
+                columns,
+                mapping
+            });
         });
 
-        if (sheetsResult.length === 0) {
-            setParseError('هیچ ردیف معامله معتبری در فایل اکسل شناسایی نشد. لطفاً ساختار ستون‌های فایل را بررسی کنید.');
+        if (rawSheetsList.length === 0) {
+            setParseError('هیچ داده‌ای در فایل اکسل یافت نشد.');
             setIsProcessing(false);
             return;
         }
 
-        setDetectedSheets(sheetsResult);
+        setRawSheets(rawSheetsList);
+        refreshDetectedSheets(rawSheetsList);
         setActivePreviewSheetIndex(0);
-        setStep('review');
+        setStep('mapping'); // Go to Mapping step!
         setIsProcessing(false);
     };
 
-    // Handle File Drop or Upload
-    const handleFileChange = (file: File) => {
-        setParseError(null);
-        setIsProcessing(true);
+    // Handle File upload
+    const handleFileUpload = (file: File) => {
+        if (!file) return;
+
         setFileName(file.name);
         setFileSize((file.size / 1024).toFixed(1) + ' KB');
+        setParseError(null);
+        setIsProcessing(true);
 
         const reader = new FileReader();
-
-        if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
-            reader.onload = (e) => {
-                try {
-                    const text = e.target?.result as string;
-                    const workbook = XLSX.read(text, { type: 'string' });
-                    processExcelWorkbook(workbook);
-                } catch (err: any) {
-                    setParseError('خطا در خواندن فایل CSV: ' + (err.message || ''));
-                    setIsProcessing(false);
-                }
-            };
-            reader.readAsText(file, 'UTF-8');
-        } else {
-            // Binary xlsx / xls
-            reader.onload = (e) => {
-                try {
-                    const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                    processExcelWorkbook(workbook);
-                } catch (err: any) {
-                    setParseError('خطا در پردازش فایل اکسل (XLSX): ' + (err.message || 'قالب نامعتبر است.'));
-                    setIsProcessing(false);
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                processExcelWorkbook(workbook);
+            } catch (err: any) {
+                console.error('Excel parse error:', err);
+                setParseError('خطا در خواندن فایل اکسل: ' + (err.message || 'فرمت نامعتبر'));
+                setIsProcessing(false);
+            }
+        };
+        reader.onerror = () => {
+            setParseError('خطا در بارگذاری فایل');
+            setIsProcessing(false);
+        };
+        reader.readAsArrayBuffer(file);
     };
 
-    // Inline Period Creation Handler
-    const handleCreateInlinePeriod = (e: React.FormEvent) => {
+    const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
-        if (!inlinePeriodTitle.trim()) return;
-
-        if (onAddNewPeriod) {
-            const newId = onAddNewPeriod(inlinePeriodTitle.trim());
-            setSelectedTargetPeriodId(newId);
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileUpload(e.dataTransfer.files[0]);
         }
-        setIsCreatingInlinePeriod(false);
-        setInlinePeriodTitle('');
     };
 
-    // Toggle Sheet selection
-    const handleToggleSheet = (index: number) => {
-        setDetectedSheets(prev => prev.map((s, idx) => idx === index ? { ...s, selected: !s.selected } : s));
+    // Update mapping field for active sheet
+    const handleUpdateActiveSheetMapping = (field: keyof FieldMappingConfig, colIndex: number) => {
+        const updated = [...rawSheets];
+        const currentSheet = updated[activePreviewSheetIndex];
+        if (!currentSheet) return;
+
+        currentSheet.mapping = {
+            ...currentSheet.mapping,
+            [field]: colIndex
+        };
+
+        setRawSheets(updated);
+        refreshDetectedSheets(updated);
     };
 
-    // Select/Deselect All Sheets
-    const handleSelectAllSheets = (selected: boolean) => {
-        setDetectedSheets(prev => prev.map(s => ({ ...s, selected })));
+    // Reset mapping for current sheet to auto-detection
+    const handleResetAutoMapping = () => {
+        const updated = [...rawSheets];
+        const currentSheet = updated[activePreviewSheetIndex];
+        if (!currentSheet) return;
+
+        currentSheet.mapping = createInitialMapping(currentSheet.columns, currentSheet.mapping.headerRowIndex);
+        setRawSheets(updated);
+        refreshDetectedSheets(updated);
     };
 
-    // Change category of a sheet
-    const handleChangeSheetCategory = (index: number, newCat: CommissionCategory) => {
-        setDetectedSheets(prev => prev.map((s, idx) => {
-            if (idx === index) {
-                const updatedDeals = s.deals.map(d => ({ ...d, category: newCat }));
-                return { ...s, category: newCat, deals: updatedDeals };
-            }
-            return s;
-        }));
-    };
-
-    // Toggle single deal
-    const handleToggleDeal = (dealId: string) => {
-        setDetectedSheets(prev => prev.map((s, idx) => {
-            if (idx === activePreviewSheetIndex) {
-                return {
-                    ...s,
-                    deals: s.deals.filter(d => d.id !== dealId)
-                };
-            }
-            return s;
-        }));
-    };
-
-    // Final Confirmation
-    const handleConfirmFinalImport = () => {
+    // Execute Import
+    const handleConfirmImport = () => {
         let finalPeriodId = selectedTargetPeriodId;
-        let finalPeriodTitle = targetPeriod.title;
-
-        if (!finalPeriodId || periods.length === 0) {
-            if (onAddNewPeriod) {
-                finalPeriodId = onAddNewPeriod('دوره مالی ۱');
-                finalPeriodTitle = 'دوره مالی ۱';
-            } else {
-                alert('لطفاً ابتدا یک دوره مالی برای ثبت معاملات انتخاب یا ایجاد فرمایید.');
-                return;
-            }
+        if (isCreatingInlinePeriod && inlinePeriodTitle.trim() && onAddNewPeriod) {
+            finalPeriodId = onAddNewPeriod(inlinePeriodTitle.trim());
         }
 
-        const selectedDeals: CommissionDeal[] = [];
-        detectedSheets.forEach(sheet => {
-            if (sheet.selected) {
-                // Ensure all deals have the selected target periodId & periodName
-                const updatedPeriodDeals = sheet.deals.map(d => ({
-                    ...d,
-                    periodId: finalPeriodId,
-                    periodName: finalPeriodTitle
-                }));
-                selectedDeals.push(...updatedPeriodDeals);
-            }
-        });
+        const selectedDeals = detectedSheets
+            .filter(s => s.selected)
+            .flatMap(s => s.deals)
+            .map(d => ({
+                ...d,
+                periodId: finalPeriodId,
+                periodName: periods.find(p => p.id === finalPeriodId)?.title || targetPeriod.title
+            }));
 
         if (selectedDeals.length === 0) {
-            alert('لطفاً حداقل یک شیت یا معامله را برای درون‌ریزی انتخاب کنید.');
+            setParseError('هیچ معامله‌ای برای ورود انتخاب نشده است.');
             return;
         }
 
@@ -511,436 +552,293 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
         onClose();
     };
 
-    const totalSelectedDeals = detectedSheets.filter(s => s.selected).reduce((sum, s) => sum + s.deals.length, 0);
-    const totalSelectedSales = detectedSheets.filter(s => s.selected).reduce((sum, s) => sum + s.totalSales, 0);
-    const totalSelectedCommission = detectedSheets.filter(s => s.selected).reduce((sum, s) => sum + s.totalCommission, 0);
-    const activeSheet = detectedSheets[activePreviewSheetIndex] || detectedSheets[0];
+    const activeRawSheet = rawSheets[activePreviewSheetIndex];
+    const activeDetectedSheet = detectedSheets[activePreviewSheetIndex];
 
-    const getCategoryBadge = (cat: CommissionCategory) => {
-        switch (cat) {
-            case 'ANBAR': return { label: 'فروش انبار', bg: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300', icon: <Building2 className="w-3 h-3" /> };
-            case 'AZAD': return { label: 'فروش آزاد', bg: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300', icon: <Repeat className="w-3 h-3" /> };
-            case 'HAVALEH': return { label: 'فروش حواله', bg: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/80 dark:text-cyan-300', icon: <FileText className="w-3 h-3" /> };
-            case 'LEASING': return { label: 'لیزینگ', bg: 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300', icon: <CreditCard className="w-3 h-3" /> };
-            case 'REGISTRATION': return { label: 'ثبت‌نام', bg: 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300', icon: <ClipboardList className="w-3 h-3" /> };
-        }
-    };
+    const systemFields = [
+        { key: 'salesPersonCol' as const, label: 'نام پرسنل فروش / مشاور', required: true, desc: 'مشاور، کارشناس، تیم فروش' },
+        { key: 'customerNameCol' as const, label: 'نام مشتری / خریدار', required: true, desc: 'خریدار یا متقاضی خودرو' },
+        { key: 'carModelCol' as const, label: 'مدل خودرو', required: true, desc: 'خودرو، تیپ، سیستم' },
+        { key: 'salePriceCol' as const, label: 'نرخ فروش / پیش‌پرداخت', required: true, desc: 'قیمت فروش یا پیش‌پرداخت لیزینگ' },
+        { key: 'purchasePriceCol' as const, label: 'نرخ خرید خودرو', required: false, desc: 'مبلغ خرید اولیه' },
+        { key: 'dailyPriceCol' as const, label: 'قیمت روز خودرو', required: false, desc: 'قیمت بازار روز' },
+        { key: 'saleDateCol' as const, label: 'تاریخ فروش', required: false, desc: 'تاریخ عقد قرارداد' },
+        { key: 'purchaseDateCol' as const, label: 'تاریخ خرید', required: false, desc: 'تاریخ خرید خودرو' },
+        { key: 'commissionAmountCol' as const, label: 'پورسانت (در صورت وجود)', required: false, desc: 'در صورت خالی بودن خودکار محاسبه می‌شود' },
+        { key: 'sellerNameCol' as const, label: 'نام فروشنده / مالک', required: false, desc: 'مالک قبلی خودرو' },
+        { key: 'dailyProfitLossCol' as const, label: 'سود و زیان روز', required: false, desc: 'اختلاف قیمت فروش و روز' },
+        { key: 'grossProfitCol' as const, label: 'کمیسیون کل / سود ناخالص', required: false, desc: 'سود ناخالص فروش آزاد' },
+        { key: 'paymentNotesCol' as const, label: 'توضیحات و وضعیت واریز', required: false, desc: 'واریز شد، علی‌الحساب و...' },
+        { key: 'nextBasketAmountCol' as const, label: 'مبلغ سبد بعدی (حواله)', required: false, desc: 'ویژه شیت حواله' }
+    ];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fade-in" dir="rtl">
-            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
                 
-                {/* Modal Top Header */}
-                <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-l from-emerald-500/10 via-indigo-500/5 to-transparent">
-                    <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/25">
+                {/* Modal Header */}
+                <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl">
                             <FileSpreadsheet className="w-6 h-6" />
                         </div>
                         <div>
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-base font-black text-slate-800 dark:text-white">
-                                    درون‌ریزی فایل‌های اکسل پورسانت (XLSX / چند شیت)
-                                </h3>
-                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                                    دقت بالا و چندجدولی
+                            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                ورود هوشمند اطلاعات از فایل اکسل
+                                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-mono">
+                                    XLSX / XLS / CSV
                                 </span>
-                            </div>
+                            </h2>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                انتخاب دقیق دوره مالی مقصد، تفکیک خودکار شیت‌ها و ثبت معاملات
+                                امکان نگاشت و تطبیق ستون‌ها بدون به‌هم‌ریختگی با تغییرات فرمت فایل
                             </p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-colors"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                {/* Target Period Selector Bar (Prominent at top) */}
-                <div className="px-6 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                        <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-xs font-black text-slate-700 dark:text-slate-200">
-                            تعیین دوره مالی مقصد برای این فایل:
+                {/* Steps Indicator */}
+                <div className="flex items-center justify-between px-6 py-2.5 bg-slate-100/70 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-xs">
+                    <div className="flex items-center gap-2 font-bold">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono ${
+                            step === 'upload' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                            ۱
+                        </div>
+                        <span className={step === 'upload' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>
+                            انتخاب فایل
                         </span>
-                        
-                        {/* Period Dropdown */}
-                        <select
-                            value={selectedTargetPeriodId}
-                            onChange={(e) => setSelectedTargetPeriodId(e.target.value)}
-                            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm cursor-pointer"
-                        >
-                            {periods.length === 0 ? (
-                                <option value="">(ابتدا دوره ایجاد کنید)</option>
-                            ) : (
-                                periods.map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.title} ({p.id})
-                                    </option>
-                                ))
-                            )}
-                        </select>
 
-                        {/* Inline Period Creation Button */}
-                        {!isCreatingInlinePeriod ? (
+                        <span className="text-slate-300 mx-1">›</span>
+
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono ${
+                            step === 'mapping' ? 'bg-emerald-600 text-white' : rawSheets.length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                            ۲
+                        </div>
+                        <span className={step === 'mapping' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>
+                            نگاشت و تطبیق ستون‌ها
+                        </span>
+
+                        <span className="text-slate-300 mx-1">›</span>
+
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono ${
+                            step === 'review' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                            ۳
+                        </div>
+                        <span className={step === 'review' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>
+                            بررسی و ورود نهایی
+                        </span>
+                    </div>
+
+                    {step === 'mapping' && (
+                        <div className="flex items-center gap-2">
                             <button
-                                type="button"
-                                onClick={() => setIsCreatingInlinePeriod(true)}
-                                className="px-2.5 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl border border-dashed border-emerald-400 flex items-center gap-1 transition-colors"
+                                onClick={handleResetAutoMapping}
+                                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 hover:bg-slate-50 text-[11px] flex items-center gap-1"
                             >
-                                <Plus className="w-3.5 h-3.5" />
-                                دوره جدید...
+                                <RefreshCw className="w-3 h-3" />
+                                بازنشانی تطبیق خودکار
                             </button>
-                        ) : (
-                            <form onSubmit={handleCreateInlinePeriod} className="flex items-center gap-1.5">
-                                <input
-                                    type="text"
-                                    value={inlinePeriodTitle}
-                                    onChange={e => setInlinePeriodTitle(e.target.value)}
-                                    placeholder="مثلاً: شهریور ۱۴۰۵"
-                                    className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-emerald-500 rounded-xl text-xs text-slate-800 dark:text-white font-bold outline-none w-32"
-                                    autoFocus
-                                />
-                                <button
-                                    type="submit"
-                                    className="px-2.5 py-1 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm"
-                                >
-                                    ثبت
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsCreatingInlinePeriod(false)}
-                                    className="text-xs text-slate-400 hover:text-slate-600 p-1"
-                                >
-                                    ✕
-                                </button>
-                            </form>
-                        )}
-                    </div>
-
-                    <div className="text-[11px] text-slate-500 font-bold">
-                        معاملات در دوره <span className="text-emerald-600 dark:text-emerald-400 font-black">«{targetPeriod.title}»</span> ثبت خواهند شد.
-                    </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Main Modal Body */}
-                <div className="flex-1 overflow-y-auto p-6">
+                {/* Modal Body */}
+                <div className="p-5 overflow-y-auto flex-1 space-y-5">
                     
-                    {/* Step 1: Upload Dropzone */}
-                    {step === 'upload' && (
-                        <div className="space-y-6">
-                            
-                            {/* Drag & Drop Area */}
-                            <div
-                                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                                onDragLeave={() => setIsDragging(false)}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    setIsDragging(false);
-                                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                                        handleFileChange(e.dataTransfer.files[0]);
-                                    }
-                                }}
-                                onClick={() => {
-                                    if (fileInputRef.current) {
-                                        fileInputRef.current.value = '';
-                                        fileInputRef.current.click();
-                                    }
-                                }}
-                                className={`border-2 border-dashed rounded-3xl p-10 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-4 ${
-                                    isDragging 
-                                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 scale-[1.01]' 
-                                        : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500 hover:bg-slate-50 dark:hover:bg-slate-700/30'
-                                }`}
-                            >
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
-                                    accept=".xlsx,.xls,.csv,.tsv"
-                                    className="hidden"
-                                />
-
-                                <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner">
-                                    <Upload className="w-8 h-8 animate-pulse" />
-                                </div>
-
-                                <div>
-                                    <h4 className="text-base font-black text-slate-800 dark:text-white">
-                                        فایل اکسل پورسانت (.xlsx یا .xls) را اینجا رها کنید یا کلیک نمایید
-                                    </h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                                        تشخیص خودکار تمام شیت‌ها و جدول‌های ۵ گانه (فروش انبار، آزاد، حواله، لیزینگ و ثبت‌نام)، تفکیک قراردادهای شراکتی ۵۰٪ و مبالغ واریزی
-                                    </p>
-                                </div>
-
-                                <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                                    <Layers className="w-3.5 h-3.5" />
-                                    پشتیبانی از فایل‌های اکسل چندجدولی و چند شیته
-                                </div>
-                            </div>
-
-                            {/* Processing Indicator */}
-                            {isProcessing && (
-                                <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-800 flex items-center justify-center gap-3 text-indigo-700 dark:text-indigo-300 text-xs font-bold animate-pulse">
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                    در حال پردازش و استخراج جدول‌های شیت اکسل...
-                                </div>
-                            )}
-
-                            {/* Parse Error Notification */}
-                            {parseError && (
-                                <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-3 text-rose-700 dark:text-rose-300 text-xs">
-                                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                                    <span>{parseError}</span>
-                                </div>
-                            )}
-
-                            {/* Text Paste Fallback Toggle */}
-                            <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowTextFallback(!showTextFallback)}
-                                    className="text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-bold flex items-center gap-1.5"
-                                >
-                                    <Info className="w-3.5 h-3.5" />
-                                    {showTextFallback ? 'بستن کادر جای‌گذاری متنی' : 'نیاز به کپی/پیست مستقیم متن اکسل یا CSV دارید؟ (اینجا کلیک کنید)'}
-                                </button>
-
-                                {showTextFallback && (
-                                    <div className="mt-3 space-y-3">
-                                        <textarea
-                                            value={rawTextFallback}
-                                            onChange={e => setRawTextFallback(e.target.value)}
-                                            rows={6}
-                                            placeholder="ردیف,تاریخ خرید,تاریخ فروش,نام پرسنل فروش,نام مشتری,مدل خودرو,نرخ خرید,قیمت روز,نرخ فروش,سودیا زیان روز,درصد پورسانت,پورسانت&#10;1,,1405/05/10,درسا محمدی,هدیه توکلی,(1405) eagle,21000000000,24500000000,24600000000,100000000,0.05,12300000"
-                                            className="w-full p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800 dark:text-white"
-                                            dir="ltr"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (!rawTextFallback.trim()) {
-                                                    setParseError('لطفاً متنی در کادر جای‌گذاری کنید.');
-                                                    return;
-                                                }
-                                                try {
-                                                    const wb = XLSX.read(rawTextFallback, { type: 'string' });
-                                                    processExcelWorkbook(wb);
-                                                } catch (e: any) {
-                                                    setParseError('خطا در پردازش متن: ' + e?.message);
-                                                }
-                                            }}
-                                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors"
-                                        >
-                                            پردازش متن جای‌گذاری‌شده
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
+                    {parseError && (
+                        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-center gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                            <span>{parseError}</span>
                         </div>
                     )}
 
-                    {/* Step 2: Multi-Sheet Review & Confirmation */}
-                    {step === 'review' && (
-                        <div className="space-y-6">
-                            
-                            {/* File and Target Period Summary Banner */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 rounded-xl">
-                                        <Database className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                            <span>فایل: {fileName || 'کپی مستقیم'}</span>
-                                            {fileSize && <span className="text-xs font-mono font-normal text-slate-400">({fileSize})</span>}
-                                        </h4>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            دوره مقصد: <b className="text-emerald-600 dark:text-emerald-400">{targetPeriod.title}</b> | شناسایی <b className="text-slate-700 dark:text-slate-200">{detectedSheets.length} شیت</b>
-                                        </p>
-                                    </div>
+                    {/* STEP 1: Upload */}
+                    {step === 'upload' && (
+                        <div className="space-y-4">
+                            {/* Drag and Drop Zone */}
+                            <div
+                                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                onDragLeave={() => setIsDragging(false)}
+                                onDrop={handleDrop}
+                                onClick={() => fileInputRef.current?.click()}
+                                className={`border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center cursor-pointer transition-all ${
+                                    isDragging
+                                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 scale-[0.99]'
+                                        : 'border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500/50 bg-slate-50/50 dark:bg-slate-800/30'
+                                }`}
+                            >
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".xlsx, .xls, .csv"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            handleFileUpload(e.target.files[0]);
+                                        }
+                                    }}
+                                />
+
+                                <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-4 shadow-sm">
+                                    <Upload className="w-8 h-8" />
                                 </div>
 
-                                {/* Summary Pills */}
-                                <div className="flex flex-wrap items-center gap-3 text-xs">
-                                    <div className="bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                                        <span className="text-slate-400">کل معاملات انتخابی:</span>{' '}
-                                        <b className="font-mono text-emerald-600 font-black">{totalSelectedDeals}</b>
-                                    </div>
-                                    <div className="bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                                        <span className="text-slate-400">مجموع پورسانت:</span>{' '}
-                                        <b className="font-mono text-indigo-600 font-black">{totalSelectedCommission.toLocaleString('fa-IR')} ریال</b>
-                                    </div>
+                                <h3 className="text-base font-black text-slate-800 dark:text-white mb-1">
+                                    فایل اکسل معاملات را اینجا رها کنید یا کلیک کنید
+                                </h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
+                                    پشتیبانی کامل از فایل‌های چند شیتی (انبار، آزاد، حواله، لیزینگ، ثبت نام) با قابلیت تنظیم و تطبیق ستون‌ها در مرحله بعد
+                                </p>
+
+                                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
+                                    <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                                    انتخاب فایل از سیستم
                                 </div>
                             </div>
+                        </div>
+                    )}
 
-                            {/* Detected Sheets Selector Cards */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                        <Layers className="w-4 h-4 text-emerald-600" />
-                                        شیت‌ها و جدول‌های استخراج‌شده از اکسل:
-                                    </h5>
+                    {/* STEP 2: Field Mapping */}
+                    {step === 'mapping' && activeRawSheet && (
+                        <div className="space-y-5">
+                            
+                            {/* Sheet Selector Tabs */}
+                            {rawSheets.length > 1 && (
+                                <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200 dark:border-slate-800">
+                                    <span className="text-xs font-bold text-slate-500 shrink-0 ml-1">شیت‌ها:</span>
+                                    {rawSheets.map((sh, idx) => (
+                                        <button
+                                            key={sh.sheetName}
+                                            type="button"
+                                            onClick={() => setActivePreviewSheetIndex(idx)}
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                                                activePreviewSheetIndex === idx
+                                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+                                            }`}
+                                        >
+                                            {sh.sheetName} ({sh.rawRows.length} ردیف)
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Mapping Configuration Card */}
+                            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-slate-200 dark:border-slate-700/60 space-y-4">
+                                <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectAllSheets(true)}
-                                            className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                                        <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
+                                        <h3 className="text-xs font-black text-slate-900 dark:text-white">
+                                            تطبیق فیلدهای سیستم با ستون‌های شیت «{activeRawSheet.sheetName}»
+                                        </h3>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs">
+                                        <span className="text-slate-500 font-bold">ردیف سربرگ:</span>
+                                        <select
+                                            value={activeRawSheet.mapping.headerRowIndex}
+                                            onChange={e => handleUpdateActiveSheetMapping('headerRowIndex', parseInt(e.target.value) || 0)}
+                                            className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold font-mono outline-none"
                                         >
-                                            انتخاب همه شیت‌ها
-                                        </button>
-                                        <span className="text-slate-300">|</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectAllSheets(false)}
-                                            className="text-[11px] text-slate-500 font-bold hover:underline"
-                                        >
-                                            عدم انتخاب همه
-                                        </button>
+                                            {Array.from({ length: Math.min(10, activeRawSheet.rawRows.length) }).map((_, rIdx) => (
+                                                <option key={rIdx} value={rIdx}>ردیف {rIdx + 1}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {detectedSheets.map((sheet, idx) => {
-                                        const badge = getCategoryBadge(sheet.category);
-                                        const isActive = activePreviewSheetIndex === idx;
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    فیلدهای زیر به صورت خودکار تشخیص داده شده‌اند. در صورت تغییر ستون‌ها در فایل اکسل، می‌توانید ستون متناظر را انتخاب کنید تا محاسبات دقیق انجام شود:
+                                </p>
+
+                                {/* Fields Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {systemFields.map(field => {
+                                        const mappedVal = activeRawSheet.mapping[field.key];
+                                        const isAssigned = mappedVal !== -1 && mappedVal !== undefined;
 
                                         return (
-                                            <div
-                                                key={idx}
-                                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-                                                    isActive 
-                                                        ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-500 ring-2 ring-emerald-500/20 shadow-md' 
-                                                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                            <div 
+                                                key={field.key} 
+                                                className={`p-3 rounded-2xl border transition-all ${
+                                                    isAssigned 
+                                                        ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700' 
+                                                        : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40'
                                                 }`}
-                                                onClick={() => setActivePreviewSheetIndex(idx)}
                                             >
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleToggleSheet(idx);
-                                                            }}
-                                                            className="text-emerald-600 hover:text-emerald-700"
-                                                        >
-                                                            {sheet.selected ? (
-                                                                <CheckSquare className="w-5 h-5 text-emerald-600" />
-                                                            ) : (
-                                                                <Square className="w-5 h-5 text-slate-300" />
-                                                            )}
-                                                        </button>
-                                                        <span className="text-xs font-black text-slate-800 dark:text-white truncate max-w-[140px]" title={sheet.sheetName}>
-                                                            {sheet.sheetName}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Category Selector Dropdown */}
-                                                    <select
-                                                        value={sheet.category}
-                                                        onChange={(e) => {
-                                                            e.stopPropagation();
-                                                            handleChangeSheetCategory(idx, e.target.value as CommissionCategory);
-                                                        }}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border-0 cursor-pointer outline-none ${badge.bg}`}
-                                                    >
-                                                        <option value="ANBAR">🏢 فروش انبار</option>
-                                                        <option value="AZAD">🔄 فروش آزاد</option>
-                                                        <option value="HAVALEH">📄 فروش حواله</option>
-                                                        <option value="LEASING">💳 لیزینگ</option>
-                                                        <option value="REGISTRATION">📋 ثبت‌نام</option>
-                                                    </select>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                                                        <span>{field.label}</span>
+                                                        {field.required && (
+                                                            <span className="text-rose-500 text-[10px] font-mono">*ضروری</span>
+                                                        )}
+                                                    </label>
+                                                    <span className="text-[10px] text-slate-400">
+                                                        {field.desc}
+                                                    </span>
                                                 </div>
 
-                                                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700/60 font-mono">
-                                                    <span>{sheet.deals.length} معامله</span>
-                                                    <span className="font-bold text-emerald-600">{sheet.totalCommission.toLocaleString('fa-IR')} ریال</span>
-                                                </div>
+                                                <select
+                                                    value={mappedVal}
+                                                    onChange={e => handleUpdateActiveSheetMapping(field.key, parseInt(e.target.value))}
+                                                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500"
+                                                >
+                                                    <option value="-1">-- عدم تخصیص (خالی) --</option>
+                                                    {activeRawSheet.columns.map(col => (
+                                                        <option key={col.index} value={col.index}>
+                                                            {col.label} {col.sampleValues[0] ? `(نمونه: ${col.sampleValues[0].substring(0, 15)})` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         );
                                     })}
                                 </div>
                             </div>
 
-                            {/* Active Sheet Table Preview */}
-                            {activeSheet && (
-                                <div className="space-y-2.5">
+                            {/* Live Preview Table of Mapped Data */}
+                            {activeDetectedSheet && (
+                                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-slate-200 dark:border-slate-700/60 space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-black text-slate-800 dark:text-white">
-                                                پیش‌نمایش ردیف‌های شیت «{activeSheet.sheetName}»:
-                                            </span>
-                                            <span className="text-xs text-slate-500 font-mono">
-                                                ({activeSheet.deals.length} معامله شناسایی‌شده)
-                                            </span>
-                                        </div>
+                                        <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                            <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                                            پیش‌نمایش معاملات استخراج‌شده ({activeDetectedSheet.deals.length.toLocaleString('fa-IR')} معامله)
+                                        </h4>
+                                        <span className="text-[11px] text-emerald-600 font-bold font-mono">
+                                            جمع پورسانت: {Math.round(activeDetectedSheet.totalCommission / 10).toLocaleString('fa-IR')} تومان
+                                        </span>
                                     </div>
 
-                                    <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-x-auto max-h-[35vh]">
-                                        <table className="w-full text-xs text-right border-collapse">
-                                            <thead className="bg-slate-100 dark:bg-slate-900 sticky top-0 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                                        <table className="w-full text-[11px] text-right bg-white dark:bg-slate-900">
+                                            <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">
                                                 <tr>
-                                                    <th className="p-2.5">#</th>
-                                                    <th className="p-2.5">تاریخ فروش</th>
-                                                    <th className="p-2.5">پرسنل فروش</th>
-                                                    <th className="p-2.5">نام مشتری / خریدار</th>
-                                                    <th className="p-2.5">مدل خودرو</th>
-                                                    <th className="p-2.5">نرخ فروش (ریال)</th>
-                                                    <th className="p-2.5">سود/زیان یا ناخالص</th>
-                                                    <th className="p-2.5">پورسانت محاسبه‌شده</th>
-                                                    <th className="p-2.5">وضعیت واریز</th>
-                                                    <th className="p-2.5">حذف</th>
+                                                    <th className="py-2 px-2.5">ردیف</th>
+                                                    <th className="py-2 px-2.5">تاریخ</th>
+                                                    <th className="py-2 px-2.5">پرسنل</th>
+                                                    <th className="py-2 px-2.5">خریدار</th>
+                                                    <th className="py-2 px-2.5">خودرو</th>
+                                                    <th className="py-2 px-2.5">نرخ فروش (تومان)</th>
+                                                    <th className="py-2 px-2.5">پورسانت (تومان)</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                                                {activeSheet.deals.map((deal, dIdx) => (
-                                                    <tr key={deal.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                        <td className="p-2.5 font-mono text-slate-400">{dIdx + 1}</td>
-                                                        <td className="p-2.5 font-mono">{deal.saleDate}</td>
-                                                        <td className="p-2.5 font-bold">
-                                                            {deal.salesPerson}
-                                                            {deal.contractWriter && (
-                                                                <span className="text-[10px] text-indigo-500 block">
-                                                                    قولنامه: {deal.contractWriter}
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-2.5">{deal.customerName}</td>
-                                                        <td className="p-2.5 font-bold text-slate-800 dark:text-white">{deal.carModel}</td>
-                                                        <td className="p-2.5 font-mono">{deal.salePrice.toLocaleString('fa-IR')}</td>
-                                                        <td className={`p-2.5 font-mono font-bold ${deal.dailyProfitLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                            {(deal.category === 'AZAD' ? deal.grossProfit : deal.dailyProfitLoss).toLocaleString('fa-IR')}
-                                                        </td>
-                                                        <td className="p-2.5 font-mono font-black text-emerald-600">
-                                                            {deal.commissionAmount.toLocaleString('fa-IR')}
-                                                        </td>
-                                                        <td className="p-2.5">
-                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                                deal.paymentStatus === 'PAID'
-                                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
-                                                                    : deal.paymentStatus === 'PARTIAL'
-                                                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300'
-                                                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                                            }`}>
-                                                                {deal.paymentStatus === 'PAID' ? 'واریز شد' : deal.paymentStatus === 'PARTIAL' ? 'علی‌الحساب' : 'در انتظار'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-2.5">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleToggleDeal(deal.id)}
-                                                                className="text-rose-500 hover:text-rose-700 text-xs font-bold"
-                                                                title="حذف این ردیف"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </td>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                {activeDetectedSheet.deals.slice(0, 4).map((d, idx) => (
+                                                    <tr key={d.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                                        <td className="py-2 px-2.5 font-mono text-slate-400">{idx + 1}</td>
+                                                        <td className="py-2 px-2.5 font-mono">{d.saleDate || '-'}</td>
+                                                        <td className="py-2 px-2.5 font-bold text-slate-900 dark:text-white">{d.salesPerson}</td>
+                                                        <td className="py-2 px-2.5 text-slate-700 dark:text-slate-300">{d.customerName}</td>
+                                                        <td className="py-2 px-2.5 text-emerald-600 font-bold">{d.carModel}</td>
+                                                        <td className="py-2 px-2.5 font-mono font-bold">{Math.round((d.salePrice || 0) / 10).toLocaleString('fa-IR')}</td>
+                                                        <td className="py-2 px-2.5 font-mono font-black text-emerald-600">{Math.round((d.commissionAmount || 0) / 10).toLocaleString('fa-IR')}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -949,92 +847,169 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                                 </div>
                             )}
 
-                            {/* Import Mode: Append vs Replace */}
-                            <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col sm:flex-row items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5">
-                                    <RefreshCw className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                                    <span className="text-xs font-black text-slate-800 dark:text-white">
-                                        نحوه اعمال در دوره ({targetPeriod.title}):
+                        </div>
+                    )}
+
+                    {/* STEP 3: Review and Finalize */}
+                    {step === 'review' && (
+                        <div className="space-y-4">
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                    <span className="text-[11px] text-slate-500 block">تعداد کل معاملات</span>
+                                    <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                                        {detectedSheets.filter(s => s.selected).flatMap(s => s.deals).length.toLocaleString('fa-IR')}
                                     </span>
                                 </div>
-
-                                <div className="flex items-center gap-2">
-                                    <label className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer border transition-all ${
-                                        importMode === 'append'
-                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                                    }`}>
-                                        <input
-                                            type="radio"
-                                            name="importMode"
-                                            value="append"
-                                            checked={importMode === 'append'}
-                                            onChange={() => setImportMode('append')}
-                                            className="hidden"
-                                        />
-                                        ➕ افزودن به معاملات موجود این دوره
-                                    </label>
-
-                                    <label className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer border transition-all ${
-                                        importMode === 'replace'
-                                            ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                                    }`}>
-                                        <input
-                                            type="radio"
-                                            name="importMode"
-                                            value="replace"
-                                            checked={importMode === 'replace'}
-                                            onChange={() => setImportMode('replace')}
-                                            className="hidden"
-                                        />
-                                        🔄 پاکسازی و جایگزینی کامل دوره با این فایل
-                                    </label>
+                                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                    <span className="text-[11px] text-slate-500 block">مجموع فروش</span>
+                                    <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                                        {Math.round(detectedSheets.filter(s => s.selected).reduce((sum, s) => sum + s.totalSales, 0) / 10).toLocaleString('fa-IR')} <span className="text-xs font-normal">تومان</span>
+                                    </span>
+                                </div>
+                                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800">
+                                    <span className="text-[11px] text-emerald-700 dark:text-emerald-300 block font-bold">مجموع پورسانت</span>
+                                    <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                                        {Math.round(detectedSheets.filter(s => s.selected).reduce((sum, s) => sum + s.totalCommission, 0) / 10).toLocaleString('fa-IR')} <span className="text-xs font-normal">تومان</span>
+                                    </span>
                                 </div>
                             </div>
 
+                            {/* Target Period Setting */}
+                            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                        <Calendar className="w-4 h-4 text-emerald-600" />
+                                        دوره کمیسیون مقصد برای ثبت اطلاعات
+                                    </label>
+                                    {onAddNewPeriod && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCreatingInlinePeriod(!isCreatingInlinePeriod)}
+                                            className="text-xs text-indigo-600 font-bold hover:underline"
+                                        >
+                                            {isCreatingInlinePeriod ? 'انتخاب از دوره‌های موجود' : '+ ایجاد دوره جدید'}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {isCreatingInlinePeriod ? (
+                                    <input
+                                        type="text"
+                                        value={inlinePeriodTitle}
+                                        onChange={e => setInlinePeriodTitle(e.target.value)}
+                                        placeholder="عنوان دوره جدید، مثلا: کمیسیون و پاداش شهریور ۱۴۰۵"
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                                    />
+                                ) : (
+                                    <select
+                                        value={selectedTargetPeriodId}
+                                        onChange={e => setSelectedTargetPeriodId(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                                    >
+                                        {periods.map(p => (
+                                            <option key={p.id} value={p.id}>{p.title}</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+
+                            {/* Import Mode (Append vs Replace) */}
+                            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                                <div>
+                                    <span className="text-xs font-black text-slate-800 dark:text-white block">
+                                        شیوه ورود به دوره
+                                    </span>
+                                    <span className="text-[11px] text-slate-500">
+                                        الحاق به ردیف‌های موجود یا جایگزینی کامل معاملات این دوره
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                                    <button
+                                        type="button"
+                                        onClick={() => setImportMode('append')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                            importMode === 'append' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        الحاق (افزودن)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setImportMode('replace')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                            importMode === 'replace' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        جایگزینی کامل
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
 
                 </div>
 
-                {/* Modal Footer Controls */}
-                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
-                    {step === 'review' ? (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setStep('upload');
-                                setDetectedSheets([]);
-                            }}
-                            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
-                        >
-                            ← بازگشت و انتخاب فایل دیگر
-                        </button>
-                    ) : (
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+                    <div>
+                        {step === 'mapping' && (
+                            <button
+                                type="button"
+                                onClick={() => setStep('upload')}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl flex items-center gap-1.5"
+                            >
+                                <ArrowRight className="w-4 h-4" />
+                                مرحله قبل (تغییر فایل)
+                            </button>
+                        )}
+                        {step === 'review' && (
+                            <button
+                                type="button"
+                                onClick={() => setStep('mapping')}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl flex items-center gap-1.5"
+                            >
+                                <ArrowRight className="w-4 h-4" />
+                                مرحله قبل (ویرایش نگاشت ستون‌ها)
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl"
                         >
                             انصراف
                         </button>
-                    )}
 
-                    {step === 'review' && (
-                        <button
-                            type="button"
-                            onClick={handleConfirmFinalImport}
-                            disabled={totalSelectedDeals === 0}
-                            className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <CheckCircle className="w-4 h-4" />
-                            درون‌ریزی نهایی {totalSelectedDeals} معامله در دوره «{targetPeriod.title}»
-                        </button>
-                    )}
+                        {step === 'mapping' && (
+                            <button
+                                type="button"
+                                onClick={() => setStep('review')}
+                                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+                            >
+                                مرحله بعد: بررسی و تایید
+                                <ArrowLeft className="w-4 h-4" />
+                            </button>
+                        )}
+
+                        {step === 'review' && (
+                            <button
+                                type="button"
+                                onClick={handleConfirmImport}
+                                className="px-6 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+                            >
+                                <Check className="w-4 h-4" />
+                                تایید و ورود نهایی به سیستم
+                            </button>
+                        )}
+                    </div>
                 </div>
 
             </div>
         </div>
     );
 };
+export default CommissionExcelImportModal;

@@ -856,6 +856,22 @@ export interface CommissionSettings {
     leasingRate: number; // e.g. 0.1 (% of down payment)
     registrationRate: number; // e.g. 0.1 (% of down payment)
     lossPenaltyRate: number; // e.g. 0.25 (% of sale price when daily profit/loss < 0)
+
+    // تنظیمات محاسبه با عدد ثابت (Fixed Amount in Rials)
+    anbarCalcType?: 'PERCENT' | 'FIXED';
+    anbarFixedAmount?: number; // مبلغ ثابت پورسانت انبار (ریال)
+
+    azadCalcType?: 'PERCENT' | 'FIXED';
+    azadFixedAmount?: number; // مبلغ ثابت پورسانت آزاد (ریال)
+
+    havalehCalcType?: 'PERCENT' | 'FIXED';
+    havalehFixedAmount?: number; // مبلغ ثابت پورسانت حواله (ریال)
+
+    leasingCalcType?: 'PERCENT' | 'FIXED';
+    leasingFixedAmount?: number; // مبلغ ثابت پورسانت لیزینگ (ریال)
+
+    registrationCalcType?: 'PERCENT' | 'FIXED';
+    registrationFixedAmount?: number; // مبلغ ثابت ثبت نام کارخانه (ریال)
 }
 
 export interface PersonnelCommissionAdjustment {

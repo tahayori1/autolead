@@ -92,9 +92,10 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     margin: 10mm 12mm 10mm 12mm;
   }
 
-  /* Reset body and hide all application shell UI */
+  /* Reset root & body for seamless printing */
   html, body {
     height: auto !important;
+    min-height: 100% !important;
     overflow: visible !important;
     background: #ffffff !important;
     background-color: #ffffff !important;
@@ -106,6 +107,7 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
+    visibility: visible !important;
   }
 
   /* Force Vazirmatn font on all print elements */
@@ -113,52 +115,54 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif !important;
   }
 
-  /* Hide app navigation, sidebars, header bars, action buttons, notifications and modals */
+  /* Allow application layout shells to expand naturally in print */
+  #root,
+  main,
+  .flex.h-screen {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide app navigation, sidebars, header bars, action buttons, notifications and modal chrome */
   nav,
   aside,
   header:not(.print-header),
   footer:not(.print-footer),
   button,
-  input,
+  input:not([type="checkbox"]),
   select,
   textarea,
   .no-print,
-  [role="dialog"],
-  [role="navigation"],
-  [role="banner"],
-  [role="complementary"],
-  .fixed,
-  .sticky {
+  .print\:hidden {
     display: none !important;
-  }
-
-  /* When printing, hide all main elements by default */
-  body * {
-    visibility: hidden;
-  }
-
-  /* Make ONLY the printable document container and its children visible */
-  .bank-letter-print-area,
-  .bank-letter-print-container,
-  .bank-letter-print-area *,
-  .bank-letter-print-container * {
-    visibility: visible !important;
   }
 
   /* Expand the printable document to full page without mockup borders or shadows */
   .bank-letter-print-area,
-  .bank-letter-print-container {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+  .bank-letter-print-container,
+  .print-paper-root {
+    position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     background: #ffffff !important;
+    overflow: visible !important;
+    visibility: visible !important;
+  }
+
+  .bank-letter-print-area *,
+  .bank-letter-print-container *,
+  .print-paper-root * {
+    visibility: visible !important;
   }
 
   /* Preserve badges and high-contrast color highlights */
@@ -186,9 +190,15 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
   }
 
   /* Avoid page breaks inside paragraphs, signature boxes and tables */
-  p, table, tr, td, .avoid-break {
+  p, table, tr, td, .avoid-break, .signature-box, .contract-clause {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
+
+  /* Subtle watermark */
+  .watermark-container {
+    opacity: 0.035 !important;
+  }
 }
+
 

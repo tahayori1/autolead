@@ -116,154 +116,399 @@ export const CommissionSettingsModal: React.FC<CommissionSettingsModalProps> = (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         
                         {/* 1. Anbar Rate */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                                     فروش انبار (ANBAR)
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">پیش‌فرض: ۰.۰۵٪</span>
+                                <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-xl text-[10px]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, anbarCalcType: 'PERCENT' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            (settings.anbarCalcType || 'PERCENT') === 'PERCENT'
+                                                ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        درصدی (٪)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, anbarCalcType: 'FIXED' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            settings.anbarCalcType === 'FIXED'
+                                                ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        عدد ثابت (ریال)
+                                    </button>
+                                </div>
                             </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                درصد محاسبه پورسانت از کل مبلغ نرخ فروش خودرو
-                            </p>
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    step="0.001"
-                                    min="0"
-                                    max="100"
-                                    value={settings.anbarRate}
-                                    onChange={e => setSettings({ ...settings, anbarRate: parseFloat(e.target.value) || 0 })}
-                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    required
-                                />
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
-                            </div>
+
+                            {settings.anbarCalcType === 'FIXED' ? (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        مبلغ ثابت پورسانت به ازای هر خودرو (مستقل از قیمت)
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="100000"
+                                            min="0"
+                                            value={settings.anbarFixedAmount ?? 0}
+                                            onChange={e => setSettings({ ...settings, anbarFixedAmount: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-14 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            placeholder="مثال: ۵۰۰۰۰۰۰"
+                                        />
+                                        <span className="absolute left-3 top-2 text-[11px] font-bold text-slate-400">ریال</span>
+                                    </div>
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono block">
+                                        معادل: {Math.round((settings.anbarFixedAmount || 0) / 10).toLocaleString('fa-IR')} تومان
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        درصد محاسبه پورسانت از کل مبلغ نرخ فروش خودرو (پیش‌فرض: ۰.۰۵٪)
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="0.001"
+                                            min="0"
+                                            max="100"
+                                            value={settings.anbarRate}
+                                            onChange={e => setSettings({ ...settings, anbarRate: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            required
+                                        />
+                                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* 2. Azad Rate (Profit & Flat) */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                                     فروش آزاد (AZAD)
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">پیش‌فرض: ۱۰٪ سود</span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                درصد سهم از سود کل کمیسیون معامله (فروش منهای خرید)
-                            </p>
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    min="0"
-                                    max="100"
-                                    value={settings.azadRate}
-                                    onChange={e => setSettings({ ...settings, azadRate: parseFloat(e.target.value) || 0 })}
-                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-                                    required
-                                />
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
-                            </div>
-
-                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60">
-                                <span className="text-[10px] text-slate-400 block mb-1">درصد کف فروش آزاد (در صورت عدم سود):</span>
-                                <div className="relative">
-                                    <input
-                                        type="number"
-                                        step="0.001"
-                                        min="0"
-                                        max="100"
-                                        value={settings.azadFlatRate}
-                                        onChange={e => setSettings({ ...settings, azadFlatRate: parseFloat(e.target.value) || 0 })}
-                                        className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono outline-none"
-                                    />
-                                    <span className="absolute left-3 top-1.5 text-xs font-bold text-slate-400">٪</span>
+                                <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-xl text-[10px]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, azadCalcType: 'PERCENT' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            (settings.azadCalcType || 'PERCENT') === 'PERCENT'
+                                                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        درصدی (٪)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, azadCalcType: 'FIXED' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            settings.azadCalcType === 'FIXED'
+                                                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        عدد ثابت (ریال)
+                                    </button>
                                 </div>
                             </div>
+
+                            {settings.azadCalcType === 'FIXED' ? (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        مبلغ ثابت پورسانت فروش آزاد به ازای هر معامله
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="100000"
+                                            min="0"
+                                            value={settings.azadFixedAmount ?? 0}
+                                            onChange={e => setSettings({ ...settings, azadFixedAmount: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-14 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="مثال: ۱۰۰۰۰۰۰۰"
+                                        />
+                                        <span className="absolute left-3 top-2 text-[11px] font-bold text-slate-400">ریال</span>
+                                    </div>
+                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono block">
+                                        معادل: {Math.round((settings.azadFixedAmount || 0) / 10).toLocaleString('fa-IR')} تومان
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        درصد سهم از سود کل کمیسیون معامله (فروش منهای خرید)
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            max="100"
+                                            value={settings.azadRate}
+                                            onChange={e => setSettings({ ...settings, azadRate: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                            required
+                                        />
+                                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
+                                    </div>
+
+                                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                                        <span className="text-[10px] text-slate-400 block mb-1">درصد کف فروش آزاد (در صورت عدم سود):</span>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                min="0"
+                                                max="100"
+                                                value={settings.azadFlatRate}
+                                                onChange={e => setSettings({ ...settings, azadFlatRate: parseFloat(e.target.value) || 0 })}
+                                                className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono outline-none"
+                                            />
+                                            <span className="absolute left-3 top-1.5 text-xs font-bold text-slate-400">٪</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* 3. Havaleh Rate */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                                     فروش حواله (HAVALEH)
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">پیش‌فرض: ۰.۰۵٪</span>
+                                <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-xl text-[10px]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, havalehCalcType: 'PERCENT' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            (settings.havalehCalcType || 'PERCENT') === 'PERCENT'
+                                                ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        درصدی (٪)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, havalehCalcType: 'FIXED' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            settings.havalehCalcType === 'FIXED'
+                                                ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        عدد ثابت (ریال)
+                                    </button>
+                                </div>
                             </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                درصد محاسبه پورسانت از مبلغ کل فروش حواله
-                            </p>
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    step="0.001"
-                                    min="0"
-                                    max="100"
-                                    value={settings.havalehRate}
-                                    onChange={e => setSettings({ ...settings, havalehRate: parseFloat(e.target.value) || 0 })}
-                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-amber-500 outline-none"
-                                    required
-                                />
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
-                            </div>
+
+                            {settings.havalehCalcType === 'FIXED' ? (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        مبلغ ثابت پورسانت فروش هر فقره حواله
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="100000"
+                                            min="0"
+                                            value={settings.havalehFixedAmount ?? 0}
+                                            onChange={e => setSettings({ ...settings, havalehFixedAmount: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-14 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-amber-500 outline-none"
+                                            placeholder="مثال: ۶۰۰۰۰۰۰"
+                                        />
+                                        <span className="absolute left-3 top-2 text-[11px] font-bold text-slate-400">ریال</span>
+                                    </div>
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono block">
+                                        معادل: {Math.round((settings.havalehFixedAmount || 0) / 10).toLocaleString('fa-IR')} تومان
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        درصد محاسبه پورسانت از مبلغ کل فروش حواله (پیش‌فرض: ۰.۰۵٪)
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="0.001"
+                                            min="0"
+                                            max="100"
+                                            value={settings.havalehRate}
+                                            onChange={e => setSettings({ ...settings, havalehRate: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-amber-500 outline-none"
+                                            required
+                                        />
+                                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* 4. Leasing Rate */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                                     لیزینگ و اقساط (LEASING)
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">پیش‌فرض: ۰.۱٪</span>
+                                <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-xl text-[10px]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, leasingCalcType: 'PERCENT' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            (settings.leasingCalcType || 'PERCENT') === 'PERCENT'
+                                                ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        درصدی (٪)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, leasingCalcType: 'FIXED' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            settings.leasingCalcType === 'FIXED'
+                                                ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        عدد ثابت (ریال)
+                                    </button>
+                                </div>
                             </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                درصد محاسبه پورسانت از مبلغ پیش‌پرداخت پرونده
-                            </p>
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    max="100"
-                                    value={settings.leasingRate}
-                                    onChange={e => setSettings({ ...settings, leasingRate: parseFloat(e.target.value) || 0 })}
-                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-purple-500 outline-none"
-                                    required
-                                />
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
-                            </div>
+
+                            {settings.leasingCalcType === 'FIXED' ? (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        مبلغ ثابت پورسانت پرونده لیزینگ به ازای هر خودرو
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="100000"
+                                            min="0"
+                                            value={settings.leasingFixedAmount ?? 0}
+                                            onChange={e => setSettings({ ...settings, leasingFixedAmount: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-14 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-purple-500 outline-none"
+                                            placeholder="مثال: ۸۰۰۰۰۰۰"
+                                        />
+                                        <span className="absolute left-3 top-2 text-[11px] font-bold text-slate-400">ریال</span>
+                                    </div>
+                                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono block">
+                                        معادل: {Math.round((settings.leasingFixedAmount || 0) / 10).toLocaleString('fa-IR')} تومان
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        درصد محاسبه پورسانت از مبلغ پیش‌پرداخت پرونده (پیش‌فرض: ۰.۱٪)
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            max="100"
+                                            value={settings.leasingRate}
+                                            onChange={e => setSettings({ ...settings, leasingRate: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-purple-500 outline-none"
+                                            required
+                                        />
+                                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* 5. Registration Rate */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
                                     ثبت‌نام کارخانه (REGISTRATION)
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">پیش‌فرض: ۰.۱٪</span>
+                                <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-0.5 rounded-xl text-[10px]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, registrationCalcType: 'PERCENT' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            (settings.registrationCalcType || 'PERCENT') === 'PERCENT'
+                                                ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        درصدی (٪)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettings({ ...settings, registrationCalcType: 'FIXED' })}
+                                        className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                                            settings.registrationCalcType === 'FIXED'
+                                                ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-400 shadow-xs'
+                                                : 'text-slate-500'
+                                        }`}
+                                    >
+                                        عدد ثابت (ریال)
+                                    </button>
+                                </div>
                             </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                درصد پورسانت از پیش‌پرداخت ثبت‌نام نمایندگی
-                            </p>
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    max="100"
-                                    value={settings.registrationRate}
-                                    onChange={e => setSettings({ ...settings, registrationRate: parseFloat(e.target.value) || 0 })}
-                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
-                                    required
-                                />
-                                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
-                            </div>
+
+                            {settings.registrationCalcType === 'FIXED' ? (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        مبلغ ثابت پورسانت ثبت نام کارخانه
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="100000"
+                                            min="0"
+                                            value={settings.registrationFixedAmount ?? 0}
+                                            onChange={e => setSettings({ ...settings, registrationFixedAmount: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-14 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
+                                            placeholder="مثال: ۴۵۱۰۰۰۰"
+                                        />
+                                        <span className="absolute left-3 top-2 text-[11px] font-bold text-slate-400">ریال</span>
+                                    </div>
+                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono block">
+                                        معادل: {Math.round((settings.registrationFixedAmount || 0) / 10).toLocaleString('fa-IR')} تومان
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        درصد پورسانت از پیش‌پرداخت ثبت‌نام نمایندگی (پیش‌فرض: ۰.۱٪)
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            max="100"
+                                            value={settings.registrationRate}
+                                            onChange={e => setSettings({ ...settings, registrationRate: parseFloat(e.target.value) || 0 })}
+                                            className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-cyan-500 outline-none"
+                                            required
+                                        />
+                                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">٪</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* 6. Loss Penalty Rate (Rule for negative profit/loss) */}

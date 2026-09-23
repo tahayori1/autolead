@@ -381,7 +381,7 @@ const App: React.FC = () => {
             icon: <ChartBarIcon className="w-5 h-5" />,
             items: [
                 { view: 'reports' as ActiveView, label: 'گزارشات و نمودارها', icon: <ChartBarIcon className="w-5 h-5" /> },
-                { view: 'commission' as ActiveView, label: 'کمیسیون و پورسانت', icon: <CalculatorIcon className="w-5 h-5" /> },
+                { view: 'commission' as ActiveView, label: 'کمسیون و پاداش', icon: <CalculatorIcon className="w-5 h-5" /> },
                 { view: 'poll' as ActiveView, label: 'نظرسنجی مشتریان', icon: <PollIcon className="w-5 h-5" /> },
             ]
         },
