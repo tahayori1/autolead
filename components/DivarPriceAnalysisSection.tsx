@@ -9,8 +9,8 @@ import {
     Info, FileText, Sliders, MapPin, Globe, CheckCircle2, Loader2, X,
     SlidersHorizontal, Layers, Eye, EyeOff, AlertTriangle, ExternalLink
 } from 'lucide-react';
-import type { DivarPriceItem, DivarModelStats, ScrapedCarPrice, CarPriceStats } from '../types';
-import { getDivarPrices, getScrapedCarPrices } from '../services/api';
+import type { DivarPriceItem, DivarModelStats, ScrapedCarPrice, CarPriceStats, DivarAdvDetail } from '../types';
+import { getDivarPrices, getScrapedCarPrices, getDivarAdvDetails } from '../services/api';
 
 interface DivarPriceAnalysisSectionProps {
     showToast?: (message: string, type: 'success' | 'error') => void;
@@ -213,6 +213,33 @@ const matchOtherPricesForCar = (carKey: string, allOtherPrices: ScrapedCarPrice[
     return deduped;
 };
 
+const DEFAULT_DIVAR_ITEMS: DivarPriceItem[] = [
+    { title: "جک جی4 سفید", price: 3000000000, km: "300", desc: "3 ساعت پیش در گرگان", car_name: "jac j4", href: "https://divar.ir/v/ga4mIZW2" },
+    { title: "جک 1405 صفر پلاک", price: 2930000000, km: "0", desc: "در تهران", car_name: "jac j4", href: "https://divar.ir/v/gaV6lgev" },
+    { title: "جک J4 مشکی", price: 2925000000, km: "0", desc: "نمایشگاه در گرگان", car_name: "jac j4", href: "https://divar.ir/v/ga3WYbYt" },
+    { title: "جک j4 صفر کیلومتر", price: 2900000000, km: "0", desc: "نمایشگاه در مشهد", car_name: "jac j4", href: "https://divar.ir/v/ga3yG5uE" },
+    { title: "جک J4 مدل 1405 نمایندگی کرمان موتور", price: 2830000000, km: "0", desc: "نمایشگاه در تهران", car_name: "jac j4", href: "https://divar.ir/v/ga0SrY5a" },
+    { title: "جک J4 صفر خشک مدل 1405 تحویل شهریور", price: 2805000000, km: "60", desc: "پریروز در تهران", car_name: "jac j4", href: "https://divar.ir/v/ga1Gk0C0" },
+    { title: "j4-خشک-1405-نقد-معاوضه نداریم", price: 2800000000, km: "0", desc: "1 ساعت پیش در مشهد", car_name: "jac j4", href: "https://divar.ir/v/ga4KqH53" },
+    { title: "جک j4 خشک نقد و اقساط", price: 2800000000, km: "0", desc: "16 ساعت پیش در اردبیل", car_name: "jac j4", href: "https://divar.ir/v/ga3msXAC" },
+    { title: "فروش اقساطی جک J4", price: 2800000000, km: "0", desc: "نمایشگاه در قم", car_name: "jac j4", href: "https://divar.ir/v/ga2O3K9W" },
+    { title: "جک J4", price: 2762000000, km: "0", desc: "نمایشگاه در تهران", car_name: "jac j4", href: "https://divar.ir/v/ga2Szff7" },
+    { title: "جک جی 4 مدل 1405 گارانتی فعال", price: 2750000000, km: "0", desc: "نمایشگاه در کرج", car_name: "jac j4", href: "https://divar.ir/v/gamWnvHJ" },
+    { title: "جک J4 مشکی(مدل 1405)صفر AutoLand", price: 2750000000, km: "0", desc: "نمایشگاه در اصفهان", car_name: "jac j4", href: "https://divar.ir/v/ga3unJwa" },
+    { title: "جکj4 اپشنال کیلومترجدید چک‌ها کم خواهد شد", price: 2750000000, km: "0", desc: "در زنجان", car_name: "jac j4", href: "https://divar.ir/v/gaPGkm-j" },
+    { title: "فروش جک j4 صفر سفید", price: 2750000000, km: "360", desc: "در شیراز", car_name: "jac j4", href: "https://divar.ir/v/gaAa67y0" },
+    { title: "جک j4", price: 2730000000, km: "0", desc: "3 روز پیش در اراک", car_name: "jac j4", href: "https://divar.ir/v/gazytA7b" },
+    { title: "جک j4 اتوماتیک صفر برج آخر 1404", price: 2700000000, km: "0", desc: "در ملایر", car_name: "jac j4", href: "https://divar.ir/v/gay2XNzO" },
+    { title: "جکj4مدل1404", price: 2700000000, km: "0", desc: "دیروز در تهران", car_name: "jac j4", href: "https://divar.ir/v/ga2SHwHl" },
+    { title: "jack j4", price: 2700000000, km: "30", desc: "پریروز در تبریز", car_name: "jac j4", href: "https://divar.ir/v/ga2-wB7F" },
+    { title: "جک j4", price: 2700000000, km: "800", desc: "در تهران", car_name: "jac j4", href: "https://divar.ir/v/gawGOYeK" },
+    { title: "جک جی 4", price: 2680000000, km: "0", desc: "18 ساعت پیش در کرج", car_name: "jac j4", href: "https://divar.ir/v/ga3SLKtA" },
+    { title: "جک j4 مدل 405 صفر", price: 2650000000, km: "0", desc: "22 ساعت پیش در ارومیه", car_name: "jac j4", href: "https://divar.ir/v/ga363Z3s" },
+    { title: "جک j4 صفر کیلومتر خشک مدل آخر 1404", price: 2550000000, km: "0", desc: "در اصفهان", car_name: "jac j4", href: "https://divar.ir/v/gari9XvN" },
+    { title: "جک J4 جی چهار 4 سفید ( صفر خشک تحویل فوری روز", price: 2550000000, km: "0", desc: "نمایشگاه در تهران", car_name: "jac j4", href: "https://divar.ir/v/gabNlvu9" },
+    { title: "جک جی فور J 4 اتومات 1405 صفر تحویل فوری", price: 2500000000, km: "0", desc: "نمایشگاه در تهران", car_name: "jac j4", href: "https://divar.ir/v/ga30JAI9" }
+];
+
 const STORAGE_CACHE_KEY = 'divar_live_prices_v4';
 const STORAGE_TIME_KEY = 'divar_live_timestamp_v4';
 const STORAGE_CITY_KEY = 'divar_live_last_city_v4';
@@ -226,10 +253,6 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
 }) => {
     const [items, setItems] = useState<DivarPriceItem[]>(() => {
         try {
-            localStorage.removeItem('divar_prices_cache_v2');
-            localStorage.removeItem('divar_prices_timestamp_v2');
-            localStorage.removeItem('divar_prices_last_city_v2');
-
             const cached = localStorage.getItem(STORAGE_CACHE_KEY);
             if (cached) {
                 const parsed = JSON.parse(cached);
@@ -240,7 +263,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         } catch {
             // fallback
         }
-        return [];
+        return DEFAULT_DIVAR_ITEMS;
     });
 
     const [lastUpdated, setLastUpdated] = useState<string>(() => {
@@ -263,6 +286,54 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     const [showOtherSourcesOnChart, setShowOtherSourcesOnChart] = useState<boolean>(true);
     const [showOtherSourceLines, setShowOtherSourceLines] = useState<boolean>(true);
     const [showOutliersModal, setShowOutliersModal] = useState<boolean>(false);
+
+    const [advDetailUrl, setAdvDetailUrl] = useState<string>('');
+    const [advDetailLoading, setAdvDetailLoading] = useState<boolean>(false);
+    const [advDetailResult, setAdvDetailResult] = useState<DivarAdvDetail | null>(null);
+    const [showAdvDetailModal, setShowAdvDetailModal] = useState<boolean>(false);
+    const [advCooldownSeconds, setAdvCooldownSeconds] = useState<number>(0);
+
+    useEffect(() => {
+        if (advCooldownSeconds > 0) {
+            const timer = setInterval(() => {
+                setAdvCooldownSeconds(prev => (prev > 1 ? prev - 1 : 0));
+            }, 1000);
+            return () => clearInterval(timer);
+        }
+    }, [advCooldownSeconds]);
+
+    const handleFetchAdvDetails = async (targetUrl?: string) => {
+        if (advCooldownSeconds > 0 || advDetailLoading) {
+            if (showToast) showToast(`لطفاً برای استعلام بعدی ${advCooldownSeconds} ثانیه صبر کنید`, 'error');
+            return;
+        }
+
+        const urlToFetch = targetUrl;
+        if (!urlToFetch || !urlToFetch.trim()) {
+            if (showToast) showToast('لطفا لینک معتبر آگهی دیوار را وارد کنید', 'error');
+            return;
+        }
+
+        setAdvDetailLoading(true);
+        if (showToast) showToast('در حال استعلام جزئیات آگهی از دیوار (تا ۶۰ ثانیه)...', 'success');
+
+        try {
+            const results = await getDivarAdvDetails(urlToFetch.trim());
+            if (Array.isArray(results) && results.length > 0) {
+                setAdvDetailResult(results[0]);
+                setShowAdvDetailModal(true);
+                if (showToast) showToast('جزئیات آگهی با موفقیت دریافت شد', 'success');
+            } else {
+                throw new Error('پاسخی از وب‌هوک دریافت نشد');
+            }
+        } catch (err: any) {
+            const msg = err.message || 'خطا در استعلام جزئیات آگهی';
+            if (showToast) showToast(msg, 'error');
+        } finally {
+            setAdvDetailLoading(false);
+            setAdvCooldownSeconds(30); // 30 seconds cooldown
+        }
+    };
 
     // Fallback fetching for other prices if not provided as props
     const [fetchedOtherPrices, setFetchedOtherPrices] = useState<ScrapedCarPrice[]>([]);
@@ -1667,15 +1738,25 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                                             {ad.title || 'بدون عنوان'}
                                                         </div>
                                                         {ad.href && (
-                                                            <a 
-                                                                href={ad.href} 
-                                                                target="_blank" 
-                                                                rel="noopener noreferrer" 
-                                                                className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline mt-0.5 inline-flex items-center gap-0.5"
-                                                            >
-                                                                <span>مشاهده آگهی در دیوار</span>
-                                                                <ExternalLink className="w-2.5 h-2.5" />
-                                                            </a>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <a 
+                                                                    href={ad.href} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer" 
+                                                                    className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline inline-flex items-center gap-0.5"
+                                                                >
+                                                                    <span>مشاهده در دیوار</span>
+                                                                    <ExternalLink className="w-2.5 h-2.5" />
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleFetchAdvDetails(ad.href!)}
+                                                                    className="text-[10px] px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 font-bold inline-flex items-center gap-1 cursor-pointer"
+                                                                >
+                                                                    <Sparkles className="w-2.5 h-2.5" />
+                                                                    <span>استعلام مشخصات کامل</span>
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </td>
                                                     <td className="p-3 text-center font-mono font-bold text-sm">
@@ -1842,6 +1923,146 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                 type="button"
                                 onClick={() => setShowOutliersModal(false)}
                                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl cursor-pointer"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Ad Detail Modal */}
+            {showAdvDetailModal && advDetailResult && (
+                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-850 rounded-3xl max-w-2xl w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 flex items-center justify-center font-bold">
+                                    🚗
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-slate-800 dark:text-white text-base line-clamp-1">
+                                        {advDetailResult.title || 'جزئیات آگهی دیوار'}
+                                    </h4>
+                                    <p className="text-[11px] text-slate-400 font-mono">
+                                        {advDetailResult.info || 'استعلام برخط بدون خروج از اپ'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowAdvDetailModal(false)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Specs Grid */}
+                        <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {advDetailResult.price && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">قیمت اعلامی:</span>
+                                        <p className="text-sm font-black font-mono text-rose-600 dark:text-rose-400">
+                                            {advDetailResult.price}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.km && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">کارکرد:</span>
+                                        <p className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.km}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.color && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">رنگ:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.color}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.year && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">مدل / سال:</span>
+                                        <p className="text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.year}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.engine && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">وضعیت موتور:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.engine}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.shasi && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">شاسی:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.shasi}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.body && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">بدنه:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.body}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.gearbox && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">گیربکس:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.gearbox}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.fuel && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">سوخت:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.fuel}
+                                        </p>
+                                    </div>
+                                )}
+                                {advDetailResult.lease && (
+                                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
+                                        <span className="text-[11px] text-slate-400 font-bold">لیزینگ / اقساط:</span>
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200">
+                                            {advDetailResult.lease}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {advDetailResult.details && (
+                                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">متن توضیحات کامل آگهی:</span>
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-line font-sans">
+                                        {advDetailResult.details}
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-[11px] text-slate-400 font-mono border-t border-slate-100 dark:border-slate-800">
+                                <span>{advDetailResult['date-time-create']}</span>
+                                <span>{advDetailResult['date-time-update']}</span>
+                            </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowAdvDetailModal(false)}
+                                className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl cursor-pointer"
                             >
                                 بستن
                             </button>

@@ -326,7 +326,7 @@ const ReportsPage: React.FC = () => {
         setError(null);
         try {
             const [usersData, carsData, ordersData, logsData, meetingsData, staffData, journalsData] = await Promise.all([
-                getUsers(),
+                getUsers({ items: 'all' }),
                 getCars(),
                 carOrdersService.getAll(),
                 getCallLogs().catch(() => []),

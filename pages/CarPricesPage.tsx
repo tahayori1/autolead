@@ -1378,7 +1378,9 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                                                 <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 truncate">
                                                                     {op.source_name}
                                                                     {isStale && (
-                                                                        <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" title="بیش از ۲۴ ساعت از آخرین بروزرسانی گذشته است" />
+                                                                        <span title="بیش از ۲۴ ساعت از آخرین بروزرسانی گذشته است">
+                                                                            <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                                                        </span>
                                                                     )}
                                                                     :
                                                                 </span>

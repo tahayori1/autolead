@@ -239,6 +239,26 @@ export interface DivarPriceItem {
     href: string | null;
 }
 
+export interface DivarAdvDetail {
+    details?: string;
+    km?: string;
+    color?: string;
+    year?: string;
+    engine?: string;
+    shasi?: string;
+    body?: string;
+    gearbox?: string;
+    brand?: string;
+    fuel?: string;
+    price?: string;
+    lease?: string;
+    title?: string;
+    info?: string;
+    'date-time-create'?: string;
+    'date-time-update'?: string;
+    [key: string]: any;
+}
+
 export interface DivarModelStats {
     car_name: string;
     displayName: string;

@@ -36,7 +36,8 @@ import type {
     SalaryAdvanceRequest,
     CrmMeeting,
     AdvertisementReport,
-    DivarPriceItem
+    DivarPriceItem,
+    DivarAdvDetail
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -1599,6 +1600,39 @@ export const getDivarPrices = async (
         return normalizeItems(data, model);
     } finally {
         clearTimeout(timeoutId);
+    }
+};
+
+export const getDivarAdvDetails = async (adUrl: string, signal?: AbortSignal): Promise<DivarAdvDetail[]> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 65000); // 65 seconds
+    if (signal) {
+        signal.addEventListener('abort', () => controller.abort());
+    }
+
+    const encodedUrl = encodeURIComponent(adUrl);
+    const endpoint = `https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/divar-adv?url=${encodedUrl}`;
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) return data;
+            if (data && typeof data === 'object') {
+                if (Array.isArray(data.data)) return data.data;
+                if (Array.isArray(data.items)) return data.items;
+                return [data];
+            }
+        }
+        throw new Error(`خطا در استعلام جزئیات آگهی (کد ${response.status})`);
+    } catch (err: any) {
+        clearTimeout(timeoutId);
+        throw err;
     }
 };
 
