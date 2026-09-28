@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { CarOrder, Car, CarSaleCondition, CarPriceStats, ScrapedCarPrice, User, StaffUser } from '../types';
+import type { CarOrder, Car, CarSaleCondition, CarPriceStats, ScrapedCarPrice, User, StaffUser, OrderPartner } from '../types';
 import { OrderStatus, SaleType, PayType } from '../types';
 import { 
     Search, 
@@ -31,7 +31,16 @@ import {
     BadgeCheck,
     Plus,
     UserPlus,
-    UserCheck
+    UserCheck,
+    Warehouse,
+    Truck,
+    Calculator,
+    Coins,
+    ArrowUpDown,
+    Trash2,
+    Percent,
+    Users,
+    ArrowRightLeft
 } from 'lucide-react';
 import { CloseIcon } from './icons/CloseIcon';
 import { getCars, getConditions, getCarPriceStats, getScrapedCarPrices, getUsers, getStaffUsers, createCondition, createUser, createCallLog, createCustomerJournal } from '../services/api';
@@ -168,6 +177,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
     const [crmSearchQuery, setCrmSearchQuery] = useState('');
     const [crmResults, setCrmResults] = useState<User[]>([]);
 
+    // Partner selection state
+    const [newPartnerStaffName, setNewPartnerStaffName] = useState<string>('');
+    const [newPartnerSide, setNewPartnerSide] = useState<'فروش' | 'خرید'>('فروش');
+
     const [formData, setFormData] = useState({
         buyerName: '',
         buyerNationalId: '',
@@ -181,6 +194,15 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         selectedColor: '',
         proposedPrice: 0,
         userNotes: '',
+        purchasePrice: 0,
+        sellingPrice: 0,
+        shippingCost: 0,
+        netCommission: 0,
+        totalCommissionBonus: 0,
+        partnerCommissionShare: 0,
+        sellerType: 'COMPANY_WAREHOUSE' as 'COMPANY_WAREHOUSE' | 'OTHER',
+        sellerName: 'انبار مرکزی شرکت (حسینی خودرو)',
+        partners: [] as OrderPartner[],
         carExperts: [] as string[]
     });
 
@@ -190,8 +212,23 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
             setStep(1);
             setSelectedPriceYear(null);
             setExpertSearchQuery('');
+            setNewPartnerStaffName('');
+            setNewPartnerSide('فروش');
             
             if (editOrder) {
+                const sPrice = editOrder.sellingPrice || editOrder.proposedPrice || 0;
+                const pPrice = editOrder.purchasePrice || 0;
+                const sCost = editOrder.shippingCost || 0;
+                const netComm = editOrder.netCommission !== undefined ? editOrder.netCommission : (sPrice - pPrice - sCost);
+                const bonus = editOrder.totalCommissionBonus !== undefined ? editOrder.totalCommissionBonus : (netComm > 0 ? Math.round(netComm * 0.1) : 0);
+                const partnerList: OrderPartner[] = editOrder.partners && editOrder.partners.length > 0 
+                    ? editOrder.partners 
+                    : (editOrder.carExperts || []).map(exp => ({
+                        name: exp.replace(/\(.*\)/, '').trim(),
+                        side: exp.includes('خرید') ? ('خرید' as const) : ('فروش' as const)
+                    }));
+                const share = editOrder.partnerCommissionShare !== undefined ? editOrder.partnerCommissionShare : (partnerList.length > 0 && bonus > 0 ? Math.round(bonus / partnerList.length) : 0);
+
                 setFormData({
                     buyerName: editOrder.buyerName || '',
                     buyerNationalId: editOrder.buyerNationalId || '',
@@ -203,8 +240,17 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     conditionId: editOrder.conditionId || 0,
                     conditionSummary: editOrder.conditionSummary || '',
                     selectedColor: editOrder.selectedColor || '',
-                    proposedPrice: editOrder.proposedPrice || 0,
+                    proposedPrice: sPrice,
                     userNotes: editOrder.userNotes || '',
+                    purchasePrice: pPrice,
+                    sellingPrice: sPrice,
+                    shippingCost: sCost,
+                    netCommission: netComm,
+                    totalCommissionBonus: bonus,
+                    partnerCommissionShare: share,
+                    sellerType: (editOrder.sellerType as any) || (editOrder.deductFromStock ? 'COMPANY_WAREHOUSE' : 'OTHER'),
+                    sellerName: editOrder.sellerName || (editOrder.sellerType === 'OTHER' ? '' : 'انبار مرکزی شرکت (حسینی خودرو)'),
+                    partners: partnerList,
                     carExperts: editOrder.carExperts || []
                 });
             } else if (initialBuyerData) {
@@ -216,6 +262,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     buyerNationalId: initialBuyerData.nationalId || prev.buyerNationalId,
                     buyerAddress: initialBuyerData.address || prev.buyerAddress,
                     buyerPostalCode: initialBuyerData.postalCode || prev.buyerPostalCode,
+                    partners: [],
                     carExperts: []
                 }));
             } else {
@@ -232,6 +279,15 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     selectedColor: '',
                     proposedPrice: 0,
                     userNotes: '',
+                    purchasePrice: 0,
+                    sellingPrice: 0,
+                    shippingCost: 0,
+                    netCommission: 0,
+                    totalCommissionBonus: 0,
+                    partnerCommissionShare: 0,
+                    sellerType: 'COMPANY_WAREHOUSE',
+                    sellerName: 'انبار مرکزی شرکت (حسینی خودرو)',
+                    partners: [],
                     carExperts: []
                 });
             }
@@ -807,7 +863,106 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         setStep(prev => Math.max(1, prev - 1));
     };
 
-    // Expert Selection Handlers (Max 4 Experts)
+    // Financial Calculation Helper
+    const updateFinancials = (partial: { 
+        purchasePrice?: number; 
+        sellingPrice?: number; 
+        shippingCost?: number; 
+        proposedPrice?: number;
+        sellerType?: 'COMPANY_WAREHOUSE' | 'OTHER';
+        sellerName?: string;
+    }) => {
+        setFormData(prev => {
+            const selling = partial.sellingPrice !== undefined 
+                ? partial.sellingPrice 
+                : (partial.proposedPrice !== undefined ? partial.proposedPrice : (prev.sellingPrice || prev.proposedPrice || 0));
+            const purchase = partial.purchasePrice !== undefined ? partial.purchasePrice : (prev.purchasePrice || 0);
+            const shipping = partial.shippingCost !== undefined ? partial.shippingCost : (prev.shippingCost || 0);
+
+            const netCommission = selling - purchase - shipping;
+            const totalCommissionBonus = netCommission > 0 ? Math.round(netCommission * 0.1) : 0;
+            const partnersCount = (prev.partners || []).length;
+            const partnerCommissionShare = partnersCount > 0 && totalCommissionBonus > 0 
+                ? Math.round(totalCommissionBonus / partnersCount) 
+                : 0;
+
+            return {
+                ...prev,
+                ...partial,
+                sellingPrice: selling,
+                proposedPrice: selling,
+                purchasePrice: purchase,
+                shippingCost: shipping,
+                netCommission,
+                totalCommissionBonus,
+                partnerCommissionShare
+            };
+        });
+    };
+
+    // Collaborating Partners Handlers (Max 4 Partners - Buy / Sale side)
+    const handleAddPartner = (staffName: string, side: 'فروش' | 'خرید') => {
+        const trimmed = staffName.trim();
+        if (!trimmed) return;
+        setFormData(prev => {
+            const currentPartners = prev.partners || [];
+            if (currentPartners.some(p => p.name === trimmed)) return prev;
+            if (currentPartners.length >= 4) return prev; // Maximum 4 partners
+            
+            const staffObj = staffUsers.find(s => (s.fullName || s.username) === trimmed);
+            const newPartner: OrderPartner = {
+                name: trimmed,
+                side,
+                role: staffObj?.roleTitle || staffObj?.role || '',
+                userId: staffObj?.id
+            };
+            const updated = [...currentPartners, newPartner];
+            const netComm = (prev.sellingPrice || prev.proposedPrice || 0) - (prev.purchasePrice || 0) - (prev.shippingCost || 0);
+            const bonus = netComm > 0 ? Math.round(netComm * 0.1) : 0;
+            const share = updated.length > 0 && bonus > 0 ? Math.round(bonus / updated.length) : 0;
+
+            return {
+                ...prev,
+                partners: updated,
+                carExperts: updated.map(p => `${p.name} (سمت ${p.side})`),
+                partnerCommissionShare: share
+            };
+        });
+    };
+
+    const handleRemovePartner = (partnerName: string) => {
+        setFormData(prev => {
+            const updated = (prev.partners || []).filter(p => p.name !== partnerName);
+            const netComm = (prev.sellingPrice || prev.proposedPrice || 0) - (prev.purchasePrice || 0) - (prev.shippingCost || 0);
+            const bonus = netComm > 0 ? Math.round(netComm * 0.1) : 0;
+            const share = updated.length > 0 && bonus > 0 ? Math.round(bonus / updated.length) : 0;
+
+            return {
+                ...prev,
+                partners: updated,
+                carExperts: updated.map(p => `${p.name} (سمت ${p.side})`),
+                partnerCommissionShare: share
+            };
+        });
+    };
+
+    const handleTogglePartnerSide = (partnerName: string) => {
+        setFormData(prev => {
+            const updated = (prev.partners || []).map(p => {
+                if (p.name === partnerName) {
+                    return { ...p, side: p.side === 'فروش' ? ('خرید' as const) : ('فروش' as const) };
+                }
+                return p;
+            });
+            return {
+                ...prev,
+                partners: updated,
+                carExperts: updated.map(p => `${p.name} (سمت ${p.side})`)
+            };
+        });
+    };
+
+    // Expert Selection Handlers (Legacy / Max 4 Experts)
     const handleToggleExpert = (expertName: string) => {
         const trimmed = expertName.trim();
         if (!trimmed) return;
@@ -1925,81 +2080,582 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                     )}
 
                                     {/* ------------------------------------------------------------- */}
-                                    {/* PROPOSED PRICE INPUT FIELD & FAST-FILL BUTTONS                */}
+                                    {/* STEP 3.1: SELLER & WAREHOUSE SELECTION                        */}
                                     {/* ------------------------------------------------------------- */}
-                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border-2 border-sky-500/30 shadow-md space-y-4">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                            <label className="block text-sm font-black text-slate-800 dark:text-white">
-                                                قیمت معامله شده / پیشنهادی کاربر (تومان)
-                                            </label>
-                                            {/* Quick fill buttons */}
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                {activePriceVariant?.manualPrice && activePriceVariant.manualPrice.price_rial > 0 ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData({...formData, proposedPrice: activePriceVariant.manualPrice!.price_rial})}
-                                                        className="text-[11px] bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-lg font-black transition-colors border border-indigo-200 dark:border-indigo-800"
-                                                    >
-                                                        ⭐️ نرخ مصوب نمایندگی
-                                                    </button>
-                                                ) : null}
-                                                {selectedConditionObj?.initial_deposit ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData({...formData, proposedPrice: selectedConditionObj.initial_deposit})}
-                                                        className="text-[11px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg font-bold transition-colors"
-                                                    >
-                                                        همان قیمت بخشنامه
-                                                    </button>
-                                                ) : null}
-                                                {activePriceVariant?.averageMarketPrice ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData({...formData, proposedPrice: activePriceVariant.averageMarketPrice})}
-                                                        className="text-[11px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg font-bold transition-colors"
-                                                    >
-                                                        میانگین بازار
-                                                    </button>
-                                                ) : null}
-                                                {activePriceVariant?.highestMarketPrice ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData({...formData, proposedPrice: activePriceVariant.highestMarketPrice})}
-                                                        className="text-[11px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg font-bold transition-colors"
-                                                    >
-                                                        سقف بازار
-                                                    </button>
-                                                ) : null}
+                                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                                                    <Warehouse className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-sm text-slate-800 dark:text-white">
+                                                        تامین‌کننده و فروشنده خودرو
+                                                    </h4>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        مشخص فرمایید خودرو از انبار شرکت تامین شده یا توسط شخص/نمایشگاه همکار
+                                                    </span>
+                                                </div>
                                             </div>
-                                        </div>
-
-                                        <div className="relative">
-                                            <input 
-                                                required 
-                                                type="number" 
-                                                className={`w-full px-5 py-4 border-2 rounded-2xl bg-slate-50 dark:bg-slate-900 dark:text-white outline-none focus:ring-4 font-mono text-2xl font-black transition-all ${
-                                                    credibilityVerdict.status === 'INVALID'
-                                                        ? 'border-rose-500 text-rose-600 focus:ring-rose-500/20' 
-                                                        : credibilityVerdict.status === 'VALID'
-                                                            ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 focus:ring-emerald-500/20'
-                                                            : 'border-slate-300 dark:border-slate-700 focus:border-sky-500 focus:ring-sky-500/20 text-slate-900'
-                                                }`} 
-                                                value={formData.proposedPrice || ''} 
-                                                onChange={e => setFormData({...formData, proposedPrice: Number(e.target.value)})} 
-                                                placeholder="مبلغ پیشنهادی را به تومان وارد کنید..."
-                                            />
-                                            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">
-                                                تومان
+                                            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-2.5 py-1 rounded-lg">
+                                                {formData.sellerType === 'COMPANY_WAREHOUSE' ? '🏢 فروشنده: خود شرکت' : '👤 فروشنده: همکار / شخص'}
                                             </span>
                                         </div>
 
-                                        {/* Number in Persian Words */}
-                                        {formData.proposedPrice > 0 && (
-                                            <div className="bg-sky-50 dark:bg-sky-950/30 p-3 rounded-xl border border-sky-100 dark:border-sky-900/50 flex items-center gap-2 text-xs font-bold text-sky-800 dark:text-sky-300">
-                                                <span>به حروف:</span>
-                                                <span className="font-black text-sky-900 dark:text-sky-200">
-                                                    {numberToPersianWords(formData.proposedPrice)} تومان
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => updateFinancials({ 
+                                                    sellerType: 'COMPANY_WAREHOUSE', 
+                                                    sellerName: 'انبار مرکزی شرکت (حسینی خودرو)' 
+                                                })}
+                                                className={`p-3.5 rounded-xl border text-right transition-all flex items-start gap-3 ${
+                                                    formData.sellerType === 'COMPANY_WAREHOUSE'
+                                                        ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-2 ring-indigo-500/20 shadow-sm'
+                                                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300'
+                                                }`}
+                                            >
+                                                <div className={`p-2 rounded-lg ${
+                                                    formData.sellerType === 'COMPANY_WAREHOUSE' 
+                                                        ? 'bg-indigo-600 text-white' 
+                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                                                }`}>
+                                                    <Building2 className="w-5 h-5" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-black text-xs">انبار خود شرکت (فروشنده خود شرکت می‌باشد)</span>
+                                                        {formData.sellerType === 'COMPANY_WAREHOUSE' && <Check className="w-4 h-4 text-indigo-600" />}
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                                        موجودی از انبار رسمی حسینی خودرو تامین و پس از تایید از انبار کسر می‌گردد.
+                                                    </p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => updateFinancials({ 
+                                                    sellerType: 'OTHER', 
+                                                    sellerName: formData.sellerName === 'انبار مرکزی شرکت (حسینی خودرو)' ? '' : formData.sellerName 
+                                                })}
+                                                className={`p-3.5 rounded-xl border text-right transition-all flex items-start gap-3 ${
+                                                    formData.sellerType === 'OTHER'
+                                                        ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-2 ring-indigo-500/20 shadow-sm'
+                                                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300'
+                                                }`}
+                                            >
+                                                <div className={`p-2 rounded-lg ${
+                                                    formData.sellerType === 'OTHER' 
+                                                        ? 'bg-indigo-600 text-white' 
+                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                                                }`}>
+                                                    <Users className="w-5 h-5" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-black text-xs">سایر / شخص حقیقی یا نمایشگاه همکار</span>
+                                                        {formData.sellerType === 'OTHER' && <Check className="w-4 h-4 text-indigo-600" />}
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                                        خودرو از نمایشگاه‌های همکار یا اشخاص خریداری شده و واسطه‌گری صورت می‌گیرد.
+                                                    </p>
+                                                </div>
+                                            </button>
+                                        </div>
+
+                                        {formData.sellerType === 'OTHER' && (
+                                            <div className="pt-2 animate-fade-in">
+                                                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                                                    نام فروشنده، مالک خودرو یا نمایشگاه همکار:
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.sellerName || ''}
+                                                    onChange={e => updateFinancials({ sellerName: e.target.value })}
+                                                    placeholder="مثلاً: نمایشگاه الماس، آقای رضایی، نمایشگاه همکار..."
+                                                    className="w-full px-4 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* ------------------------------------------------------------- */}
+                                    {/* STEP 3.2: PURCHASE PRICE, SELLING PRICE & SHIPPING COST INPUTS */}
+                                    {/* ------------------------------------------------------------- */}
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border-2 border-sky-500/30 shadow-md space-y-5">
+                                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/80 pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black">
+                                                    <Coins className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                                                        ورود ارقام مالی معامله (قیمت خرید، فروش و هزینه حمل)
+                                                    </h4>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        اختلاف خرید و فروش پس از کسر حمل، مبنای محاسبه کمیسیون و پورسانت ۱۰٪ خواهد بود
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span className="text-xs bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 px-2.5 py-1 rounded-lg font-bold">
+                                                فرمول سود معامله
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            {/* SELLING / PROPOSED PRICE */}
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                        قیمت فروش خودرو (قیمت معامله پیشنهادی)
+                                                    </label>
+                                                    <span className="text-[10px] text-emerald-600 font-bold">تومان</span>
+                                                </div>
+
+                                                <div className="relative">
+                                                    <input 
+                                                        required 
+                                                        type="number" 
+                                                        className={`w-full px-4 py-3 border-2 rounded-xl bg-slate-50 dark:bg-slate-900 dark:text-white outline-none focus:ring-4 font-mono text-xl font-black transition-all ${
+                                                            credibilityVerdict.status === 'INVALID'
+                                                                ? 'border-rose-500 text-rose-600 focus:ring-rose-500/20' 
+                                                                : credibilityVerdict.status === 'VALID'
+                                                                    ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 focus:ring-emerald-500/20'
+                                                                    : 'border-slate-300 dark:border-slate-700 focus:border-sky-500 focus:ring-sky-500/20 text-slate-900'
+                                                        }`} 
+                                                        value={formData.proposedPrice || ''} 
+                                                        onChange={e => updateFinancials({ sellingPrice: Number(e.target.value), proposedPrice: Number(e.target.value) })} 
+                                                        placeholder="مثلاً ۲,۱۰۰,۰۰۰,۰۰۰"
+                                                    />
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
+                                                        تومان
+                                                    </span>
+                                                </div>
+
+                                                {formData.proposedPrice > 0 && (
+                                                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-lg">
+                                                        به حروف: {numberToPersianWords(formData.proposedPrice)} تومان
+                                                    </div>
+                                                )}
+
+                                                {/* Fast Fill Buttons for Selling Price */}
+                                                <div className="flex items-center gap-1 flex-wrap pt-1">
+                                                    {activePriceVariant?.manualPrice && activePriceVariant.manualPrice.price_rial > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateFinancials({ sellingPrice: activePriceVariant.manualPrice!.price_rial, proposedPrice: activePriceVariant.manualPrice!.price_rial })}
+                                                            className="text-[10px] bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md font-bold transition-colors border border-indigo-200 dark:border-indigo-800"
+                                                        >
+                                                            نرخ مصوب
+                                                        </button>
+                                                    )}
+                                                    {selectedConditionObj?.initial_deposit ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateFinancials({ sellingPrice: selectedConditionObj.initial_deposit, proposedPrice: selectedConditionObj.initial_deposit })}
+                                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-bold"
+                                                        >
+                                                            قیمت بخشنامه
+                                                        </button>
+                                                    ) : null}
+                                                    {activePriceVariant?.averageMarketPrice ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateFinancials({ sellingPrice: activePriceVariant.averageMarketPrice, proposedPrice: activePriceVariant.averageMarketPrice })}
+                                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-bold"
+                                                        >
+                                                            میانگین بازار
+                                                        </button>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+
+                                            {/* PURCHASE PRICE */}
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                        قیمت خرید خودرو (تومان)
+                                                    </label>
+                                                    <span className="text-[10px] text-blue-600 font-bold">بهای تمام‌شده خرید</span>
+                                                </div>
+
+                                                <div className="relative">
+                                                    <input 
+                                                        type="number" 
+                                                        className="w-full px-4 py-3 border-2 border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 rounded-xl bg-slate-50 dark:bg-slate-900 dark:text-white outline-none font-mono text-xl font-black transition-all" 
+                                                        value={formData.purchasePrice || ''} 
+                                                        onChange={e => updateFinancials({ purchasePrice: Number(e.target.value) })} 
+                                                        placeholder="مثلاً ۲,۰۰۰,۰۰۰,۰۰۰"
+                                                    />
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
+                                                        تومان
+                                                    </span>
+                                                </div>
+
+                                                {formData.purchasePrice > 0 && (
+                                                    <div className="text-[11px] text-blue-700 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg">
+                                                        به حروف: {numberToPersianWords(formData.purchasePrice)} تومان
+                                                    </div>
+                                                )}
+                                                <span className="text-[10px] text-slate-400 block">
+                                                    مبلغ پرداخت شده بابت خرید خودرو از تامین‌کننده، شرکت یا مالک قبلی
                                                 </span>
+                                            </div>
+                                        </div>
+
+                                        {/* SHIPPING COST */}
+                                        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                                    <Truck className="w-3.5 h-3.5 text-amber-500" />
+                                                    هزینه حمل و باربری خودرو (تومان)
+                                                </label>
+                                                <span className="text-[10px] text-amber-600 font-bold">کسر از سود معامله</span>
+                                            </div>
+
+                                            <div className="relative max-w-md">
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full px-4 py-2.5 border-2 border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/20 rounded-xl bg-slate-50 dark:bg-slate-900 dark:text-white outline-none font-mono text-base font-black transition-all" 
+                                                    value={formData.shippingCost || ''} 
+                                                    onChange={e => updateFinancials({ shippingCost: Number(e.target.value) })} 
+                                                    placeholder="مثلاً ۲۰,۰۰۰,۰۰۰"
+                                                />
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
+                                                    تومان
+                                                </span>
+                                            </div>
+
+                                            {formData.shippingCost > 0 && (
+                                                <div className="text-[11px] text-amber-700 dark:text-amber-300 font-bold bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded-lg max-w-md">
+                                                    به حروف: {numberToPersianWords(formData.shippingCost)} تومان
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* ------------------------------------------------------------- */}
+                                    {/* STEP 3.3: LIVE COMMISSION & 10% BONUS BREAKDOWN CARD          */}
+                                    {/* ------------------------------------------------------------- */}
+                                    <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl border border-indigo-800 shadow-xl space-y-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-800/60 pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black">
+                                                    <Calculator className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-sm text-white flex items-center gap-2">
+                                                        محاسبه کمیسیون خالص و پورسانت ۱۰ درصدی معامله
+                                                    </h4>
+                                                    <span className="text-[10px] text-indigo-300">
+                                                        فرمول: (قیمت فروش) - (قیمت خرید) - (هزینه حمل) = کمیسیون خالص
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-xl font-bold flex items-center gap-1">
+                                                <Percent className="w-3.5 h-3.5" />
+                                                پورسانت ۱۰٪ از کمیسیون
+                                            </span>
+                                        </div>
+
+                                        {/* Step-by-Step Financial Equation Cards */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                                            {/* Selling Price */}
+                                            <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                                                <span className="text-slate-400 block text-[11px] mb-1">قیمت فروش:</span>
+                                                <span className="font-mono font-bold text-base text-emerald-400">
+                                                    {(formData.proposedPrice || 0).toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 mr-1">تومان</span>
+                                            </div>
+
+                                            {/* Purchase Price */}
+                                            <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                                                <span className="text-slate-400 block text-[11px] mb-1">قیمت خرید:</span>
+                                                <span className="font-mono font-bold text-base text-blue-400">
+                                                    - {(formData.purchasePrice || 0).toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 mr-1">تومان</span>
+                                            </div>
+
+                                            {/* Shipping Cost */}
+                                            <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                                                <span className="text-slate-400 block text-[11px] mb-1">هزینه حمل:</span>
+                                                <span className="font-mono font-bold text-base text-amber-400">
+                                                    - {(formData.shippingCost || 0).toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 mr-1">تومان</span>
+                                            </div>
+
+                                            {/* Net Commission */}
+                                            <div className={`p-3 rounded-xl border ${
+                                                (formData.netCommission || 0) > 0 
+                                                    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' 
+                                                    : 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                                            }`}>
+                                                <span className="block text-[11px] mb-1 font-bold">کمیسیون خالص:</span>
+                                                <span className="font-mono font-black text-lg">
+                                                    {(formData.netCommission || 0).toLocaleString('fa-IR')}
+                                                </span>
+                                                <span className="text-[10px] mr-1 font-bold">تومان</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Commission Bonus (10%) and Partner Division Card */}
+                                        <div className="bg-indigo-900/40 border border-indigo-700/60 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                                            <div className="space-y-1 text-right w-full md:w-auto">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-indigo-300 font-bold">مبلغ پورسانت کل (۱۰ درصد کمیسیون):</span>
+                                                    <span className="font-mono font-black text-xl text-yellow-300">
+                                                        {(formData.totalCommissionBonus || 0).toLocaleString('fa-IR')} تومان
+                                                    </span>
+                                                </div>
+                                                {formData.totalCommissionBonus > 0 && (
+                                                    <span className="text-[11px] text-indigo-200 block">
+                                                        به حروف: {numberToPersianWords(formData.totalCommissionBonus)} تومان
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="bg-white/10 px-4 py-2.5 rounded-xl border border-white/15 text-center w-full md:w-auto">
+                                                <span className="text-[11px] text-slate-300 block mb-0.5">
+                                                    سهم پورسانت هر همکار (تقسیم بین {(formData.partners || []).length || 1} نفر):
+                                                </span>
+                                                <span className="font-mono font-black text-lg text-emerald-300">
+                                                    {(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')} تومان
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ------------------------------------------------------------- */}
+                                    {/* STEP 3.4: COLLABORATING PARTNERS (MAX 4 - SALE / BUY SIDE)    */}
+                                    {/* ------------------------------------------------------------- */}
+                                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center font-black">
+                                                    <Users className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                                                        همکاران مشارکت‌کننده در معامله
+                                                        <span className="text-[10px] bg-violet-100 dark:bg-violet-900/60 text-violet-800 dark:text-violet-200 px-2 py-0.5 rounded-full font-bold">
+                                                            حداکثر ۴ همکار
+                                                        </span>
+                                                    </h4>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        همکاری در سمت فروش یا خرید خودرو - پورسانت ۱۰٪ معامله بین این افراد تقسیم می‌شود
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <span className={`text-xs px-3 py-1 rounded-xl font-bold transition-all ${
+                                                (formData.partners || []).length === 4
+                                                    ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 font-black'
+                                                    : 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300'
+                                            }`}>
+                                                {(formData.partners || []).length} از ۴ همکار انتخاب شده
+                                            </span>
+                                        </div>
+
+                                        {/* Explanation Note according to user prompt */}
+                                        <div className="bg-violet-50/70 dark:bg-violet-950/30 p-3 rounded-xl border border-violet-100 dark:border-violet-900/40 text-xs text-violet-900 dark:text-violet-200 flex items-start gap-2">
+                                            <Info className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
+                                            <span>
+                                                یک معامله می‌تواند حداکثر ۴ همکار داشته باشد (مثلاً ۱ نفر در سمت فروش و ۳ نفر در سمت خرید، یا ترکیبات دیگر). پورسانت ۸ میلیون تومانی در این مثال، بین افراد همکار تقسیم می‌شود.
+                                            </span>
+                                        </div>
+
+                                        {/* Selected Partners Display Cards */}
+                                        {(formData.partners || []).length > 0 ? (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                {(formData.partners || []).map((partner, idx) => {
+                                                    const isSaleSide = partner.side === 'فروش';
+                                                    return (
+                                                        <div 
+                                                            key={partner.name}
+                                                            className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                                                                isSaleSide
+                                                                    ? 'bg-sky-50/60 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800'
+                                                                    : 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                                                                    isSaleSide 
+                                                                        ? 'bg-sky-600 text-white' 
+                                                                        : 'bg-emerald-600 text-white'
+                                                                }`}>
+                                                                    {idx + 1}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="font-bold text-xs text-slate-800 dark:text-white truncate">
+                                                                            {partner.name}
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleTogglePartnerSide(partner.name)}
+                                                                            className={`text-[10px] px-2 py-0.5 rounded-md font-black flex items-center gap-1 transition-all ${
+                                                                                isSaleSide
+                                                                                    ? 'bg-sky-100 dark:bg-sky-900 text-sky-800 dark:text-sky-200 hover:bg-sky-200'
+                                                                                    : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200'
+                                                                            }`}
+                                                                            title="کلیک برای تغییر سمت همکاری"
+                                                                        >
+                                                                            <ArrowRightLeft className="w-2.5 h-2.5" />
+                                                                            <span>سمت {partner.side}</span>
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className="text-[10px] text-slate-400">
+                                                                            سهم پورسانت: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')}</strong> ت
+                                                                        </span>
+                                                                        {partner.role && (
+                                                                            <span className="text-[10px] text-slate-400 font-normal">({partner.role})</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRemovePartner(partner.name)}
+                                                                    className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                                                                    title="حذف همکار"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-center text-xs text-slate-400">
+                                                هنوز همکار مشارکت‌کننده‌ای به این سفارش اختصاص نیافته است. از بخش زیر همکاران سمت فروش یا خرید را انتخاب نمایید.
+                                            </div>
+                                        )}
+
+                                        {/* Add Partner Control Form */}
+                                        {(formData.partners || []).length < 4 ? (
+                                            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                                                <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                                                    <span>افزودن همکار جدید به معامله (انتخاب از لیست پرسنل و کاربران دارای دسترسی):</span>
+                                                    <span className="text-[11px] text-violet-600 dark:text-violet-400">
+                                                        {4 - (formData.partners || []).length} جایگاه خالی
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                                                    {/* Select Staff User */}
+                                                    <div className="sm:col-span-6">
+                                                        <select
+                                                            value={newPartnerStaffName}
+                                                            onChange={e => setNewPartnerStaffName(e.target.value)}
+                                                            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-bold outline-none focus:ring-2 focus:ring-violet-500"
+                                                        >
+                                                            <option value="">-- انتخاب نام همکار از لیست کاربران --</option>
+                                                            {filteredStaffUsers
+                                                                .filter(u => !(formData.partners || []).some(p => p.name === (u.fullName || u.username)))
+                                                                .map(u => (
+                                                                    <option key={u.id} value={u.fullName || u.username}>
+                                                                        {u.fullName || u.username} {u.role ? `(${u.role})` : ''}
+                                                                    </option>
+                                                                ))
+                                                            }
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Side Selector (فروش / خرید) */}
+                                                    <div className="sm:col-span-3 flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setNewPartnerSide('فروش')}
+                                                            className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all ${
+                                                                newPartnerSide === 'فروش'
+                                                                    ? 'bg-sky-600 text-white shadow-sm'
+                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                                                            }`}
+                                                        >
+                                                            سمت فروش
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setNewPartnerSide('خرید')}
+                                                            className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all ${
+                                                                newPartnerSide === 'خرید'
+                                                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                                                            }`}
+                                                        >
+                                                            سمت خرید
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Add Button */}
+                                                    <div className="sm:col-span-3">
+                                                        <button
+                                                            type="button"
+                                                            disabled={!newPartnerStaffName}
+                                                            onClick={() => {
+                                                                if (newPartnerStaffName) {
+                                                                    handleAddPartner(newPartnerStaffName, newPartnerSide);
+                                                                    setNewPartnerStaffName('');
+                                                                }
+                                                            }}
+                                                            className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                            <span>افزودن همکار</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Fast Staff Chips */}
+                                                <div className="pt-1">
+                                                    <span className="text-[10px] text-slate-400 block mb-1.5">انتخاب سریع با یک کلیک:</span>
+                                                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                                                        {filteredStaffUsers
+                                                            .filter(u => !(formData.partners || []).some(p => p.name === (u.fullName || u.username)))
+                                                            .slice(0, 10)
+                                                            .map(u => {
+                                                                const name = u.fullName || u.username;
+                                                                return (
+                                                                    <div key={u.id} className="inline-flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 text-[10px]">
+                                                                        <span className="px-1.5 font-bold text-slate-700 dark:text-slate-300">{name}</span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleAddPartner(name, 'فروش')}
+                                                                            className="px-1.5 py-0.5 bg-sky-100 hover:bg-sky-200 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 rounded font-bold transition-colors ml-0.5"
+                                                                            title="افزودن در سمت فروش"
+                                                                        >
+                                                                            + فروش
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleAddPartner(name, 'خرید')}
+                                                                            className="px-1.5 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded font-bold transition-colors"
+                                                                            title="افزودن در سمت خرید"
+                                                                        >
+                                                                            + خرید
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-200 font-bold flex items-center gap-2">
+                                                <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                                                <span>حداکثر سقف مجاز (۴ همکار مشارکت‌کننده) برای این معامله تکمیل شده است.</span>
                                             </div>
                                         )}
                                     </div>
@@ -2114,104 +2770,51 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Car Experts Selection (Max 4 Experts) */}
-                                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                                    {/* Collaborating Partners Summary in Step 4 */}
+                                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-2.5">
                                             <h4 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
-                                                <UserCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                                                <span>کارشناسان خودرو دخیل در خرید و معامله خودرو</span>
+                                                <Users className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                                                <span>همکاران مشارکت‌کننده در معامله (سمت فروش و خرید)</span>
                                             </h4>
-                                            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold transition-all ${
-                                                (formData.carExperts || []).length === 4 
-                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-black'
-                                                    : 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300'
-                                            }`}>
-                                                {(formData.carExperts || []).length} از ۴ کارشناس انتخاب شده
+                                            <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                                                {(formData.partners || []).length} از ۴ همکار
                                             </span>
                                         </div>
 
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                                            نام کارشناس یا کارشناسان خودرو دخیل در این خرید و معامله را از بین کاربران و کارشناسان سیستم انتخاب فرمایید (حداکثر ۴ کارشناس).
-                                        </p>
-
-                                        {/* Selected Expert Badges */}
-                                        {(formData.carExperts || []).length > 0 ? (
-                                            <div className="flex flex-wrap gap-2 p-3 bg-teal-50/60 dark:bg-teal-950/30 rounded-xl border border-teal-100 dark:border-teal-900/50">
-                                                {(formData.carExperts || []).map((expert, idx) => (
-                                                    <div 
-                                                        key={idx} 
-                                                        className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-teal-800 rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm transition-all"
-                                                    >
-                                                        <div className="w-5 h-5 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center text-[10px] text-teal-700 dark:text-teal-300 font-mono font-bold">
-                                                            {idx + 1}
-                                                        </div>
-                                                        <span>{expert}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveExpert(expert)}
-                                                            className="text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 p-0.5 rounded-md transition-colors"
-                                                            title="حذف کارشناس"
+                                        {(formData.partners || []).length > 0 ? (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {(formData.partners || []).map((partner) => {
+                                                    const isSaleSide = partner.side === 'فروش';
+                                                    return (
+                                                        <div 
+                                                            key={partner.name}
+                                                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs ${
+                                                                isSaleSide
+                                                                    ? 'bg-sky-50/50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800 text-sky-900 dark:text-sky-200'
+                                                                    : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                                                            }`}
                                                         >
-                                                            <XCircle className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-black">{partner.name}</span>
+                                                                <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                                                                    isSaleSide ? 'bg-sky-200 dark:bg-sky-800 text-sky-900 dark:text-sky-100' : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100'
+                                                                }`}>
+                                                                    سمت {partner.side}
+                                                                </span>
+                                                            </div>
+                                                            <span className="font-mono font-bold text-slate-500 dark:text-slate-400 text-[11px]">
+                                                                پورسانت: {(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')} ت
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         ) : (
-                                            <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-center text-xs text-slate-400">
-                                                هنوز کارشناسی برای این سفارش انتخاب نشده است. از لیست کارشناسان زیر انتخاب نمایید.
+                                            <div className="p-2.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl text-center text-xs text-slate-400">
+                                                بدون همکار مشارکت‌کننده (می‌توانید در گام قبل همکاران را مشخص نمایید)
                                             </div>
                                         )}
-
-                                        {/* Search & Staff User Chips Selection */}
-                                        <div className="space-y-2">
-                                            <div className="relative">
-                                                <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="جستجو در نام، نام خانوادگی یا سمت کارشناسان..." 
-                                                    className="w-full pr-8 pl-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-teal-500 transition-all"
-                                                    value={expertSearchQuery}
-                                                    onChange={e => setExpertSearchQuery(e.target.value)}
-                                                />
-                                            </div>
-
-                                            {/* Staff User Chips Grid */}
-                                            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 border border-slate-100 dark:border-slate-700/60 rounded-xl bg-slate-50/40 dark:bg-slate-900/20">
-                                                {filteredStaffUsers.length > 0 ? (
-                                                    filteredStaffUsers.map(staff => {
-                                                        const displayName = staff.fullName || staff.username;
-                                                        const isSelected = (formData.carExperts || []).includes(displayName);
-                                                        const isMaxReached = (formData.carExperts || []).length >= 4 && !isSelected;
-
-                                                        return (
-                                                            <button
-                                                                key={staff.id}
-                                                                type="button"
-                                                                disabled={isMaxReached}
-                                                                onClick={() => handleToggleExpert(displayName)}
-                                                                className={`text-xs px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all ${
-                                                                    isSelected
-                                                                        ? 'bg-teal-600 text-white shadow-sm shadow-teal-500/20'
-                                                                        : isMaxReached
-                                                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-40'
-                                                                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-teal-950/50 dark:hover:text-teal-300 border border-slate-200 dark:border-slate-700 shadow-2xs'
-                                                                }`}
-                                                            >
-                                                                <UserIcon className="w-3 h-3 text-slate-400" />
-                                                                <span>{displayName}</span>
-                                                                {staff.role && <span className="text-[10px] opacity-75 font-normal">({staff.role})</span>}
-                                                                {isSelected && <Check className="w-3 h-3" />}
-                                                            </button>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <div className="w-full py-3 text-center text-xs text-slate-400">
-                                                        کاربری با این مشخصات یافت نشد
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
                                     </div>
 
                                     {/* Buyer Details Form & CRM Auto-fill */}

@@ -233,7 +233,7 @@ export interface CarPriceStats {
 export interface DivarPriceItem {
     title: string | null;
     price: number | null;
-    km: string | null;
+    km: string | number | null;
     desc: string | null;
     car_name: string;
     href: string | null;
@@ -314,6 +314,13 @@ export enum OrderStatus {
     COMPLETED = 'تکمیل شده',
 }
 
+export interface OrderPartner {
+    name: string;
+    side: 'فروش' | 'خرید'; // سمت فروش یا سمت خرید
+    role?: string;
+    userId?: number | string;
+}
+
 export interface CarOrder {
     id: number;
     trackingCode?: string;
@@ -329,11 +336,27 @@ export interface CarOrder {
     carName: string;
     conditionId: number;
     conditionSummary: string; // Detailed snapshot
-    // Step 3: Proposal
+    // Step 3: Proposal & Pricing
     selectedColor: string;
     proposedPrice: number;
     userNotes: string;
-    // Car Experts (Max 4 experts involved in the purchase/deal)
+
+    // Financial breakdown (Purchase, Selling, Transport, Net Commission, Commission Bonus)
+    purchasePrice?: number;         // قیمت خرید خودرو (تومان)
+    sellingPrice?: number;          // قیمت فروش خودرو (تومان)
+    shippingCost?: number;          // هزینه حمل (تومان)
+    netCommission?: number;         // کمیسیون خالص: قیمت فروش - قیمت خرید - هزینه حمل
+    totalCommissionBonus?: number;  // ۱۰ درصد کمیسیون خالص (پورسانت کل)
+    partnerCommissionShare?: number;// سهم پورسانت هر یک از همکاران
+
+    // Seller & Warehouse info
+    sellerType?: 'COMPANY_WAREHOUSE' | 'OTHER' | string; // انبار خود شرکت یا سایر
+    sellerName?: string;            // نام فروشنده یا انبار
+
+    // Collaborating Partners (Max 4 partners, either sale side or buy side)
+    partners?: OrderPartner[];
+
+    // Car Experts (Legacy / Max 4 experts involved in the purchase/deal)
     carExperts?: string[];
     expertIds?: number[];
     // Admin Review

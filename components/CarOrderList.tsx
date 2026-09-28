@@ -79,35 +79,101 @@ const CarOrderList: React.FC<CarOrderListProps> = ({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                                 <div>
                                     <span className="block text-xs text-slate-400 mb-1">خریدار:</span>
-                                    <span className="font-bold">{order.buyerName}</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">{order.buyerName}</span>
                                     <span className="block text-[10px] text-slate-500 mt-0.5" dir="ltr">{order.buyerPhone}</span>
                                 </div>
                                 <div>
-                                    <span className="block text-xs text-slate-400 mb-1">قیمت پیشنهادی:</span>
-                                    <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{(order.proposedPrice || 0).toLocaleString('fa-IR')}</span>
+                                    <span className="block text-xs text-slate-400 mb-1">فروشنده / انبار:</span>
+                                    <span className="font-bold text-slate-800 dark:text-white flex items-center gap-1 text-xs">
+                                        {order.sellerType === 'COMPANY_WAREHOUSE' ? (
+                                            <span className="text-indigo-600 dark:text-indigo-400 font-bold">🏢 انبار خود شرکت</span>
+                                        ) : (
+                                            <span className="text-slate-700 dark:text-slate-300">👤 {order.sellerName || 'سایر / همکار'}</span>
+                                        )}
+                                    </span>
                                 </div>
                                 <div>
-                                    <span className="block text-xs text-slate-400 mb-1">قیمت نهایی:</span>
-                                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{order.finalPrice ? order.finalPrice.toLocaleString('fa-IR') : '---'}</span>
+                                    <span className="block text-xs text-slate-400 mb-1">قیمت فروش پیشنهادی:</span>
+                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{(order.proposedPrice || 0).toLocaleString('fa-IR')} <span className="text-[10px] text-slate-400">ت</span></span>
+                                </div>
+                                <div>
+                                    <span className="block text-xs text-slate-400 mb-1">قیمت نهایی مصوب:</span>
+                                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{order.finalPrice ? order.finalPrice.toLocaleString('fa-IR') + ' ت' : 'در انتظار تایید'}</span>
                                 </div>
                             </div>
 
-                            {/* Car Experts Involved */}
-                            {order.carExperts && order.carExperts.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 mb-4 px-3 py-2 bg-teal-50/50 dark:bg-teal-950/20 rounded-xl border border-teal-100/70 dark:border-teal-900/40 text-xs">
-                                    <span className="font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1 text-[11px]">
-                                        <span>🧑‍💼</span>
-                                        کارشناسان دخیل:
-                                    </span>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {order.carExperts.map((exp, idx) => (
-                                            <span key={idx} className="bg-white dark:bg-slate-800 text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-teal-800 px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                                                {exp}
+                            {/* Financial breakdown: Purchase, Shipping, Net Commission, 10% Bonus */}
+                            {((order.purchasePrice && order.purchasePrice > 0) || (order.shippingCost && order.shippingCost > 0) || (order.netCommission !== undefined && order.netCommission !== 0)) && (
+                                <div className="mb-4 p-3 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-slate-900/60 dark:to-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/40 text-xs">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 text-[11px]">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-slate-400">قیمت خرید:</span>
+                                            <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{(order.purchasePrice || 0).toLocaleString('fa-IR')} ت</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-slate-400">هزینه حمل:</span>
+                                            <span className="font-mono font-bold text-amber-600">{(order.shippingCost || 0).toLocaleString('fa-IR')} ت</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-slate-400">کمیسیون خالص:</span>
+                                            <span className={`font-mono font-black ${(order.netCommission || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                                                {(order.netCommission !== undefined ? order.netCommission : ((order.sellingPrice || order.proposedPrice || 0) - (order.purchasePrice || 0) - (order.shippingCost || 0))).toLocaleString('fa-IR')} ت
                                             </span>
-                                        ))}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 bg-yellow-50 dark:bg-yellow-950/40 px-2.5 py-1 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                            <span className="text-yellow-800 dark:text-yellow-300 font-bold">پورسانت کل (۱۰٪):</span>
+                                            <span className="font-mono font-black text-yellow-900 dark:text-yellow-200">
+                                                {(order.totalCommissionBonus || 0).toLocaleString('fa-IR')} ت
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Collaborating Partners Involved */}
+                            {((order.partners && order.partners.length > 0) || (order.carExperts && order.carExperts.length > 0)) && (
+                                <div className="flex flex-wrap items-center gap-2 mb-4 px-3 py-2 bg-violet-50/50 dark:bg-violet-950/20 rounded-xl border border-violet-100/70 dark:border-violet-900/40 text-xs">
+                                    <span className="font-bold text-violet-800 dark:text-violet-300 flex items-center gap-1 text-[11px]">
+                                        <span>👥</span>
+                                        همکاران مشارکت‌کننده:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5 items-center">
+                                        {order.partners && order.partners.length > 0 ? (
+                                            order.partners.map((partner, idx) => {
+                                                const isSaleSide = partner.side === 'فروش';
+                                                return (
+                                                    <span 
+                                                        key={idx} 
+                                                        className={`border px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 shadow-2xs ${
+                                                            isSaleSide 
+                                                                ? 'bg-sky-50 dark:bg-sky-950/50 text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-800' 
+                                                                : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
+                                                        }`}
+                                                    >
+                                                        <span>{partner.name}</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-black ${
+                                                            isSaleSide ? 'bg-sky-200 dark:bg-sky-800 text-sky-900 dark:text-sky-100' : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100'
+                                                        }`}>
+                                                            {partner.side}
+                                                        </span>
+                                                        {order.partnerCommissionShare ? (
+                                                            <span className="text-[10px] opacity-75 font-mono">
+                                                                ({order.partnerCommissionShare.toLocaleString('fa-IR')} ت)
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                );
+                                            })
+                                        ) : (
+                                            order.carExperts!.map((exp, idx) => (
+                                                <span key={idx} className="bg-white dark:bg-slate-800 text-violet-900 dark:text-violet-200 border border-violet-200 dark:border-violet-800 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                                    {exp}
+                                                </span>
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             )}

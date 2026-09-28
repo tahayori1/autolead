@@ -599,6 +599,29 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         return normalizationAnalysis.normalAds;
     }, [isNormalized, selectedCarAds, normalizationAnalysis]);
 
+    // Helper to safely extract numeric km from string, number, or null/undefined
+    const parseKmNumber = (val: string | number | null | undefined): number | null => {
+        if (val === null || val === undefined) return null;
+        if (typeof val === 'number') {
+            return isNaN(val) ? null : val;
+        }
+        const str = String(val).replace(/[^\d]/g, '');
+        if (!str) return null;
+        const num = parseInt(str, 10);
+        return isNaN(num) ? null : num;
+    };
+
+    const formatKmDisplay = (val: string | number | null | undefined): string => {
+        if (val === null || val === undefined) return 'نامشخص';
+        const num = parseKmNumber(val);
+        if (num === null) {
+            const rawStr = String(val).trim();
+            return rawStr || 'نامشخص';
+        }
+        if (num === 0) return 'صفر کیلومتر';
+        return `${num.toLocaleString('fa-IR')} ک.م`;
+    };
+
     // Active car stats recalculated based on active normalization state
     const activeCarStats = useMemo(() => {
         const prices = activeEffectiveAds.map(a => a.price);
@@ -610,8 +633,8 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
         let zeroKmCount = 0;
         let usedCount = 0;
         activeEffectiveAds.forEach(i => {
-            if (i.km !== null) {
-                const kmNum = parseInt((i.km || '').replace(/[^\d]/g, ''), 10);
+            const kmNum = parseKmNumber(i.km);
+            if (kmNum !== null) {
                 if (kmNum === 0) zeroKmCount++;
                 else if (kmNum > 0) usedCount++;
             }
@@ -673,7 +696,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                 index: idx + 1,
                 price: ad.price,
                 title: ad.title || `آگهی شماره ${idx + 1}`,
-                km: ad.km !== null ? (ad.km === '0' ? 'صفر کیلومتر' : `${ad.km} ک.م`) : 'نامشخص',
+                km: formatKmDisplay(ad.km),
                 desc: ad.desc || '',
                 color,
                 radius,
@@ -757,8 +780,8 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     const tableAds = useMemo(() => {
         return activeEffectiveAds.filter(item => {
             if (onlyZeroKm) {
-                const kmClean = (item.km || '').trim();
-                if (kmClean !== '0') return false;
+                const kmNum = parseKmNumber(item.km);
+                if (kmNum !== 0) return false;
             }
             if (searchQuery.trim()) {
                 const q = searchQuery.trim().toLowerCase();
@@ -773,8 +796,8 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
             if (sortOrder === 'price_desc') return pB - pA;
             if (sortOrder === 'price_asc') return pA - pB;
             if (sortOrder === 'km_asc') {
-                const kmA = parseInt((a.km || '999999').replace(/[^\d]/g, ''), 10) || 0;
-                const kmB = parseInt((b.km || '999999').replace(/[^\d]/g, ''), 10) || 0;
+                const kmA = parseKmNumber(a.km) ?? 999999;
+                const kmB = parseKmNumber(b.km) ?? 999999;
                 return kmA - kmB;
             }
             return 0;
@@ -1804,19 +1827,22 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                                         )}
                                                     </td>
                                                     <td className="p-3 text-center font-mono">
-                                                        {ad.km !== null ? (
-                                                            ad.km === '0' ? (
-                                                                <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-sans font-bold text-[11px]">
-                                                                    صفر کیلومتر
-                                                                </span>
-                                                            ) : (
+                                                        {(() => {
+                                                            const kmNum = parseKmNumber(ad.km);
+                                                            if (kmNum === null) return <span className="text-slate-400">-</span>;
+                                                            if (kmNum === 0) {
+                                                                return (
+                                                                    <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-sans font-bold text-[11px]">
+                                                                        صفر کیلومتر
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return (
                                                                 <span className="text-slate-700 dark:text-slate-300 font-bold text-[11px]">
-                                                                    {parseInt(ad.km, 10).toLocaleString('fa-IR')} ک.م
+                                                                    {kmNum.toLocaleString('fa-IR')} ک.م
                                                                 </span>
-                                                            )
-                                                        ) : (
-                                                            <span className="text-slate-400">-</span>
-                                                        )}
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="p-3 text-slate-500 dark:text-slate-400 text-[11px]">
                                                         {ad.desc || '-'}
@@ -1902,7 +1928,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                         </span>
                                     </div>
                                     <p className="text-[10px] text-slate-400">
-                                        کارکرد: {item.ad.km === '0' ? 'صفر کیلومتر' : `${item.ad.km} ک.م`}
+                                        کارکرد: {formatKmDisplay(item.ad.km)}
                                     </p>
                                 </div>
                             ))}

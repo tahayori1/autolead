@@ -75,7 +75,7 @@ export const CollabCarsPage: React.FC = () => {
             body_status: 'سالم و بی‌رنگ',
             inspection_status: 'تایید شده',
             showroom_name: showrooms[0]?.name || '',
-            showroom_id: showrooms[0]?.id || '',
+            showroom_id: showrooms[0]?.id !== undefined ? String(showrooms[0].id) : '',
             price: '',
             mileage: '',
             description: ''
@@ -94,7 +94,7 @@ export const CollabCarsPage: React.FC = () => {
             body_status: car.body_status || 'سالم و بی‌رنگ',
             inspection_status: car.inspection_status || 'تایید شده',
             showroom_name: car.showroom_name || '',
-            showroom_id: car.showroom_id || '',
+            showroom_id: car.showroom_id !== undefined ? String(car.showroom_id) : '',
             price: car.price?.toString() || '',
             mileage: car.mileage?.toString() || '',
             description: car.description || ''
@@ -432,7 +432,7 @@ export const CollabCarsPage: React.FC = () => {
                                             setFormData({ 
                                                 ...formData, 
                                                 showroom_name: name,
-                                                showroom_id: found ? found.id : ''
+                                                showroom_id: found ? String(found.id) : ''
                                             });
                                         }}
                                         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500"

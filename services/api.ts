@@ -39,7 +39,8 @@ import type {
     DivarPriceItem,
     DivarAdvDetail,
     CollaborationShowroom,
-    CollaborationCar
+    CollaborationCar,
+    OrderPartner
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -1531,10 +1532,13 @@ export const getDivarPrices = async (
                 if (digitsOnly) numPrice = parseInt(digitsOnly, 10);
             }
 
+            const rawKm = item.km ?? item.kilometer ?? item.mileage ?? item.usage ?? null;
+            const cleanKm = rawKm !== null && rawKm !== undefined ? String(rawKm).trim() : null;
+
             return {
                 title: item.title ?? item.name ?? item.subject ?? null,
                 price: numPrice,
-                km: item.km ?? item.kilometer ?? item.mileage ?? item.usage ?? null,
+                km: cleanKm,
                 desc: item.desc ?? item.description ?? item.details ?? null,
                 car_name: item.car_name ?? item.model ?? item.car_model ?? item.model_name ?? defaultCarName ?? '',
                 href: item.href ?? item.link ?? item.url ?? null
@@ -2151,6 +2155,23 @@ const normalizeCarOrder = (order: any): CarOrder => {
         return isNaN(n) ? undefined : n;
     };
 
+    let partners: OrderPartner[] = [];
+    if (Array.isArray(order.partners)) {
+        partners = order.partners;
+    } else if (Array.isArray(order.order_partners)) {
+        partners = order.order_partners;
+    } else if (typeof order.partners === 'string' && order.partners.trim()) {
+        try {
+            const parsed = JSON.parse(order.partners);
+            if (Array.isArray(parsed)) partners = parsed;
+        } catch {}
+    } else if (typeof order.order_partners === 'string' && order.order_partners.trim()) {
+        try {
+            const parsed = JSON.parse(order.order_partners);
+            if (Array.isArray(parsed)) partners = parsed;
+        } catch {}
+    }
+
     return {
         id: Number(order.id),
         trackingCode: order.trackingCode || order.tracking_code || '',
@@ -2166,6 +2187,22 @@ const normalizeCarOrder = (order: any): CarOrder => {
         selectedColor: order.selectedColor || order.selected_color || '',
         proposedPrice: Number(order.proposedPrice || order.proposed_price || 0),
         userNotes: order.userNotes || order.user_notes || '',
+        
+        // Financial & Commission breakdown
+        purchasePrice: parseNum(order.purchasePrice ?? order.purchase_price),
+        sellingPrice: parseNum(order.sellingPrice ?? order.selling_price ?? order.proposedPrice ?? order.proposed_price),
+        shippingCost: parseNum(order.shippingCost ?? order.shipping_cost),
+        netCommission: parseNum(order.netCommission ?? order.net_commission),
+        totalCommissionBonus: parseNum(order.totalCommissionBonus ?? order.total_commission_bonus),
+        partnerCommissionShare: parseNum(order.partnerCommissionShare ?? order.partner_commission_share),
+
+        // Seller & Warehouse
+        sellerType: order.sellerType || order.seller_type || (order.deductFromStock ? 'COMPANY_WAREHOUSE' : 'OTHER'),
+        sellerName: order.sellerName || order.seller_name || '',
+
+        // Collaborating Partners
+        partners: partners,
+
         carExperts: experts,
         expertIds: Array.isArray(order.expertIds) ? order.expertIds : [],
         adminNotes: order.adminNotes || order.admin_notes || '',
@@ -2182,8 +2219,18 @@ const normalizeCarOrder = (order: any): CarOrder => {
 const denormalizeCarOrder = (order: Partial<CarOrder>): any => {
     if (!order || typeof order !== 'object') return order;
     
-    const expertsArray = Array.isArray(order.carExperts) ? order.carExperts : [];
+    const expertsArray = Array.isArray(order.carExperts) ? [...order.carExperts] : [];
     const expertIdsArray = Array.isArray(order.expertIds) ? order.expertIds : [];
+    const partnersArray = Array.isArray(order.partners) ? order.partners : [];
+    const partnersJson = JSON.stringify(partnersArray);
+
+    // Sync partners to expertsArray if expertsArray is empty for backward compatibility
+    if (partnersArray.length > 0 && expertsArray.length === 0) {
+        partnersArray.forEach(p => {
+            expertsArray.push(`${p.name} (${p.side})`);
+        });
+    }
+
     const expertsJson = JSON.stringify(expertsArray);
     const expertIdsJson = JSON.stringify(expertIdsArray);
 
@@ -2191,7 +2238,7 @@ const denormalizeCarOrder = (order: Partial<CarOrder>): any => {
     const finalPriceVal = order.finalPrice !== undefined && order.finalPrice !== null && !isNaN(Number(order.finalPrice)) 
         ? Number(order.finalPrice) 
         : null;
-    const proposedPriceVal = Number(order.proposedPrice) || 0;
+    const proposedPriceVal = Number(order.proposedPrice) || Number(order.sellingPrice) || 0;
 
     const result: any = {
         id: order.id ? Number(order.id) : undefined,
@@ -2221,6 +2268,31 @@ const denormalizeCarOrder = (order: Partial<CarOrder>): any => {
         proposed_price: proposedPriceVal,
         userNotes: order.userNotes || '',
         user_notes: order.userNotes || '',
+
+        // Financial & Commission breakdown
+        purchasePrice: order.purchasePrice !== undefined ? Number(order.purchasePrice) : null,
+        purchase_price: order.purchasePrice !== undefined ? Number(order.purchasePrice) : null,
+        sellingPrice: order.sellingPrice !== undefined ? Number(order.sellingPrice) : proposedPriceVal,
+        selling_price: order.sellingPrice !== undefined ? Number(order.sellingPrice) : proposedPriceVal,
+        shippingCost: order.shippingCost !== undefined ? Number(order.shippingCost) : 0,
+        shipping_cost: order.shippingCost !== undefined ? Number(order.shippingCost) : 0,
+        netCommission: order.netCommission !== undefined ? Number(order.netCommission) : null,
+        net_commission: order.netCommission !== undefined ? Number(order.netCommission) : null,
+        totalCommissionBonus: order.totalCommissionBonus !== undefined ? Number(order.totalCommissionBonus) : null,
+        total_commission_bonus: order.totalCommissionBonus !== undefined ? Number(order.totalCommissionBonus) : null,
+        partnerCommissionShare: order.partnerCommissionShare !== undefined ? Number(order.partnerCommissionShare) : null,
+        partner_commission_share: order.partnerCommissionShare !== undefined ? Number(order.partnerCommissionShare) : null,
+
+        // Seller & Warehouse
+        sellerType: order.sellerType || 'OTHER',
+        seller_type: order.sellerType || 'OTHER',
+        sellerName: order.sellerName || '',
+        seller_name: order.sellerName || '',
+
+        // Collaborating Partners
+        partners: partnersJson,
+        order_partners: partnersJson,
+
         carExperts: expertsJson,
         car_experts: expertsJson,
         expertIds: expertIdsJson,
