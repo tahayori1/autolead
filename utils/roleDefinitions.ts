@@ -39,6 +39,8 @@ export const DEFAULT_SYSTEM_ROLES: UserRoleDefinition[] = [
             { module: 'orders', actions: ['view', 'add', 'edit', 'delete'] },
             { module: 'inventory', actions: ['view', 'add', 'edit', 'delete'] },
             { module: 'commission', actions: ['view', 'add', 'edit', 'delete'] },
+            { module: 'collaboration', actions: ['view', 'add', 'edit', 'delete'] },
+            { module: 'collaboration-cars', actions: ['view', 'add', 'edit', 'delete'] },
             { module: 'leave-requests', actions: ['view', 'add', 'edit'] }
         ]
     },

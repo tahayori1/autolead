@@ -348,6 +348,41 @@ export interface CarOrder {
     updatedAt: string;
 }
 
+export interface CollaborationShowroom {
+    id: string | number;
+    name: string;                // نام نمایشگاه
+    address: string;             // آدرس
+    phone: string;               // تلفن نمایشگاه
+    contact_name: string;        // نام رابط
+    contact_phone: string;       // شماره رابط
+    introducer: string;          // معرف (از بین کاربران اتولید)
+    product_basket: string | string[]; // سبد محصولات: وارداتی | سایپا | ایران خودرو | مدیران خودرو | کارکرده | مونتاژی | سایر
+    status: string;              // وضعیت همکاری: در حال همکاری | توقف همکاری | در حال مذاکره
+    description: string;         // توضیح نوع همکاری
+    createdAt?: string;
+    updatedAt?: string;
+    [key: string]: any;
+}
+
+export interface CollaborationCar {
+    id: string | number;
+    car_name: string;            // نام و مشخصات خودرو
+    brand: string;               // برند خودرو
+    model: string;               // مدل خودرو
+    year: string | number;       // سال ساخت
+    color: string;               // رنگ
+    body_status: string;         // وضعیت بدنه
+    inspection_status: string;   // وضعیت کارشناسی
+    showroom_name: string;       // نام نمایشگاه ارائه دهنده
+    showroom_id?: string | number; // شناسه نمایشگاه
+    price?: string | number;     // قیمت (سایر مشخصات مهم)
+    mileage?: string | number;   // کارکرد (سایر مشخصات مهم)
+    description?: string;        // توضیحات تکمیلی
+    createdAt?: string;
+    updatedAt?: string;
+    [key: string]: any;
+}
+
 // --- Access Control Types ---
 
 export type AppModule = 
@@ -376,7 +411,9 @@ export type AppModule =
     | 'bank-letter'
     | 'advertising-report'
     | 'poll'
-    | 'access-control';
+    | 'access-control'
+    | 'collaboration'
+    | 'collaboration-cars';
 
 export type ActionType = 'view' | 'add' | 'edit' | 'delete';
 

@@ -37,7 +37,9 @@ import type {
     CrmMeeting,
     AdvertisementReport,
     DivarPriceItem,
-    DivarAdvDetail
+    DivarAdvDetail,
+    CollaborationShowroom,
+    CollaborationCar
 } from '../types';
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
@@ -2751,6 +2753,120 @@ export const clearAllCrmLocks = async (): Promise<void> => {
         method: 'POST',
         headers: getAuthHeaders(),
     });
+};
+
+// --- Collaboration Showrooms Services ---
+export const COLLAB_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/collabration';
+
+export const getCollaborations = async (): Promise<CollaborationShowroom[]> => {
+    try {
+        const response = await fetch(COLLAB_WEBHOOK_URL, {
+            headers: getAuthHeaders()
+        });
+        const data = await handleResponse(response);
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && Array.isArray(data.items)) return data.items;
+        return [];
+    } catch (e) {
+        return [];
+    }
+};
+
+export const createCollaboration = async (payload: Omit<CollaborationShowroom, 'id'>): Promise<CollaborationShowroom> => {
+    ensureOnline();
+    const response = await fetch(COLLAB_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify(payload)
+    });
+    return handleResponse(response);
+};
+
+export const updateCollaboration = async (id: string | number, payload: Partial<CollaborationShowroom>): Promise<CollaborationShowroom> => {
+    ensureOnline();
+    const response = await fetch(COLLAB_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id, ...payload })
+    });
+    return handleResponse(response);
+};
+
+export const deleteCollaboration = async (id: string | number): Promise<void> => {
+    ensureOnline();
+    const response = await fetch(COLLAB_WEBHOOK_URL, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id })
+    });
+    return handleResponse(response);
+};
+
+// --- Collaboration Cars / Partner Inventory Services ---
+export const COLLAB_CAR_LIST_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/collabration-car-list';
+
+export const getCollabCars = async (): Promise<CollaborationCar[]> => {
+    try {
+        const response = await fetch(COLLAB_CAR_LIST_WEBHOOK_URL, {
+            headers: getAuthHeaders()
+        });
+        const data = await handleResponse(response);
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && Array.isArray(data.items)) return data.items;
+        return [];
+    } catch (e) {
+        return [];
+    }
+};
+
+export const createCollabCar = async (payload: Omit<CollaborationCar, 'id'>): Promise<CollaborationCar> => {
+    ensureOnline();
+    const response = await fetch(COLLAB_CAR_LIST_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify(payload)
+    });
+    return handleResponse(response);
+};
+
+export const updateCollabCar = async (id: string | number, payload: Partial<CollaborationCar>): Promise<CollaborationCar> => {
+    ensureOnline();
+    const response = await fetch(COLLAB_CAR_LIST_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id, ...payload })
+    });
+    return handleResponse(response);
+};
+
+export const deleteCollabCar = async (id: string | number): Promise<void> => {
+    ensureOnline();
+    const response = await fetch(COLLAB_CAR_LIST_WEBHOOK_URL, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id })
+    });
+    return handleResponse(response);
 };
 
 // --- Attendance / Timesheet Services ---
