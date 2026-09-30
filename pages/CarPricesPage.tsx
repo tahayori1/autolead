@@ -1458,7 +1458,9 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                                                         <>
                                                             <span>{price.toLocaleString('fa-IR')}</span>
                                                             {isStale && (
-                                                                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" title="بیش از ۲۴ ساعت از آخرین بروزرسانی گذشته است" />
+                                                                <span title="بیش از ۲۴ ساعت از آخرین بروزرسانی گذشته است">
+                                                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                                                </span>
                                                             )}
                                                         </>
                                                     ) : (
@@ -1563,8 +1565,8 @@ const CarPricesPage: React.FC<CarPricesPageProps> = () => {
                 ) : activeMainTab === 'divar_prices' ? (
                     <DivarPriceAnalysisSection
                         showToast={showToast}
-                        otherPrices={prices}
-                        allSources={sources}
+                        otherPrices={prices.filter(p => p.source_name !== 'custom')}
+                        allSources={sources.filter(s => s !== 'custom')}
                         priceStats={priceStatsWithOverride}
                         refreshTrigger={divarRefreshTrigger}
                     />

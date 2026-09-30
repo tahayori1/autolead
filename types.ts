@@ -237,6 +237,7 @@ export interface DivarPriceItem {
     desc: string | null;
     car_name: string;
     href: string | null;
+    [key: string]: any;
 }
 
 export interface DivarAdvDetail {

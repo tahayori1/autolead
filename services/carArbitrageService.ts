@@ -482,7 +482,7 @@ export function generateArbitrageOpportunities(params: {
 
         // 3. Build Real Arbitrage Opportunities (ONLY IF LIVE DATA EXISTS FOR BOTH ORIGIN AND SHIRAZ)
         if (hasShirazLiveData && sellPriceShirazToman > 0) {
-            const originCities: ArbitrageCityKey[] = ['tehran', 'isfahan', 'bushehr', 'shiraz'];
+            const originCities: ArbitrageCityKey[] = ['tehran', 'isfahan', 'shiraz'];
 
             originCities.forEach(origin => {
                 const originConfig = ARBITRAGE_CITIES_CONFIG[origin];
@@ -494,76 +494,235 @@ export function generateArbitrageOpportunities(params: {
                     return; // Skip if no live data for origin
                 }
 
-                let buyPriceToman = originSummary.effectiveBuyPriceToman;
-                let carrierCostToman = originConfig.defaultCarrierCostToman;
-                let inspectionCostToman = originConfig.defaultInspectionCostToman;
+                const originCityName = originConfig.label.split(' ')[0];
+                const carDisplayName = car.label.replace(/\s*\([^)]*\)/g, '').trim();
 
-                if (isLocal) {
-                    // For local Shiraz trade, require at least 2 real ads or clear spread
-                    if (originSummary.sampleCount < 2 || originSummary.minPriceToman >= sellPriceShirazToman) {
-                        return; // No distinct local spread
-                    }
-                    buyPriceToman = originSummary.minPriceToman;
-                    carrierCostToman = 0;
-                    inspectionCostToman = 2_000_000;
-                }
+                // 3.A Filter valid ads in Origin (City A) and eliminate outliers (out of reasonable price band)
+                const originAdsRaw = (cityLiveListings && cityLiveListings[origin])
+                    ? cityLiveListings[origin].filter(item => {
+                        const itemCar = (item.car_name || '').toLowerCase();
+                        const itemTitle = (item.title || '').toLowerCase();
+                        const itemDesc = (item.desc || '').toLowerCase();
+                        return (itemCar.includes(carKey) || itemTitle.includes(carKey) || itemDesc.includes(carKey) || carKey.includes(itemCar)) &&
+                               typeof item.price === 'number' && item.price >= 150_000_000;
+                    })
+                    : [];
 
-                const grossSpreadToman = sellPriceShirazToman - buyPriceToman;
-                const totalExpensesToman = carrierCostToman + inspectionCostToman;
-                const totalCapitalRequiredToman = buyPriceToman + totalExpensesToman;
-                const netProfitToman = grossSpreadToman - totalExpensesToman;
-                const roiPercent = totalCapitalRequiredToman > 0 
-                    ? Number(((netProfitToman / totalCapitalRequiredToman) * 100).toFixed(2))
-                    : 0;
-
-                const riskAnalysis = evaluateArbitrageRisk(
-                    origin,
-                    grossSpreadToman,
-                    netProfitToman,
-                    roiPercent,
-                    sellPriceShirazToman,
-                    originSummary.sampleCount
+                // Filter out extreme price anomalies using origin normal price bounds
+                const originMinNormal = originSummary.minPriceToman * 0.92;
+                const originMaxNormal = originSummary.maxPriceToman * 1.08;
+                const validOriginAds = originAdsRaw.filter(item => 
+                    item.price && item.price >= originMinNormal && item.price <= originMaxNormal
                 );
 
-                let actionSummary = '';
-                if (isLocal) {
-                    actionSummary = `خرید ${car.label} در کف بازار شیراز با قیمت ${formatToman(buyPriceToman)} و فروش مجدد در شیراز به قیمت ${formatToman(sellPriceShirazToman)}`;
+                // Sort origin ads by price ascending (cheapest / best buy ads first)
+                validOriginAds.sort((a, b) => (a.price || 0) - (b.price || 0));
+
+                // 3.B Filter valid ads in Destination Shiraz (City B) and eliminate outliers
+                const shirazAdsRaw = (cityLiveListings && cityLiveListings['shiraz'])
+                    ? cityLiveListings['shiraz'].filter(item => {
+                        const itemCar = (item.car_name || '').toLowerCase();
+                        const itemTitle = (item.title || '').toLowerCase();
+                        const itemDesc = (item.desc || '').toLowerCase();
+                        return (itemCar.includes(carKey) || itemTitle.includes(carKey) || itemDesc.includes(carKey) || carKey.includes(itemCar)) &&
+                               typeof item.price === 'number' && item.price >= 150_000_000;
+                    })
+                    : [];
+
+                const shirazMinNormal = shirazSummary.minPriceToman * 0.92;
+                const shirazMaxNormal = shirazSummary.maxPriceToman * 1.08;
+                const validShirazAds = shirazAdsRaw.filter(item =>
+                    item.price && item.price >= shirazMinNormal && item.price <= shirazMaxNormal
+                );
+
+                // Sort Shiraz ads by price descending (highest selling ads first)
+                validShirazAds.sort((a, b) => (b.price || 0) - (a.price || 0));
+
+                // 3.C Create Granular Ad-to-Ad Arbitrage Opportunities:
+                // Pair specific cheap ads from city A with specific target selling price / top ads in city B!
+                if (validOriginAds.length > 0) {
+                    // Evaluate each available cheap ad in City A (up to top 4 best priced ads)
+                    const adsToEvaluate = validOriginAds.slice(0, 4);
+
+                    adsToEvaluate.forEach((cheapAd, adIndex) => {
+                        const buyPriceToman = cheapAd.price!;
+                        // Best matching sell ad in Shiraz: either top high price ad, or reference sell price
+                        const matchingSellAd = validShirazAds[Math.min(adIndex, validShirazAds.length - 1)] || validShirazAds[0];
+                        const sellPriceToman = matchingSellAd ? matchingSellAd.price! : sellPriceShirazToman;
+
+                        let carrierCostToman = isLocal ? 0 : originConfig.defaultCarrierCostToman;
+                        let inspectionCostToman = isLocal ? 2_000_000 : originConfig.defaultInspectionCostToman;
+
+                        const grossSpreadToman = sellPriceToman - buyPriceToman;
+                        const totalExpensesToman = carrierCostToman + inspectionCostToman;
+                        const totalCapitalRequiredToman = buyPriceToman + totalExpensesToman;
+                        const netProfitToman = grossSpreadToman - totalExpensesToman;
+                        const roiPercent = totalCapitalRequiredToman > 0 
+                            ? Number(((netProfitToman / totalCapitalRequiredToman) * 100).toFixed(2))
+                            : 0;
+
+                        // Only consider if profitable or if it's the primary market opportunity
+                        if (isLocal && (netProfitToman <= 0 || buyPriceToman >= sellPriceToman)) {
+                            return;
+                        }
+
+                        const riskAnalysis = evaluateArbitrageRisk(
+                            origin,
+                            grossSpreadToman,
+                            netProfitToman,
+                            roiPercent,
+                            sellPriceToman,
+                            originSummary.sampleCount
+                        );
+
+                        const profitAmountText = formatToman(Math.max(0, netProfitToman));
+                        let actionSummary = '';
+                        if (isLocal) {
+                            actionSummary = `از شیراز خودرو ${carDisplayName} بخر و در شیراز بفروش و ${profitAmountText} سود کن!`;
+                        } else {
+                            actionSummary = `از ${originCityName} خودرو ${carDisplayName} بخر و در شیراز بفروش و ${profitAmountText} سود کن!`;
+                        }
+
+                        const buyAdHref = cheapAd?.href 
+                            ? (cheapAd.href.startsWith('http') ? cheapAd.href : `https://divar.ir${cheapAd.href.startsWith('/') ? '' : '/'}${cheapAd.href}`)
+                            : `https://divar.ir/s/${origin}/car?q=${encodeURIComponent(carDisplayName)}`;
+                        const buyAdTitle = cheapAd?.title || `آگهی ارزان ${carDisplayName} در ${originCityName}`;
+
+                        const sellAdHref = matchingSellAd?.href
+                            ? (matchingSellAd.href.startsWith('http') ? matchingSellAd.href : `https://divar.ir${matchingSellAd.href.startsWith('/') ? '' : '/'}${matchingSellAd.href}`)
+                            : `https://divar.ir/s/shiraz/car?q=${encodeURIComponent(carDisplayName)}`;
+                        const sellAdTitle = matchingSellAd?.title || `آگهی فروش ${carDisplayName} در شیراز`;
+
+                        const stableAdKey = cheapAd?.adv_id || cheapAd?.id || `${buyPriceToman}_${adIndex}`;
+                        const opportunity: CarArbitrageOpportunity = {
+                            id: `${carKey}_${origin}_ad_${adIndex}_${stableAdKey}`,
+                            carKey,
+                            carName: car.label,
+                            tradeType: isLocal ? 'INTRA_CITY_SHIRAZ' : 'CROSS_CITY_ARBITRAGE',
+                            originCity: origin,
+                            originCityLabel: originConfig.label,
+                            destinationCity: 'shiraz',
+                            destinationCityLabel: ARBITRAGE_CITIES_CONFIG.shiraz.label,
+                            distanceKm: originConfig.distanceToShirazKm,
+                            estimatedDays: originConfig.estimatedTransportDays,
+                            buyPriceToman,
+                            sellPriceShirazToman: sellPriceToman,
+                            grossSpreadToman,
+                            carrierCostToman,
+                            inspectionCostToman,
+                            totalExpensesToman,
+                            totalCapitalRequiredToman,
+                            netProfitToman,
+                            roiPercent,
+                            riskLevel: riskAnalysis.riskLevel,
+                            riskScore: riskAnalysis.riskScore,
+                            riskFactors: riskAnalysis.riskFactors,
+                            signal: riskAnalysis.signal,
+                            signalLabel: riskAnalysis.signalLabel,
+                            actionSummary,
+                            buyAdHref,
+                            buyAdTitle,
+                            buyAdPrice: buyPriceToman,
+                            buyAdDesc: cheapAd.desc || null,
+                            buyAdImage: cheapAd.image || null,
+                            sellAdHref,
+                            sellAdTitle,
+                            sellAdPrice: sellPriceToman,
+                            sellAdDesc: matchingSellAd?.desc || null,
+                            sellAdImage: matchingSellAd?.image || null,
+                            isDirectAdPair: true,
+                            originSampleCount: originSummary.sampleCount,
+                            shirazSampleCount: shirazSummary.sampleCount,
+                            confidence: originSummary.sampleCount >= 3 ? 'HIGH' : originSummary.sampleCount >= 1 ? 'MEDIUM' : 'LOW'
+                        };
+
+                        opportunities.push(opportunity);
+                    });
                 } else {
-                    actionSummary = `خرید ${car.label} از شهر ${originConfig.label} به قیمت ${formatToman(buyPriceToman)} و حمل با خودروبر به شیراز جهت فروش با قیمت ${formatToman(sellPriceShirazToman)}`;
+                    // Fallback to statistical benchmark opportunity if no granular individual ads filtered
+                    let buyPriceToman = originSummary.effectiveBuyPriceToman;
+                    let carrierCostToman = originConfig.defaultCarrierCostToman;
+                    let inspectionCostToman = originConfig.defaultInspectionCostToman;
+
+                    if (isLocal) {
+                        if (originSummary.sampleCount < 2 || originSummary.minPriceToman >= sellPriceShirazToman) {
+                            return;
+                        }
+                        buyPriceToman = originSummary.minPriceToman;
+                        carrierCostToman = 0;
+                        inspectionCostToman = 2_000_000;
+                    }
+
+                    const grossSpreadToman = sellPriceShirazToman - buyPriceToman;
+                    const totalExpensesToman = carrierCostToman + inspectionCostToman;
+                    const totalCapitalRequiredToman = buyPriceToman + totalExpensesToman;
+                    const netProfitToman = grossSpreadToman - totalExpensesToman;
+                    const roiPercent = totalCapitalRequiredToman > 0 
+                        ? Number(((netProfitToman / totalCapitalRequiredToman) * 100).toFixed(2))
+                        : 0;
+
+                    const riskAnalysis = evaluateArbitrageRisk(
+                        origin,
+                        grossSpreadToman,
+                        netProfitToman,
+                        roiPercent,
+                        sellPriceShirazToman,
+                        originSummary.sampleCount
+                    );
+
+                    const profitAmountText = formatToman(Math.max(0, netProfitToman));
+                    let actionSummary = '';
+                    if (isLocal) {
+                        actionSummary = `از شیراز خودرو ${carDisplayName} بخر و در شیراز بفروش و ${profitAmountText} سود کن!`;
+                    } else {
+                        actionSummary = `از ${originCityName} خودرو ${carDisplayName} بخر و در شیراز بفروش و ${profitAmountText} سود کن!`;
+                    }
+
+                    const buyAdHref = `https://divar.ir/s/${origin}/car?q=${encodeURIComponent(carDisplayName)}`;
+                    const buyAdTitle = `آگهی خرید ${carDisplayName} در ${originCityName}`;
+                    const sellAdHref = `https://divar.ir/s/shiraz/car?q=${encodeURIComponent(carDisplayName)}`;
+                    const sellAdTitle = `آگهی فروش ${carDisplayName} در شیراز`;
+
+                    const opportunity: CarArbitrageOpportunity = {
+                        id: `${carKey}-${origin}-to-shiraz`,
+                        carKey,
+                        carName: car.label,
+                        tradeType: isLocal ? 'INTRA_CITY_SHIRAZ' : 'CROSS_CITY_ARBITRAGE',
+                        originCity: origin,
+                        originCityLabel: originConfig.label,
+                        destinationCity: 'shiraz',
+                        destinationCityLabel: ARBITRAGE_CITIES_CONFIG.shiraz.label,
+                        distanceKm: originConfig.distanceToShirazKm,
+                        estimatedDays: originConfig.estimatedTransportDays,
+                        buyPriceToman,
+                        sellPriceShirazToman,
+                        grossSpreadToman,
+                        carrierCostToman,
+                        inspectionCostToman,
+                        totalExpensesToman,
+                        totalCapitalRequiredToman,
+                        netProfitToman,
+                        roiPercent,
+                        riskLevel: riskAnalysis.riskLevel,
+                        riskScore: riskAnalysis.riskScore,
+                        riskFactors: riskAnalysis.riskFactors,
+                        signal: riskAnalysis.signal,
+                        signalLabel: riskAnalysis.signalLabel,
+                        actionSummary,
+                        buyAdHref,
+                        buyAdTitle,
+                        buyAdPrice: buyPriceToman,
+                        sellAdHref,
+                        sellAdTitle,
+                        sellAdPrice: sellPriceShirazToman,
+                        isDirectAdPair: false,
+                        originSampleCount: originSummary.sampleCount,
+                        shirazSampleCount: shirazSummary.sampleCount,
+                        confidence: originSummary.sampleCount >= 3 ? 'HIGH' : originSummary.sampleCount >= 1 ? 'MEDIUM' : 'LOW'
+                    };
+
+                    opportunities.push(opportunity);
                 }
-
-                const opportunity: CarArbitrageOpportunity = {
-                    id: `${carKey}-${origin}-to-shiraz`,
-                    carKey,
-                    carName: car.label,
-                    tradeType: isLocal ? 'INTRA_CITY_SHIRAZ' : 'CROSS_CITY_ARBITRAGE',
-                    originCity: origin,
-                    originCityLabel: originConfig.label,
-                    destinationCity: 'shiraz',
-                    destinationCityLabel: ARBITRAGE_CITIES_CONFIG.shiraz.label,
-                    distanceKm: originConfig.distanceToShirazKm,
-                    estimatedDays: originConfig.estimatedTransportDays,
-                    buyPriceToman,
-                    sellPriceShirazToman,
-                    grossSpreadToman,
-                    carrierCostToman,
-                    inspectionCostToman,
-                    totalExpensesToman,
-                    totalCapitalRequiredToman,
-                    netProfitToman,
-                    roiPercent,
-                    riskLevel: riskAnalysis.riskLevel,
-                    riskScore: riskAnalysis.riskScore,
-                    riskFactors: riskAnalysis.riskFactors,
-                    signal: riskAnalysis.signal,
-                    signalLabel: riskAnalysis.signalLabel,
-                    actionSummary,
-                    originSampleCount: originSummary.sampleCount,
-                    shirazSampleCount: shirazSummary.sampleCount,
-                    confidence: originSummary.sampleCount >= 3 ? 'HIGH' : originSummary.sampleCount >= 1 ? 'MEDIUM' : 'LOW'
-                };
-
-                opportunities.push(opportunity);
             });
         }
     });
@@ -605,9 +764,12 @@ export function calculateCustomDeal(input: CustomCalculatorInput): CarArbitrageO
         3 // assumed user entered specific quote
     );
 
+    const profitAmountText = formatToman(Math.max(0, netProfitToman));
+    const originCityName = originConfig.label.split(' ')[0];
+    const carDisplayName = carLabel.replace(/\s*\([^)]*\)/g, '').trim();
     const actionSummary = isLocal
-        ? `معامله اختصاصی ${carLabel} در شیراز: خرید ${formatToman(input.buyPriceToman)} و فروش ${formatToman(input.sellPriceShirazToman)}`
-        : `خرید اختصاصی ${carLabel} از ${originConfig.label} به قیمت ${formatToman(input.buyPriceToman)} و انتقال به شیراز جهت فروش ${formatToman(input.sellPriceShirazToman)}`;
+        ? `از شیراز خودرو ${carDisplayName} بخر و در شیراز بفروش و ${profitAmountText} سود کن!`
+        : `از ${originCityName} خودرو ${carDisplayName} بخر و در شیراز بفروش و ${profitAmountText} سود کن!`;
 
     return {
         id: `custom-${input.carKey}-${input.originCity}-${Date.now()}`,

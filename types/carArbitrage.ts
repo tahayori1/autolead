@@ -129,7 +129,21 @@ export interface CarArbitrageOpportunity {
     signalLabel: string;
     actionSummary: string; // e.g. "خرید ایگل در تهران به قیمت ۱,۱۵۰ و فروش در شیراز به قیمت ۱,۲۱۰"
     
+    // Listing Links (Divar Ad URLs & Details)
+    buyAdHref?: string | null;
+    buyAdTitle?: string | null;
+    buyAdPrice?: number | null;
+    buyAdDesc?: string | null;
+    buyAdImage?: string | null;
+
+    sellAdHref?: string | null;
+    sellAdTitle?: string | null;
+    sellAdPrice?: number | null;
+    sellAdDesc?: string | null;
+    sellAdImage?: string | null;
+
     // Confidence & Data Sources
+    isDirectAdPair?: boolean; // آیا این فرصت معامله مستقیم آگهی‌به‌آگهی است؟
     originSampleCount: number;
     shirazSampleCount: number;
     confidence: 'HIGH' | 'MEDIUM' | 'LOW';

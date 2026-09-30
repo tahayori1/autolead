@@ -18,7 +18,8 @@ import {
     Clock, 
     Car, 
     Info, 
-    Radio
+    Radio,
+    MessageSquare
 } from 'lucide-react';
 import { 
     ArbitrageCityKey, 
@@ -36,7 +37,7 @@ import {
     calculateCustomDeal, 
     formatInquiryTimeAgo
 } from '../services/carArbitrageService';
-import { getDivarPrices } from '../services/api';
+import { getDivarArbitragePrices } from '../services/api';
 import type { DivarPriceItem, ScrapedCarPrice, CarPriceStats } from '../types';
 
 interface CarArbitrageSectionProps {
@@ -47,25 +48,29 @@ interface CarArbitrageSectionProps {
     showToast?: (message: string, type: 'success' | 'error') => void;
 }
 
+const DEFAULT_DIVAR_LISTINGS: DivarPriceItem[] = [];
+const DEFAULT_SCRAPED_PRICES: ScrapedCarPrice[] = [];
+const DEFAULT_PRICE_STATS: CarPriceStats[] = [];
+
 export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
-    divarListings: propDivarListings = [],
-    scrapedPrices = [],
-    priceStats = [],
+    divarListings: propDivarListings = DEFAULT_DIVAR_LISTINGS,
+    scrapedPrices = DEFAULT_SCRAPED_PRICES,
+    priceStats = DEFAULT_PRICE_STATS,
     onRefresh,
     showToast
 }) => {
     // State filters
-    const [selectedCarFilter, setSelectedCarFilter] = useState<string>('all');
+    const [selectedCarFilter, setSelectedCarFilter] = useState<string>('kmc eagle');
     const [selectedOriginFilter, setSelectedOriginFilter] = useState<string>('all');
     const [selectedRiskFilter, setSelectedRiskFilter] = useState<string>('all');
     const [sortBy, setSortBy] = useState<'profit' | 'roi' | 'risk' | 'distance'>('profit');
     const [copiedCardId, setCopiedCardId] = useState<string | null>(null);
 
     // Active Tab inside Arbitrage Section
-    const [activeSubTab, setActiveSubTab] = useState<'opportunities' | 'calculator' | 'matrix'>('opportunities');
+    const [activeSubTab, setActiveSubTab] = useState<'opportunities' | 'calculator'>('opportunities');
 
-    // Selected Target City for Inquiry (all or specific city)
-    const [selectedInquiryCity, setSelectedInquiryCity] = useState<'all' | ArbitrageCityKey>('shiraz');
+    // Selected Target City for Inquiry (all, shiraz, tehran, or isfahan)
+    const [selectedInquiryCity, setSelectedInquiryCity] = useState<'all' | ArbitrageCityKey>('all');
 
     // Live Divar Inquiries per City State (NO OFFLINE CACHE - ALWAYS LIVE)
     const [cityLiveListings, setCityLiveListings] = useState<Record<ArbitrageCityKey, DivarPriceItem[]>>({
@@ -97,6 +102,16 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
 
     // Normalization View Mode
     const [showNormalizationDetails, setShowNormalizationDetails] = useState<boolean>(false);
+
+    // Expandable cards state (click to show full financial details)
+    const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
+
+    const toggleExpandCard = useCallback((cardId: string) => {
+        setExpandedCardIds(prev => ({
+            ...prev,
+            [cardId]: !prev[cardId]
+        }));
+    }, []);
 
     // Abort Controller and Timers for Live Inquiries
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -194,7 +209,7 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
         }));
 
         try {
-            const rawItems = await getDivarPrices(carQuery, cityKey, controller.signal);
+            const rawItems = await getDivarArbitragePrices(carQuery, cityKey, controller.signal);
             const nowIso = new Date().toISOString();
             const items = Array.isArray(rawItems) ? rawItems : [];
             const labeled = items.map(i => ({ ...i, car_name: i.car_name || carQuery }));
@@ -255,14 +270,14 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
         }
     }, [selectedCarFilter, showToast, stopAllInquiries]);
 
-    // 2. Sequential Inquiry for multiple cities with a strict 50-second gap between cities
+    // 2. Sequential Inquiry for multiple cities with a 1-second gap between cities
     const handleFetchSequentialCitiesLive = useCallback(async (targetCarKey?: string) => {
         stopAllInquiries();
         stopSequenceFlagRef.current = false;
         setIsSequentialRunning(true);
 
         const carQuery = targetCarKey && targetCarKey !== 'all' ? targetCarKey : (selectedCarFilter !== 'all' ? selectedCarFilter : 'kmc eagle');
-        const cities: ArbitrageCityKey[] = ['shiraz', 'tehran', 'isfahan', 'bushehr'];
+        const cities: ArbitrageCityKey[] = ['shiraz', 'tehran', 'isfahan'];
 
         for (let i = 0; i < cities.length; i++) {
             if (stopSequenceFlagRef.current) break;
@@ -286,7 +301,7 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
             }));
 
             try {
-                const rawItems = await getDivarPrices(carQuery, currentCity, controller.signal);
+                const rawItems = await getDivarArbitragePrices(carQuery, currentCity, controller.signal);
                 const nowIso = new Date().toISOString();
                 const items = Array.isArray(rawItems) ? rawItems : [];
                 const labeled = items.map(item => ({ ...item, car_name: item.car_name || carQuery }));
@@ -343,15 +358,15 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
                 abortControllerRef.current = null;
             }
 
-            // If there's another city in the queue, wait 50 seconds before inquiring the next one!
+            // If there's another city in the queue, wait 1 second before inquiring the next one!
             if (i < cities.length - 1 && !stopSequenceFlagRef.current) {
                 const nextCity = cities[i + 1];
                 setNextCityInQueue(nextCity);
-                setCountdownSeconds(50);
+                setCountdownSeconds(1);
 
                 await new Promise<void>((resolve) => {
                     skipCountdownResolverRef.current = resolve;
-                    let remaining = 50;
+                    let remaining = 1;
 
                     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
                     countdownIntervalRef.current = setInterval(() => {
@@ -400,10 +415,36 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
         }
     };
 
-    // Initial Live Inquiry on mount:
-    // By default, as soon as the opportunities section opens, automatically inquire Shiraz for the selected car!
+    // Automatic Live Inquiry on Car Selection change
+    const handleCarFilterChange = (newCar: string) => {
+        setSelectedCarFilter(newCar);
+        const queryCar = newCar !== 'all' ? newCar : 'kmc eagle';
+        if (selectedInquiryCity === 'all') {
+            handleFetchSequentialCitiesLive(queryCar);
+        } else {
+            handleInquireSingleCity('shiraz', queryCar).then(() => {
+                if (selectedInquiryCity !== 'shiraz') {
+                    handleInquireSingleCity(selectedInquiryCity, queryCar);
+                }
+            });
+        }
+    };
+
+    // Automatic Live Inquiry on City Selection change
+    const handleInquiryCityChange = (newCity: 'all' | ArbitrageCityKey) => {
+        setSelectedInquiryCity(newCity);
+        setSelectedOriginFilter(newCity);
+        const queryCar = selectedCarFilter !== 'all' ? selectedCarFilter : 'kmc eagle';
+        if (newCity === 'all') {
+            handleFetchSequentialCitiesLive(queryCar);
+        } else {
+            handleInquireSingleCity(newCity, queryCar);
+        }
+    };
+
+    // Initial Live Inquiry on mount (Auto-inquire all 3 cities: Shiraz, Tehran, Isfahan)
     useEffect(() => {
-        handleInquireSingleCity('shiraz', 'kmc eagle');
+        handleFetchSequentialCitiesLive('kmc eagle');
     }, []);
 
     // Generate Opportunities & City Summaries with strict statistical normalization
@@ -466,6 +507,20 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
 
         return list;
     }, [opportunities, selectedCarFilter, selectedOriginFilter, selectedRiskFilter, sortBy]);
+
+    const handleToggleExpandAll = useCallback(() => {
+        setExpandedCardIds(prev => {
+            const anyExpanded = filteredOpportunities.some(op => !!prev[op.id]);
+            if (anyExpanded) {
+                return {};
+            }
+            const nextState: Record<string, boolean> = {};
+            filteredOpportunities.forEach(op => {
+                nextState[op.id] = true;
+            });
+            return nextState;
+        });
+    }, [filteredOpportunities]);
 
     // High level metrics
     const summaryMetrics = useMemo(() => {
@@ -569,359 +624,203 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
 
     return (
         <div className="space-y-6">
-            {/* Top Overview & Live Control Center */}
-            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl border border-indigo-900/40 shadow-xl relative overflow-hidden">
-                {/* Background ambient lighting */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-72 h-72 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
-
-                <div className="relative z-10 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
-                    {/* Quick Stats Summary & Live Refresh Trigger */}
-                    <div className="flex flex-wrap items-center gap-3 w-full justify-between">
-                        <div className="flex flex-wrap items-center gap-3">
-                            <div className="bg-white/5 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                                    <TrendingUp className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <span className="text-[11px] text-slate-400 block font-medium">حداکثر سود کشف‌شده</span>
-                                    <span className="text-sm font-black text-emerald-400 font-mono block">
-                                        {summaryMetrics.maxProfit > 0 ? formatToman(summaryMetrics.maxProfit) : 'در انتظار استعلام'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="bg-white/5 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
-                                    <Layers className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <span className="text-[11px] text-slate-400 block font-medium">فرصت‌های فعال</span>
-                                    <span className="text-sm font-black text-white font-mono block">
-                                        {summaryMetrics.profitableCount} از {summaryMetrics.totalOpportunities} مسیر
-                                    </span>
-                                </div>
-                            </div>
+            {/* Unified Clean & Fast Control Header */}
+            <div className="bg-white dark:bg-slate-850 rounded-3xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-5">
+                {/* 1. Header Title & Live Status */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <span className="w-9 h-9 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black shadow-2xs">
+                                <TrendingUp className="w-5 h-5" />
+                            </span>
+                            <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                                آربیتراژ خودرو (شیراز 📍 - تهران 🏛️ - اصفهان 🏛️)
+                            </h2>
                         </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            استعلام زنده آگهی‌های دیوار • خرید زیر قیمت در تهران و اصفهان و فروش با سود در شیراز
+                        </p>
+                    </div>
 
-                        {/* Car and City Inquiry Selector & Trigger Action */}
-                        <div className="bg-white/10 backdrop-blur-md p-2.5 rounded-2xl border border-white/15 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                            {/* Car Selector Field */}
-                            <div className="flex items-center gap-1.5 bg-slate-950/60 px-3 py-2 rounded-xl border border-white/10 text-xs">
-                                <Car className="w-3.5 h-3.5 text-indigo-400" />
-                                <span className="text-slate-300 font-bold whitespace-nowrap text-[11px]">انتخاب خودرو:</span>
-                                <select
-                                    value={selectedCarFilter}
-                                    onChange={(e) => {
-                                        const newCar = e.target.value;
-                                        setSelectedCarFilter(newCar);
-                                    }}
-                                    disabled={isInquiring || isSequentialRunning}
-                                    className="bg-transparent border-none text-white font-bold text-xs outline-none cursor-pointer max-w-[150px] sm:max-w-[180px]"
-                                >
-                                    <option value="all" className="bg-slate-900 text-white">همه خودروها ({KNOWN_ARBITRAGE_CARS.length})</option>
-                                    {KNOWN_ARBITRAGE_CARS.map(c => (
-                                        <option key={c.key} value={c.key} className="bg-slate-900 text-white">
-                                            {c.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* City Selector Field */}
-                            <div className="flex items-center gap-1.5 bg-slate-950/60 px-3 py-2 rounded-xl border border-white/10 text-xs">
-                                <MapPin className="w-3.5 h-3.5 text-amber-400" />
-                                <span className="text-slate-300 font-bold whitespace-nowrap text-[11px]">انتخاب شهر:</span>
-                                <select
-                                    value={selectedInquiryCity}
-                                    onChange={(e) => setSelectedInquiryCity(e.target.value as any)}
-                                    disabled={isInquiring || isSequentialRunning}
-                                    className="bg-transparent border-none text-white font-bold text-xs outline-none cursor-pointer"
-                                >
-                                    <option value="shiraz" className="bg-slate-900 text-white">شیراز 📍 (مرجع نمایندگی)</option>
-                                    <option value="tehran" className="bg-slate-900 text-white">تهران 🏛️</option>
-                                    <option value="isfahan" className="bg-slate-900 text-white">اصفهان 🏛️</option>
-                                    <option value="bushehr" className="bg-slate-900 text-white">بوشهر 🌊</option>
-                                    <option value="all" className="bg-slate-900 text-white">همه ۴ شهر (نوبتی با ۵۰ ثانیه فاصله)</option>
-                                </select>
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={handleExecuteInquiry}
-                                disabled={isInquiring || isSequentialRunning}
-                                className={`py-2 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer whitespace-nowrap ${
-                                    isInquiring
-                                        ? 'bg-amber-500 text-slate-950 shadow-amber-500/30'
-                                        : 'bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 shadow-emerald-500/20'
-                                }`}
-                            >
-                                <RefreshCw className={`w-3.5 h-3.5 ${isInquiring ? 'animate-spin' : ''}`} />
+                    {/* Live Status Badge & One-Click Refresh */}
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                        {isInquiring ? (
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs font-bold animate-pulse">
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
                                 <span>
-                                    {isInquiring
-                                        ? `در حال استعلام ${activeInquiringCity ? ARBITRAGE_CITIES_CONFIG[activeInquiringCity].label.split(' ')[0] : 'شهر'} (${inquiryElapsedSeconds} ثانیه)...`
-                                        : selectedInquiryCity === 'all'
-                                            ? 'استعلام نوبتی ۴ شهر (فاصله ۵۰ ثانیه)'
-                                            : `استعلام زنده ${ARBITRAGE_CITIES_CONFIG[selectedInquiryCity].label.split(' ')[0]} ⚡`}
+                                    در حال استعلام {activeInquiringCity ? ARBITRAGE_CITIES_CONFIG[activeInquiringCity].label.split(' ')[0] : ''} ({inquiryElapsedSeconds}ثانیه)...
                                 </span>
-                            </button>
+                            </div>
+                        ) : (
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                                <span>{filteredOpportunities.length} فرصت فعال</span>
+                                {summaryMetrics.maxProfit > 0 && (
+                                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono border-r border-emerald-200 dark:border-emerald-800 pr-2 mr-1">
+                                        حداکثر سود: {formatToman(summaryMetrics.maxProfit)}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={handleExecuteInquiry}
+                            disabled={isInquiring || isSequentialRunning}
+                            className="p-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer border border-slate-200 dark:border-slate-700"
+                            title="استعلام مجدد لحظه‌ای"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isInquiring ? 'animate-spin text-indigo-600' : ''}`} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* 2. Interactive Fast Controls (Car Selector + City Segment Buttons) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                    {/* Car Dropdown */}
+                    <div className="lg:col-span-4">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 block">
+                            مدل خودرو (استعلام آنی با تغییر):
+                        </label>
+                        <div className="relative">
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-600 dark:text-indigo-400">
+                                <Car className="w-4 h-4" />
+                            </div>
+                            <select
+                                value={selectedCarFilter}
+                                onChange={(e) => handleCarFilterChange(e.target.value)}
+                                disabled={isInquiring || isSequentialRunning}
+                                className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl pr-9 pl-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                            >
+                                {KNOWN_ARBITRAGE_CARS.map(c => (
+                                    <option key={c.key} value={c.key}>
+                                        {c.label}
+                                    </option>
+                                ))}
+                                <option value="all">همه مدل‌های خودرو</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* City Segment Buttons (شیراز - تهران - اصفهان) */}
+                    <div className="lg:col-span-8">
+                        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 block">
+                            شهر استعلام / مبدأ معامله (کلیک جهت استعلام سریع):
+                        </label>
+                        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                            {[
+                                { key: 'all', label: 'همه شهرها (تهران و اصفهان ⬅️ شیراز)', icon: '🌐' },
+                                { key: 'tehran', label: 'تهران', icon: '🏛️' },
+                                { key: 'isfahan', label: 'اصفهان', icon: '🏛️' },
+                                { key: 'shiraz', label: 'شیراز (مرجع)', icon: '📍' }
+                            ].map(item => {
+                                const isSelected = selectedInquiryCity === item.key;
+                                return (
+                                    <button
+                                        key={item.key}
+                                        type="button"
+                                        onClick={() => handleInquiryCityChange(item.key as any)}
+                                        disabled={isInquiring || isSequentialRunning}
+                                        className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                            isSelected
+                                                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-black'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-750'
+                                        }`}
+                                    >
+                                        <span>{item.icon}</span>
+                                        <span>{item.label}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
 
-                {/* 50-Second Countdown Active Banner */}
-                {countdownSeconds > 0 && nextCityInQueue && (
-                    <div className="mt-4 p-4 bg-gradient-to-r from-amber-500/20 via-indigo-500/20 to-emerald-500/20 rounded-2xl border border-amber-500/40 backdrop-blur-md animate-fadeIn space-y-3">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-2.5 text-amber-200 font-bold">
-                                <div className="w-8 h-8 rounded-xl bg-amber-500/30 border border-amber-500/50 flex items-center justify-center text-amber-300 font-mono font-black text-sm animate-pulse">
-                                    {countdownSeconds}
-                                </div>
-                                <div>
-                                    <span className="block font-black text-white text-xs">
-                                        {justCompletedCity ? `استعلام ${ARBITRAGE_CITIES_CONFIG[justCompletedCity].label.split(' ')[0]} انجام شد.` : ''} انتظار ۵۰ ثانیه‌ای برای شهر بعدی:
-                                    </span>
-                                    <span className="text-[11px] text-amber-200/90 font-medium">
-                                        استعلام خودکار <strong className="text-white underline">{ARBITRAGE_CITIES_CONFIG[nextCityInQueue].label.split(' ')[0]}</strong> تا {countdownSeconds} ثانیه دیگر آغاز می‌شود...
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <button
-                                    type="button"
-                                    onClick={handleSkipCountdown}
-                                    className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
-                                >
-                                    <span>استعلام فوری بدون صبر</span>
-                                    <span>⏩</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={stopAllInquiries}
-                                    className="flex-1 sm:flex-initial px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-                                >
-                                    <span>توقف چرخه</span>
-                                    <span>⏹️</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Visual Progress Bar for 50-Second Countdown */}
-                        <div className="w-full bg-slate-900/60 h-2 rounded-full overflow-hidden border border-white/10">
-                            <div
-                                className="bg-gradient-to-r from-amber-400 to-emerald-400 h-full transition-all duration-1000 ease-linear rounded-full"
-                                style={{ width: `${Math.min(100, Math.max(0, ((50 - countdownSeconds) / 50) * 100))}%` }}
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {/* Live Inquiry Status Strip (Detailed Timestamps & Interactive City Badges) */}
-                <div className="mt-5 pt-4 border-t border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-300">
-                        <span className="flex items-center gap-1.5 font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-xl">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>آخرین استعلام:</span>
-                            <strong className="font-mono text-white">{formatInquiryTimeAgo(lastGlobalInquiryTime)}</strong>
-                        </span>
-
-                        <span className="text-slate-400 text-[11px]">
-                            وضعیت شهرها (کلیک جهت استعلام فوری):
-                        </span>
-
-                        {/* Interactive City Badges */}
-                        {(['shiraz', 'tehran', 'isfahan', 'bushehr'] as ArbitrageCityKey[]).map(ck => {
-                            const meta = cityInquiryMeta[ck];
-                            const isSucc = meta.status === 'success' || (meta.rawAdsCount > 0);
-                            const isThisLoading = activeInquiringCity === ck;
-                            const isNextInQueue = nextCityInQueue === ck;
-
-                            return (
-                                <button 
-                                    key={ck}
-                                    type="button"
-                                    onClick={() => handleInquireSingleCity(ck)}
-                                    disabled={isInquiring}
-                                    title={`کلیک برای استعلام اختصاصی ${ARBITRAGE_CITIES_CONFIG[ck].label}`}
-                                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-                                        isThisLoading 
-                                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-md ring-1 ring-amber-400/40 animate-pulse'
-                                            : isNextInQueue
-                                                ? 'bg-indigo-500/20 border-indigo-400 text-indigo-300'
-                                                : isSucc 
-                                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:border-emerald-400'
-                                                    : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200'
-                                    }`}
-                                >
-                                    <span className={`w-1.5 h-1.5 rounded-full ${isThisLoading ? 'bg-amber-400 animate-ping' : 'bg-current'}`} />
-                                    <span>{ARBITRAGE_CITIES_CONFIG[ck].label.split(' ')[0]}:</span>
-                                    <span className="font-mono text-[10px]">
-                                        {isThisLoading ? 'در حال دریافت...' : isSucc ? `${meta.validAdsCount} آگهی` : 'استعلام نشده'}
-                                    </span>
-                                    <RefreshCw className={`w-2.5 h-2.5 opacity-60 hover:opacity-100 ${isThisLoading ? 'animate-spin' : ''}`} />
-                                </button>
-                            );
-                        })}
+                {/* 3. Secondary Bar: View mode tabs & quick sort (compact, sleek) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    {/* View Mode Switcher (فرصت‌ها vs ماشین‌حساب) */}
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                        <button
+                            type="button"
+                            onClick={() => setActiveSubTab('opportunities')}
+                            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                                activeSubTab === 'opportunities'
+                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                            }`}
+                        >
+                            <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>فرصت‌های معامله ({filteredOpportunities.length})</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveSubTab('calculator')}
+                            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                                activeSubTab === 'calculator'
+                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                            }`}
+                        >
+                            <Calculator className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>ماشین‌حساب و شبیه‌ساز</span>
+                        </button>
                     </div>
 
-                    {/* Normalization Details Toggle */}
-                    <button
-                        type="button"
-                        onClick={() => setShowNormalizationDetails(!showNormalizationDetails)}
-                        className="text-[11px] font-bold text-indigo-300 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 transition-all cursor-pointer"
-                    >
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>نرمال‌سازی آماری: فعال ✅</span>
-                        {showNormalizationDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    </button>
-                </div>
-
-                {/* Expandable Normalization Info Box */}
-                {showNormalizationDetails && (
-                    <div className="mt-3 p-4 bg-slate-950/80 rounded-2xl border border-indigo-500/30 text-xs text-slate-300 space-y-2 animate-fadeIn">
-                        <div className="flex items-center gap-2 text-indigo-300 font-bold">
-                            <Info className="w-4 h-4" />
-                            <span>مکانیزم هوشمند نرمال‌سازی داده‌ها در حسینی خودرو شیراز:</span>
+                    {/* Quick Filters, Sort & Expand All Controls */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1 text-slate-500 text-[11px] font-bold">
+                            <span>فیلتر:</span>
+                            <select
+                                value={selectedRiskFilter}
+                                onChange={(e) => setSelectedRiskFilter(e.target.value)}
+                                className="bg-transparent border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-300 font-bold outline-none cursor-pointer text-xs"
+                            >
+                                <option value="all">همه فرصت‌ها</option>
+                                <option value="profitable_only">فقط سودآور</option>
+                                <option value="strong_only">فرصت طلایی 🟢</option>
+                                <option value="low_only">کم‌ریسک</option>
+                            </select>
                         </div>
-                        <ul className="list-disc list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                            <li><strong>استعلام اختصاصی دیوار بر اساس شهر:</strong> آگهی‌ها به تفکیک شهرهای شیراز، تهران، اصفهان و بوشهر به صورت زنده استعلام می‌شوند.</li>
-                            <li><strong>فیلتر آگهی‌های اقساطی:</strong> کلیه آگهی‌های دارای مبالغ پیش‌پرداخت یا ناقص (کمتر از ۱۵۰ میلیون تومان) به طور خودکار حذف می‌شوند.</li>
-                            <li><strong>حذف داده‌های پرت آماری (Outlier Trimming):</strong> آگهی‌هایی با انحراف قیمتی بیش از ۲۵٪ از میانه بازار فیلتر می‌گردند تا قیمت‌های کاذب یا اشتباهات تایپی روی میانگین اثر نگذارند.</li>
-                            <li><strong>محاسبه نرخ پرتکرار (Mode):</strong> دسته‌بندی قیمت‌ها در بازه‌های ۵ میلیون تومانی جهت تعیین نرخ توافق‌شده خریداران و فروشندگان.</li>
-                            <li><strong>کف قیمت خرید بهینه:</strong> محاسبه چارک اول (۲۵٪ پایین‌تر معتبر بازار) برای مبادی جهت تضمین خرید زیر قیمت روز.</li>
-                        </ul>
+
+                        <div className="flex items-center gap-1 text-slate-500 text-[11px] font-bold">
+                            <span>مرتب‌سازی:</span>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as any)}
+                                className="bg-transparent border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-300 font-bold outline-none cursor-pointer text-xs"
+                            >
+                                <option value="profit">بیشترین سود خالص</option>
+                                <option value="roi">بالاترین درصد بازده</option>
+                                <option value="risk">کمترین شاخص ریسک</option>
+                                <option value="distance">نزدیک‌ترین مسافت</option>
+                            </select>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={handleToggleExpandAll}
+                            className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 px-2.5 py-1 rounded-lg border border-indigo-200/80 dark:border-indigo-800/80 transition-colors cursor-pointer"
+                        >
+                            {filteredOpportunities.some(op => !!expandedCardIds[op.id]) ? (
+                                <>
+                                    <ChevronUp className="w-3 h-3" />
+                                    <span>بستن همه</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ChevronDown className="w-3 h-3" />
+                                    <span>مشاهده مشخصات همه</span>
+                                </>
+                            )}
+                        </button>
                     </div>
-                )}
-
-                {/* Sub-tab Navigation */}
-                <div className="mt-6 pt-4 border-t border-white/10 flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setActiveSubTab('opportunities')}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                            activeSubTab === 'opportunities'
-                                ? 'bg-white text-slate-900 shadow-md font-black'
-                                : 'bg-white/10 text-white hover:bg-white/20'
-                        }`}
-                    >
-                        <TrendingUp className="w-4 h-4 text-indigo-600" />
-                        <span>لیست فرصت‌های معاملاتی ({filteredOpportunities.length})</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setActiveSubTab('calculator')}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                            activeSubTab === 'calculator'
-                                ? 'bg-white text-slate-900 shadow-md font-black'
-                                : 'bg-white/10 text-white hover:bg-white/20'
-                        }`}
-                    >
-                        <Calculator className="w-4 h-4 text-emerald-600" />
-                        <span>ماشین‌حساب و شبیه‌ساز معامله اختصاصی 🧮</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setActiveSubTab('matrix')}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                            activeSubTab === 'matrix'
-                                ? 'bg-white text-slate-900 shadow-md font-black'
-                                : 'bg-white/10 text-white hover:bg-white/20'
-                        }`}
-                    >
-                        <Layers className="w-4 h-4 text-amber-600" />
-                        <span>ماتریس مقایسه قیمت ۴ شهر (تهران، شیراز، اصفهان، بوشهر)</span>
-                    </button>
                 </div>
             </div>
 
             {/* TAB 1: Opportunities List */}
             {activeSubTab === 'opportunities' && (
                 <div className="space-y-6">
-                    {/* Filter and Control Bar */}
-                    <div className="bg-white dark:bg-slate-850 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                            {/* Car Select */}
-                            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                <Car className="w-3.5 h-3.5 text-indigo-500" />
-                                <span className="text-slate-500 dark:text-slate-400 font-bold whitespace-nowrap">مدل خودرو:</span>
-                                <select
-                                    value={selectedCarFilter}
-                                    onChange={(e) => {
-                                        const newCar = e.target.value;
-                                        setSelectedCarFilter(newCar);
-                                        if (newCar !== 'all') {
-                                            if (selectedInquiryCity === 'all') {
-                                                handleFetchSequentialCitiesLive(newCar);
-                                            } else {
-                                                handleInquireSingleCity(selectedInquiryCity, newCar);
-                                            }
-                                        }
-                                    }}
-                                    className="bg-transparent border-none text-slate-800 dark:text-slate-200 font-bold outline-none cursor-pointer"
-                                >
-                                    <option value="all" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">همه مدل‌ها ({KNOWN_ARBITRAGE_CARS.length})</option>
-                                    {KNOWN_ARBITRAGE_CARS.map(c => (
-                                        <option key={c.key} value={c.key} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                                             {c.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
 
-                            {/* Origin City Select */}
-                            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                                <span className="text-slate-500 dark:text-slate-400 font-bold whitespace-nowrap">شهر مبدأ:</span>
-                                <select
-                                    value={selectedOriginFilter}
-                                    onChange={(e) => setSelectedOriginFilter(e.target.value)}
-                                    className="bg-transparent border-none text-slate-800 dark:text-slate-200 font-bold outline-none cursor-pointer"
-                                >
-                                    <option value="all" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">همه مبادی</option>
-                                    <option value="tehran" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">تهران (۹۲۰ کیلومتر)</option>
-                                    <option value="isfahan" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">اصفهان (۴۸۵ کیلومتر)</option>
-                                    <option value="bushehr" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">بوشهر (۲۹۵ کیلومتر)</option>
-                                    <option value="shiraz" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">درون شیراز (معامله محلی)</option>
-                                </select>
-                            </div>
-
-                            {/* Risk Filter */}
-                            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                                <span className="text-slate-500 dark:text-slate-400 font-bold whitespace-nowrap">فیلتر ریسک:</span>
-                                <select
-                                    value={selectedRiskFilter}
-                                    onChange={(e) => setSelectedRiskFilter(e.target.value)}
-                                    className="bg-transparent border-none text-slate-800 dark:text-slate-200 font-bold outline-none cursor-pointer"
-                                >
-                                    <option value="all" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">همه فرصت‌ها</option>
-                                    <option value="profitable_only" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">فقط سود خالص مثبت (سودآور)</option>
-                                    <option value="strong_only" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">فرصت‌های طلایی 🟢</option>
-                                    <option value="low_only" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">فقط کم‌ریسک (Low Risk)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Sort By */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-400 font-medium">مرتب‌سازی:</span>
-                            <select
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value as any)}
-                                className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer"
-                            >
-                                <option value="profit">بیشترین سود خالص (تومان)</option>
-                                <option value="roi">بالاترین درصد بازده (ROI %)</option>
-                                <option value="risk">کمترین شاخص ریسک</option>
-                                <option value="distance">نزدیک‌ترین مسافت حمل</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Opportunities Grid / Live Empty States */}
                     {isInquiring ? (
                         <div className="bg-white dark:bg-slate-850 p-12 rounded-3xl border border-indigo-200 dark:border-indigo-900/60 text-center space-y-4 shadow-sm">
                             <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto animate-spin">
@@ -954,7 +853,7 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
                                     <RefreshCw className="w-4 h-4" />
                                     <span>
                                         {selectedInquiryCity === 'all'
-                                            ? 'استعلام نوبتی ۴ شهر (فاصله ۵۰ ثانیه)'
+                                            ? 'استعلام نوبتی ۴ شهر (فاصله ۱ ثانیه)'
                                             : `استعلام زنده ${ARBITRAGE_CITIES_CONFIG[selectedInquiryCity].label.split(' ')[0]}`}
                                     </span>
                                 </button>
@@ -969,20 +868,22 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
                             </div>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                             {filteredOpportunities.map((op) => {
                                 const isProfitable = op.netProfitToman > 0;
                                 const isStrong = op.signal === 'STRONG_BUY';
+                                const isExpanded = !!expandedCardIds[op.id];
 
                                 return (
                                     <div 
                                         key={op.id}
-                                        className={`bg-white dark:bg-slate-850 rounded-3xl border transition-all duration-300 hover:shadow-lg flex flex-col justify-between overflow-hidden relative ${
+                                        onClick={() => toggleExpandCard(op.id)}
+                                        className={`bg-white dark:bg-slate-850 rounded-3xl border transition-all duration-300 hover:shadow-lg flex flex-col justify-between overflow-hidden relative cursor-pointer select-none ${
                                             isStrong 
                                                 ? 'border-emerald-500/60 dark:border-emerald-500/50 shadow-md shadow-emerald-500/5 ring-1 ring-emerald-500/20' 
                                                 : isProfitable
                                                     ? 'border-slate-200/90 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700'
-                                                    : 'border-slate-200/60 dark:border-slate-800 opacity-75'
+                                                    : 'border-slate-200/60 dark:border-slate-800 opacity-80'
                                         }`}
                                     >
                                         {/* Top Accent Strip */}
@@ -994,143 +895,251 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
                                                     : 'bg-slate-300 dark:bg-slate-700'
                                         }`} />
 
-                                        <div className="p-5 space-y-4 flex-grow">
-                                            {/* Header: Car Name & Origin -> Destination */}
-                                            <div>
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-black flex items-center gap-1.5 ${
-                                                        isStrong
-                                                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                                            : isProfitable
-                                                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                                    }`}>
-                                                        {isStrong && <Sparkles className="w-3 h-3 text-emerald-500" />}
-                                                        {op.signalLabel}
+                                        <div className="p-5 space-y-3.5 flex-grow">
+                                            {/* 1. پیشنهاد معامله (Main Strategic Banner) */}
+                                            <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 dark:from-emerald-950/40 dark:via-teal-950/40 dark:to-indigo-950/40 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs">
+                                                <div className="flex items-center justify-between gap-1 mb-1.5">
+                                                    <span className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-black text-xs">
+                                                        <Sparkles className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+                                                        <span>پیشنهاد معامله:</span>
                                                     </span>
-
-                                                    <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
-                                                        <Clock className="w-3 h-3" />
-                                                        {op.estimatedDays === 0 ? 'تحویل فوری' : `~${op.estimatedDays} روز`}
-                                                    </span>
+                                                    {isStrong && (
+                                                        <span className="text-[10px] bg-emerald-500 text-white font-bold px-2 py-0.5 rounded-full">
+                                                            فرصت طلایی
+                                                        </span>
+                                                    )}
                                                 </div>
-
-                                                <h3 className="text-base font-black text-slate-900 dark:text-white mt-2">
-                                                    {op.carName}
-                                                </h3>
-
-                                                {/* Trade Route */}
-                                                <div className="mt-2.5 flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800 text-xs font-bold">
-                                                    <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                                                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                                                        <span>خرید از {op.originCityLabel}</span>
-                                                    </div>
-                                                    <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400 rotate-180" />
-                                                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                                                        <Building2 className="w-3.5 h-3.5" />
-                                                        <span>فروش در شیراز</span>
-                                                    </div>
-                                                </div>
+                                                <p className="text-sm font-black text-slate-900 dark:text-white leading-relaxed">
+                                                    {op.actionSummary}
+                                                </p>
                                             </div>
 
-                                            {/* Financial breakdown */}
-                                            <div className="space-y-2 bg-slate-50/70 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs">
-                                                <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                                                    <span>قیمت خرید نرمال در {op.originCityLabel}:</span>
-                                                    <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
-                                                        {formatToman(op.buyPriceToman)}
-                                                    </span>
-                                                </div>
+                                             {/* 2. لینک آگهی خرید و آگهی فروش (Clickable Divar links) */}
+                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                                                 {/* Buy Ad Link (Call / Negotiate with seller in City A) */}
+                                                 <a
+                                                     href={op.buyAdHref || `https://divar.ir/s/${op.originCity}/car?q=${encodeURIComponent(op.carName)}`}
+                                                     target="_blank"
+                                                     rel="noopener noreferrer"
+                                                     onClick={(e) => e.stopPropagation()}
+                                                     className="p-3 bg-rose-50/50 hover:bg-rose-100/70 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-900/50 flex flex-col justify-between text-xs transition-all group shadow-2xs hover:shadow-sm"
+                                                     title="مشاهده آگهی و تماس با مالک خودرو در دیوار"
+                                                 >
+                                                     <div className="flex items-center justify-between gap-1 mb-1.5">
+                                                         <span className="px-2 py-0.5 rounded-lg bg-rose-500 text-white font-black text-[10px]">
+                                                             آگهی ارزان مبدأ ({op.originCityLabel.split(' ')[0]})
+                                                         </span>
+                                                         <span className="text-[11px] font-black text-rose-600 dark:text-rose-400 flex items-center gap-1 group-hover:underline">
+                                                             تماس با مالک 📞 ↗
+                                                         </span>
+                                                     </div>
+                                                     <div className="space-y-0.5">
+                                                         <span className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1 group-hover:text-rose-600 dark:group-hover:text-rose-400">
+                                                             {op.buyAdTitle || `آگهی خرید در ${op.originCityLabel.split(' ')[0]}`}
+                                                         </span>
+                                                         <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                                             <span>قیمت فروشنده:</span>
+                                                             <span className="font-bold text-slate-800 dark:text-slate-200">
+                                                                 {formatToman(op.buyPriceToman)}
+                                                             </span>
+                                                         </div>
+                                                     </div>
+                                                 </a>
 
-                                                <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                                                    <span className="flex items-center gap-1">
-                                                        <Truck className="w-3 h-3 text-indigo-500" />
-                                                        <span>هزینه حمل خودروبر و کارشناسی:</span>
-                                                    </span>
-                                                    <span className="font-bold font-mono text-slate-700 dark:text-slate-300">
-                                                        {formatToman(op.totalExpensesToman)}
-                                                    </span>
-                                                </div>
+                                                 {/* Sell Ad Link (City B - Shiraz benchmark/target listing) */}
+                                                 <a
+                                                     href={op.sellAdHref || `https://divar.ir/s/shiraz/car?q=${encodeURIComponent(op.carName)}`}
+                                                     target="_blank"
+                                                     rel="noopener noreferrer"
+                                                     onClick={(e) => e.stopPropagation()}
+                                                     className="p-3 bg-emerald-50/50 hover:bg-emerald-100/70 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 flex flex-col justify-between text-xs transition-all group shadow-2xs hover:shadow-sm"
+                                                     title="مشاهده آگهی مرجع فروش در بازار شیراز"
+                                                 >
+                                                     <div className="flex items-center justify-between gap-1 mb-1.5">
+                                                         <span className="px-2 py-0.5 rounded-lg bg-emerald-600 text-white font-black text-[10px]">
+                                                             فروش در شیراز
+                                                         </span>
+                                                         <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1 group-hover:underline">
+                                                             آگهی بازار شیراز ↗
+                                                         </span>
+                                                     </div>
+                                                     <div className="space-y-0.5">
+                                                         <span className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                                                             {op.sellAdTitle || 'آگهی فروش در شیراز'}
+                                                         </span>
+                                                         <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                                             <span>نرخ فروش بازار:</span>
+                                                             <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                                                                 {formatToman(op.sellPriceShirazToman)}
+                                                             </span>
+                                                         </div>
+                                                     </div>
+                                                 </a>
+                                             </div>
 
-                                                <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                                                    <span>قیمت فروش مرجع بازار در شیراز:</span>
-                                                    <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">
-                                                        {formatToman(op.sellPriceShirazToman)}
-                                                    </span>
-                                                </div>
-
-                                                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
-                                                    <span className="font-black text-slate-900 dark:text-white">سود خالص پیش‌بینی‌شده:</span>
-                                                    <div className="text-left">
-                                                        <span className={`text-base font-black font-mono block ${
-                                                            op.netProfitToman > 0 
-                                                                ? 'text-emerald-600 dark:text-emerald-400' 
-                                                                : 'text-rose-600 dark:text-rose-400'
-                                                        }`}>
-                                                            {formatToman(op.netProfitToman)}
-                                                        </span>
-                                                        <span className={`text-[10px] font-bold font-mono ${
-                                                            op.roiPercent > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
-                                                        }`}>
-                                                            بازده سرمایه: {op.roiPercent > 0 ? '+' : ''}{op.roiPercent}٪
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Risk Level Badge & Factors */}
-                                            <div className="space-y-1.5">
-                                                <div className="flex items-center justify-between text-xs font-bold">
-                                                    <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                                                        {op.riskLevel === 'LOW' ? (
-                                                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                                                        ) : (
-                                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                                                        )}
-                                                        <span>ارزیابی ریسک جابجایی:</span>
-                                                    </span>
-                                                    <span className={`text-[11px] px-2 py-0.5 rounded-md font-mono font-black ${
+                                            {/* 3. شاخص ریسک و کلیک برای سایر مشخصات */}
+                                            <div className="flex items-center justify-between pt-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`text-[11px] px-2.5 py-1 rounded-xl font-bold flex items-center gap-1.5 ${
                                                         op.riskLevel === 'LOW'
-                                                            ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                                                            ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                                                             : op.riskLevel === 'MEDIUM'
-                                                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
-                                                                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                                                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                                                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                                                     }`}>
-                                                        شاخص ریسک: {op.riskScore}/۱۰۰
+                                                        {op.riskLevel === 'LOW' ? (
+                                                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                                        ) : (
+                                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                                        )}
+                                                        <span>شاخص ریسک: {op.riskScore}/۱۰۰</span>
+                                                        <span className="opacity-80 text-[10px]">
+                                                            ({op.riskLevel === 'LOW' ? 'کم‌ریسک 🟢' : op.riskLevel === 'MEDIUM' ? 'ریسک متوسط 🟡' : 'پرریسک 🔴'})
+                                                        </span>
                                                     </span>
                                                 </div>
 
-                                                {op.riskFactors.length > 0 && (
-                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-xl leading-relaxed">
-                                                        💡 {op.riskFactors[0]}
-                                                    </p>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleExpandCard(op.id);
+                                                    }}
+                                                    className={`text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer py-1.5 px-3 rounded-xl border select-none ${
+                                                        isExpanded
+                                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs shadow-indigo-600/30 hover:bg-indigo-700'
+                                                            : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                                                    }`}
+                                                    title={isExpanded ? 'بستن مشخصات فنی و مالی' : 'مشاهده سایر مشخصات، بهای تمام‌شده و راهنما'}
+                                                >
+                                                    <span>{isExpanded ? 'بستن مشخصات' : 'سایر مشخصات'}</span>
+                                                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                                </button>
                                             </div>
-                                        </div>
 
-                                        {/* Card Actions Footer */}
-                                        <div className="p-4 bg-slate-50/90 dark:bg-slate-900/70 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleLoadIntoCalculator(op)}
-                                                className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20 cursor-pointer"
-                                            >
-                                                <Calculator className="w-3.5 h-3.5" />
-                                                <span>شخصی‌سازی در ماشین‌حساب</span>
-                                            </button>
+                                            {/* 4. سایر مشخصات در صورت کلیک روی کارت یا دکمه */}
+                                            {isExpanded && (
+                                                <div 
+                                                    onClick={(e) => e.stopPropagation()} 
+                                                    className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3 transition-all duration-300"
+                                                >
+                                                    {/* Financial breakdown */}
+                                                    <div className="space-y-2 bg-slate-50/80 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs">
+                                                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                                            <span>قیمت خرید نرمال در {op.originCityLabel.split(' ')[0]}:</span>
+                                                            <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
+                                                                {formatToman(op.buyPriceToman)}
+                                                            </span>
+                                                        </div>
 
-                                            <button
-                                                type="button"
-                                                onClick={() => handleCopyOpportunity(op)}
-                                                className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-xl transition-all cursor-pointer"
-                                                title="کپی متن تحلیل معامله"
-                                            >
-                                                {copiedCardId === op.id ? (
-                                                    <Check className="w-4 h-4 text-emerald-600" />
-                                                ) : (
-                                                    <Copy className="w-4 h-4" />
-                                                )}
-                                            </button>
+                                                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <Truck className="w-3 h-3 text-indigo-500" />
+                                                                <span>هزینه حمل خودروبر و کارشناسی:</span>
+                                                            </span>
+                                                            <span className="font-bold font-mono text-slate-700 dark:text-slate-300">
+                                                                {formatToman(op.totalExpensesToman)}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                                            <span>بهای تمام‌شده کل:</span>
+                                                            <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
+                                                                {formatToman(op.totalCapitalRequiredToman)}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                                                            <span>قیمت فروش نرمال بازار در شیراز:</span>
+                                                            <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                                                                {formatToman(op.sellPriceShirazToman)}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
+                                                            <span className="font-black text-slate-900 dark:text-white">سود خالص پیش‌بینی‌شده:</span>
+                                                            <div className="text-left">
+                                                                <span className={`text-base font-black font-mono block ${
+                                                                    op.netProfitToman > 0 
+                                                                        ? 'text-emerald-600 dark:text-emerald-400' 
+                                                                        : 'text-rose-600 dark:text-rose-400'
+                                                                }`}>
+                                                                    {formatToman(op.netProfitToman)}
+                                                                </span>
+                                                                <span className={`text-[10px] font-bold font-mono ${
+                                                                    op.roiPercent > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
+                                                                }`}>
+                                                                    بازده سرمایه: {op.roiPercent > 0 ? '+' : ''}{op.roiPercent}٪
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Ad Description & Direct Negotiation Helper */}
+                                                    {(op.buyAdDesc || op.sellAdDesc) && (
+                                                        <div className="bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-2xl border border-amber-200/80 dark:border-amber-900/40 text-xs space-y-1.5">
+                                                            <div className="flex items-center gap-1 text-amber-800 dark:text-amber-300 font-bold text-[11px]">
+                                                                <MessageSquare className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                                                <span>متن آگهی و نکته مذاکره با مالک خودرو:</span>
+                                                            </div>
+                                                            {op.buyAdDesc && (
+                                                                <p className="text-[11px] text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed bg-white/70 dark:bg-slate-900/50 p-2 rounded-xl border border-amber-100 dark:border-slate-800">
+                                                                    🗣️ <strong className="text-slate-900 dark:text-white">توضیحات آگهی خرید:</strong> {op.buyAdDesc}
+                                                                </p>
+                                                            )}
+                                                            <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                                                                💡 راهنما: روی دکمه «تماس با مالک 📞» کلیک کنید، مشخصات فنی و رنگ خودرو را بپرسید و در صورت توافق، معامله را نهایی کنید.
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Distance & Days */}
+                                                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono px-1">
+                                                        <span className="flex items-center gap-1">
+                                                            <Clock className="w-3 h-3" />
+                                                            {op.estimatedDays === 0 ? 'تحویل فوری در شیراز' : `زمان جابجایی: ~${op.estimatedDays} روز`}
+                                                        </span>
+                                                        <span>مسافت: {op.distanceKm} کیلومتر</span>
+                                                    </div>
+
+                                                    {op.riskFactors.length > 0 && (
+                                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-xl leading-relaxed">
+                                                            💡 {op.riskFactors[0]}
+                                                        </p>
+                                                    )}
+
+                                                    {/* Card Actions Footer */}
+                                                    <div className="pt-2 flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleLoadIntoCalculator(op);
+                                                            }}
+                                                            className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20 cursor-pointer"
+                                                        >
+                                                            <Calculator className="w-3.5 h-3.5" />
+                                                            <span>شخصی‌سازی در ماشین‌حساب</span>
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleCopyOpportunity(op);
+                                                            }}
+                                                            className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-xl transition-all cursor-pointer"
+                                                            title="کپی متن تحلیل معامله"
+                                                        >
+                                                            {copiedCardId === op.id ? (
+                                                                <Check className="w-4 h-4 text-emerald-600" />
+                                                            ) : (
+                                                                <Copy className="w-4 h-4" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -1338,9 +1347,12 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
                             </div>
 
                             {/* Summary Strategy Text */}
-                            <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-xs text-slate-300 leading-relaxed">
-                                <p className="font-bold text-white mb-1">📝 خلاصه پیشنهاد راهبردی:</p>
-                                <p>{customDealResult.actionSummary}</p>
+                            <div className="p-3.5 bg-gradient-to-r from-emerald-950/60 to-indigo-950/60 rounded-2xl border border-emerald-500/30 text-xs text-slate-200 leading-relaxed shadow-sm">
+                                <div className="flex items-center gap-1.5 font-black text-emerald-300 mb-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>پیشنهاد معامله:</span>
+                                </div>
+                                <p className="font-black text-white text-sm">{customDealResult.actionSummary}</p>
                             </div>
                         </div>
 

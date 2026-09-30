@@ -1609,6 +1609,146 @@ export const getDivarPrices = async (
     }
 };
 
+export const getDivarArbitragePrices = async (
+    title?: string,
+    city?: string,
+    signal?: AbortSignal
+): Promise<DivarPriceItem[]> => {
+    // 150-second timeout because scraper webhook may take time to collect live data
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 150000);
+
+    if (signal) {
+        signal.addEventListener('abort', () => controller.abort());
+    }
+
+    const webhookUrl = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/divar-arbitrage';
+    const params = new URLSearchParams();
+    if (title && title.trim()) {
+        params.set('title', title.trim());
+    }
+    if (city && city.trim()) {
+        params.set('city', city.trim());
+    }
+
+    const queryString = params.toString();
+    const primaryUrl = queryString ? `${webhookUrl}?${queryString}` : webhookUrl;
+    const fallbackUrl = queryString ? `${API_BASE_URL}/divar-arbitrage?${queryString}` : `${API_BASE_URL}/divar-arbitrage`;
+
+    const normalizeItems = (rawData: any, defaultCarName?: string): DivarPriceItem[] => {
+        let items: any[] = [];
+        if (Array.isArray(rawData)) {
+            items = rawData;
+        } else if (rawData && typeof rawData === 'object') {
+            if (Array.isArray(rawData.data)) items = rawData.data;
+            else if (Array.isArray(rawData.items)) items = rawData.items;
+            else if (Array.isArray(rawData.result)) items = rawData.result;
+            else if (Array.isArray(rawData.prices)) items = rawData.prices;
+            else if (Array.isArray(rawData.listings)) items = rawData.listings;
+            else if (Array.isArray(rawData.body)) items = rawData.body;
+            else if (rawData.title || rawData.price) items = [rawData];
+        }
+
+        return items.map(item => {
+            let rawPrice = item.price ?? item.price_rial ?? item.price_toman ?? item.middle_description_text ?? item.amount ?? item.cost;
+            let numPrice: number | null = null;
+            if (typeof rawPrice === 'number' && !isNaN(rawPrice)) {
+                numPrice = rawPrice;
+            } else if (typeof rawPrice === 'string') {
+                const digitsOnly = rawPrice.replace(/[^\d]/g, '');
+                if (digitsOnly) numPrice = parseInt(digitsOnly, 10);
+            }
+
+            const rawKm = item.km ?? item.top_description_text ?? item.kilometer ?? item.mileage ?? item.usage ?? null;
+            const cleanKm = rawKm !== null && rawKm !== undefined ? String(rawKm).trim() : null;
+
+            let href = item.href ?? item.link ?? item.url ?? null;
+            if (!href && item.adv_id) {
+                href = `https://divar.ir/v/${item.adv_id}`;
+            } else if (!href && item.token) {
+                href = `https://divar.ir/v/${item.token}`;
+            }
+
+            return {
+                title: item.title ?? item.name ?? item.subject ?? null,
+                price: numPrice,
+                km: cleanKm,
+                desc: item.description ?? item.desc ?? item.bottom_description_text ?? item.details ?? null,
+                car_name: item.car_name ?? item.model ?? item.car_model ?? item.model_name ?? defaultCarName ?? '',
+                href
+            };
+        });
+    };
+
+    try {
+        let response: Response | null = null;
+
+        // Step 1: Try GET on primary webhook endpoint: divar-arbitrage?title=...&city=...
+        try {
+            response = await fetch(primaryUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: controller.signal
+            });
+
+            // If GET returns 404 or 405, fallback to POST with JSON body
+            if (!response.ok && (response.status === 404 || response.status === 405)) {
+                response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        title: title?.trim() || '',
+                        city: city?.trim() || '',
+                        mode: title?.trim() || '',
+                        model: title?.trim() || ''
+                    }),
+                    signal: controller.signal
+                });
+            }
+        } catch (fetchErr: any) {
+            if (controller.signal.aborted) throw fetchErr;
+
+            // Step 2: Fallback to fallbackUrl
+            try {
+                response = await fetch(fallbackUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    signal: controller.signal
+                });
+            } catch (fallbackErr: any) {
+                if (controller.signal.aborted) throw fallbackErr;
+                // Retry POST on webhook
+                response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        title: title?.trim() || '',
+                        city: city?.trim() || ''
+                    }),
+                    signal: controller.signal
+                });
+            }
+        }
+
+        if (!response || !response.ok) {
+            const status = response ? response.status : 'No Response';
+            let errDetail = '';
+            try {
+                const errJson = await response?.json();
+                if (errJson?.message) errDetail = `: ${errJson.message}`;
+            } catch {
+                // ignore
+            }
+            throw new Error(`دریافت آگهی‌های آربیتراژ دیوار ناموفق بود (کد: ${status}${errDetail})`);
+        }
+
+        const data = await response.json();
+        return normalizeItems(data, title);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
 export const getDivarAdvDetails = async (adUrl: string, signal?: AbortSignal): Promise<DivarAdvDetail[]> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 65000); // 65 seconds

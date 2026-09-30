@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, Tooltip, 
-    CartesianGrid, Cell, ReferenceLine
+    CartesianGrid, Cell, ReferenceLine, ReferenceArea
 } from 'recharts';
 import { 
     TrendingUp, TrendingDown, Scale, Sparkles, RefreshCw, Clock, 
@@ -153,14 +153,14 @@ const getSourceMarkerStyle = (sourceName: string): OtherSourceMarkerInfo => {
     }
     if (s.includes('custom') || s.includes('hm') || s.includes('hoseini') || s.includes('نمایندگی') || s.includes('مصوب')) {
         return {
-            key: 'custom',
-            label: 'نرخ مصوب مدیر فروش',
+            key: 'market_ref',
+            label: sourceName || 'مرجع متفرقه',
             markerType: 'triangle',
             markerSymbol: '▲',
-            color: '#e11d48', // rose-600
-            bgClass: 'bg-rose-50 dark:bg-rose-950/60',
-            textClass: 'text-rose-700 dark:text-rose-300',
-            borderClass: 'border-rose-200 dark:border-rose-800'
+            color: '#64748b', // slate-500
+            bgClass: 'bg-slate-50 dark:bg-slate-900',
+            textClass: 'text-slate-700 dark:text-slate-300',
+            borderClass: 'border-slate-200 dark:border-slate-700'
         };
     }
     return {
@@ -175,7 +175,7 @@ const getSourceMarkerStyle = (sourceName: string): OtherSourceMarkerInfo => {
     };
 };
 
-// Match prices from other sources against selected car
+// Match prices from other sources against selected car (excluding sales manager approved / custom rates)
 const matchOtherPricesForCar = (carKey: string, allOtherPrices: ScrapedCarPrice[]): ScrapedCarPrice[] => {
     if (!allOtherPrices || allOtherPrices.length === 0) return [];
 
@@ -196,6 +196,19 @@ const matchOtherPricesForCar = (carKey: string, allOtherPrices: ScrapedCarPrice[
 
     const matched = allOtherPrices.filter(p => {
         if (!p || !p.model_name || !p.price_rial || p.price_rial <= 0) return false;
+        // User request: نرخ مصوب مدیر فروش را در قیمت دیوار نمایش نده
+        const src = (p.source_name || '').toLowerCase();
+        if (
+            src === 'custom' || 
+            src.includes('custom') || 
+            src.includes('hm') || 
+            src.includes('hoseini') || 
+            src.includes('مصوب') || 
+            src.includes('مدیر فروش') || 
+            src.includes('نمایندگی')
+        ) {
+            return false;
+        }
         const modelLower = p.model_name.toLowerCase();
         return keywords.some(kw => modelLower.includes(kw.toLowerCase()));
     });
@@ -211,6 +224,157 @@ const matchOtherPricesForCar = (carKey: string, allOtherPrices: ScrapedCarPrice[
         }
     }
     return deduped;
+};
+
+// Interface for detected price clusters on Divar price distribution
+export interface PriceCluster {
+    id: string;
+    label: string;
+    description: string;
+    minPrice: number;
+    maxPrice: number;
+    avgPrice: number;
+    medianPrice: number;
+    centerPrice: number;
+    count: number;
+    percentage: number;
+    color: string;
+    fillColor: string;
+    strokeColor: string;
+    isPrimary: boolean;
+    ads: DivarPriceItem[];
+}
+
+const CLUSTER_PALETTES = [
+    { color: '#8b5cf6', fillColor: '#8b5cf6', strokeColor: '#7c3aed' }, // Purple (Primary Density)
+    { color: '#0ea5e9', fillColor: '#0ea5e9', strokeColor: '#0284c7' }, // Sky Blue
+    { color: '#10b981', fillColor: '#10b981', strokeColor: '#059669' }, // Emerald Green
+    { color: '#f59e0b', fillColor: '#f59e0b', strokeColor: '#d97706' }, // Amber
+    { color: '#ec4899', fillColor: '#ec4899', strokeColor: '#db2777' }, // Pink
+    { color: '#6366f1', fillColor: '#6366f1', strokeColor: '#4f46e5' }  // Indigo
+];
+
+// Detect price clusters dynamically using 1D density grouping
+export const findPriceClusters = (items: DivarPriceItem[]): PriceCluster[] => {
+    const validItems = items.filter(
+        (i): i is DivarPriceItem & { price: number } => typeof i.price === 'number' && i.price > 0
+    );
+    if (validItems.length === 0) return [];
+
+    // Sort by price ascending
+    const sorted = [...validItems].sort((a, b) => a.price - b.price);
+    const totalCount = sorted.length;
+
+    if (totalCount === 1) {
+        const item = sorted[0];
+        return [{
+            id: 'cluster-1',
+            label: 'کلاستر متمرکز تک‌آگهی',
+            description: 'تنها قیمت موجود در آگهی‌ها',
+            minPrice: item.price,
+            maxPrice: item.price,
+            avgPrice: item.price,
+            medianPrice: item.price,
+            centerPrice: item.price,
+            count: 1,
+            percentage: 100,
+            color: CLUSTER_PALETTES[0].color,
+            fillColor: CLUSTER_PALETTES[0].fillColor,
+            strokeColor: CLUSTER_PALETTES[0].strokeColor,
+            isPrimary: true,
+            ads: [item]
+        }];
+    }
+
+    const medianPrice = sorted[Math.floor(totalCount / 2)].price;
+    // Dynamic grouping threshold: ~1.5% of median car price (min 20M Tomans, max 50M Tomans)
+    const threshold = Math.max(20_000_000, Math.min(50_000_000, Math.round(medianPrice * 0.015)));
+
+    const rawClusters: { prices: number[]; ads: DivarPriceItem[] }[] = [];
+    let curCluster: { prices: number[]; ads: DivarPriceItem[] } = {
+        prices: [sorted[0].price],
+        ads: [sorted[0]]
+    };
+
+    for (let i = 1; i < sorted.length; i++) {
+        const prevP = sorted[i - 1].price;
+        const curP = sorted[i].price;
+        const diff = curP - prevP;
+
+        if (diff <= threshold) {
+            curCluster.prices.push(curP);
+            curCluster.ads.push(sorted[i]);
+        } else {
+            rawClusters.push(curCluster);
+            curCluster = {
+                prices: [curP],
+                ads: [sorted[i]]
+            };
+        }
+    }
+    rawClusters.push(curCluster);
+
+    // Find the primary cluster (highest ad count)
+    let maxClusterCount = 0;
+    let primaryRawIndex = 0;
+    rawClusters.forEach((c, idx) => {
+        if (c.ads.length > maxClusterCount) {
+            maxClusterCount = c.ads.length;
+            primaryRawIndex = idx;
+        }
+    });
+
+    return rawClusters.map((c, idx) => {
+        const minPrice = Math.min(...c.prices);
+        const maxPrice = Math.max(...c.prices);
+        const sum = c.prices.reduce((a, b) => a + b, 0);
+        const avgPrice = Math.round(sum / c.prices.length);
+        const medianP = c.prices[Math.floor(c.prices.length / 2)];
+        const count = c.ads.length;
+        const percentage = Math.round((count / totalCount) * 100);
+        const isPrimary = idx === primaryRawIndex;
+
+        // Choose representative center price: median or mode
+        const centerPrice = medianP;
+
+        // Semantic labeling
+        let label = `کلاستر قیمتی ${idx + 1}`;
+        let description = `بازه ${Math.round(minPrice / 1_000_000).toLocaleString('fa-IR')} تا ${Math.round(maxPrice / 1_000_000).toLocaleString('fa-IR')} م.ت`;
+
+        if (isPrimary && rawClusters.length > 1) {
+            label = 'کلاستر اصلی (بیشترین تراکم معامله)';
+            description = `کانون تمرکز اصلی بازار با ${count.toLocaleString('fa-IR')} آگهی (${percentage}٪ کل آگهی‌ها)`;
+        } else if (idx === 0 && rawClusters.length > 1) {
+            label = 'کلاستر کف بازار (فروش فوری)';
+            description = `پایین‌ترین سطح قیمتی آگهی‌های دیوار با ${count.toLocaleString('fa-IR')} آگهی`;
+        } else if (idx === rawClusters.length - 1 && rawClusters.length > 1) {
+            label = 'کلاستر سقف بازار (صفر / نمایشگاهی)';
+            description = `بالاترین سطح قیمت اعلامی در دیوار با ${count.toLocaleString('fa-IR')} آگهی`;
+        } else {
+            label = `کلاستر میانی ${idx + 1} (نرخ تعادلی)`;
+            description = `بازه قیمتی تعادلی بازار با ${count.toLocaleString('fa-IR')} آگهی`;
+        }
+
+        const palette = CLUSTER_PALETTES[idx % CLUSTER_PALETTES.length];
+
+        return {
+            id: `cluster-${idx + 1}-${minPrice}`,
+            label,
+            description,
+            minPrice,
+            maxPrice,
+            avgPrice,
+            medianPrice: medianP,
+            centerPrice,
+            count,
+            percentage,
+            color: isPrimary ? '#8b5cf6' : palette.color,
+            fillColor: isPrimary ? '#8b5cf6' : palette.fillColor,
+            strokeColor: isPrimary ? '#7c3aed' : palette.strokeColor,
+            isPrimary,
+            ads: c.ads
+        };
+    });
 };
 
 const DEFAULT_DIVAR_ITEMS: DivarPriceItem[] = [
@@ -281,10 +445,10 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     const [queryingCarName, setQueryingCarName] = useState<string>('کی‌ام‌سی ایگل');
     const [queryingCityName, setQueryingCityName] = useState<string>('شیراز');
 
-    // Normalization & View Settings (Normalized is true by default per user request)
+    // Normalization & View Settings (Normalized is true by default per user request; Other sources markers off by default)
     const [isNormalized, setIsNormalized] = useState<boolean>(true);
-    const [showOtherSourcesOnChart, setShowOtherSourcesOnChart] = useState<boolean>(true);
-    const [showOtherSourceLines, setShowOtherSourceLines] = useState<boolean>(true);
+    const [showOtherSourcesOnChart, setShowOtherSourcesOnChart] = useState<boolean>(false);
+    const [showOtherSourceLines, setShowOtherSourceLines] = useState<boolean>(false);
     const [showOutliersModal, setShowOutliersModal] = useState<boolean>(false);
 
     const [advDetailUrl, setAdvDetailUrl] = useState<string>('');
@@ -349,9 +513,24 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     }, [propOtherPrices]);
 
     const effectiveOtherPrices = useMemo(() => {
-        if (propOtherPrices && propOtherPrices.length > 0) return propOtherPrices;
-        return fetchedOtherPrices;
+        const raw = (propOtherPrices && propOtherPrices.length > 0) ? propOtherPrices : fetchedOtherPrices;
+        // User request: Do NOT show sales manager approved / custom rates in Divar price section
+        return raw.filter(p => {
+            const src = (p.source_name || '').toLowerCase();
+            return !(
+                src === 'custom' || 
+                src.includes('custom') || 
+                src.includes('hm') || 
+                src.includes('hoseini') || 
+                src.includes('مصوب') || 
+                src.includes('مدیر فروش') || 
+                src.includes('نمایندگی')
+            );
+        });
     }, [propOtherPrices, fetchedOtherPrices]);
+
+    const [showPriceClusters, setShowPriceClusters] = useState<boolean>(true);
+    const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const timerIntervalRef = useRef<any>(null);
@@ -1192,7 +1371,11 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                             {/* Toggle Other Sources in Scatter */}
                             <button
                                 type="button"
-                                onClick={() => setShowOtherSourcesOnChart(!showOtherSourcesOnChart)}
+                                onClick={() => {
+                                    const next = !showOtherSourcesOnChart;
+                                    setShowOtherSourcesOnChart(next);
+                                    setShowOtherSourceLines(next);
+                                }}
                                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
                                     showOtherSourcesOnChart
                                         ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
