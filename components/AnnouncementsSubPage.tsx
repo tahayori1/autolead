@@ -145,9 +145,9 @@ export const AnnouncementsSubPage: React.FC<AnnouncementsSubPageProps> = ({ logg
         return Array.from(set);
     }, [announcements]);
 
-    // Filtered list
+    // Filtered list (sorted from newest to oldest)
     const filteredAnnouncements = useMemo(() => {
-        return announcements.filter((ann) => {
+        const filtered = announcements.filter((ann) => {
             // Search query
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase();
@@ -189,6 +189,16 @@ export const AnnouncementsSubPage: React.FC<AnnouncementsSubPageProps> = ({ logg
             }
 
             return true;
+        });
+
+        // Sort from newest to oldest (by createdAt timestamp descending, then by numeric id descending)
+        return filtered.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt.includes('T') ? a.createdAt : a.createdAt.replace(' ', 'T')).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt.includes('T') ? b.createdAt : b.createdAt.replace(' ', 'T')).getTime() : 0;
+            if (!isNaN(timeA) && !isNaN(timeB) && timeA > 0 && timeB > 0 && timeA !== timeB) {
+                return timeB - timeA;
+            }
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
     }, [announcements, searchQuery, selectedCategory, selectedAudience, selectedTag, onlyUrgent, onlyEmails]);
 

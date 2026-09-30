@@ -1242,6 +1242,16 @@ export const getAnnouncements = async (): Promise<Announcement[]> => {
         delete mapped.updated_at;
         return mapped as Announcement;
     });
+
+    // Sort from newest to oldest (by createdAt timestamp descending, then by numeric id descending)
+    return mappedItems.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt.includes('T') ? a.createdAt : a.createdAt.replace(' ', 'T')).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt.includes('T') ? b.createdAt : b.createdAt.replace(' ', 'T')).getTime() : 0;
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA > 0 && timeB > 0 && timeA !== timeB) {
+            return timeB - timeA;
+        }
+        return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
 };
 
 export const createAnnouncement = async (announcement: Partial<Announcement>): Promise<Announcement> => {

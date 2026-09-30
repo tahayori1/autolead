@@ -334,6 +334,7 @@ const App: React.FC = () => {
             items: [
                 { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
                 { view: 'bank-letter' as ActiveView, label: 'قرارداد صلح و نامه بانک', icon: <Landmark className="w-5 h-5 text-amber-500" /> },
+                { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5 text-indigo-400" /> },
                 { view: 'conditions' as ActiveView, label: 'بخشنامه‌ها فروش', icon: <ConditionsIcon className="w-5 h-5" /> },
                 { view: 'inventory' as ActiveView, label: 'لیست موجودی', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
                 { view: 'car-prices' as ActiveView, label: 'قیمت روز خودروها', icon: <PriceIcon className="w-5 h-5" /> },
@@ -389,7 +390,6 @@ const App: React.FC = () => {
             isCollapsible: true,
             icon: <CalendarIcon className="w-5 h-5" />,
             items: [
-                { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
                 { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
                 { view: 'meeting-minutes' as ActiveView, label: 'صورت‌جلسات اداری', icon: <CalendarIcon className="w-5 h-5" /> },
                 { view: 'attendance' as ActiveView, label: 'حضور و غیاب، مرخصی و اضافه کار', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
