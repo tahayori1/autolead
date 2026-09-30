@@ -124,7 +124,7 @@ const CarOrderList: React.FC<CarOrderListProps> = ({
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-1.5 bg-yellow-50 dark:bg-yellow-950/40 px-2.5 py-1 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                                            <span className="text-yellow-800 dark:text-yellow-300 font-bold">پورسانت کل (۱۰٪):</span>
+                                            <span className="text-yellow-800 dark:text-yellow-300 font-bold">پورسانت کل ({order.commissionRatePercent || 10}٪):</span>
                                             <span className="font-mono font-black text-yellow-900 dark:text-yellow-200">
                                                 {(order.totalCommissionBonus || 0).toLocaleString('fa-IR')} ت
                                             </span>

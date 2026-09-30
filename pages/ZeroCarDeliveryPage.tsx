@@ -14,6 +14,7 @@ import { CheckCircleIcon } from '../components/icons/CheckCircleIcon';
 import { CalendarIcon } from '../components/icons/CalendarIcon';
 import { PollIcon } from '../components/icons/PollIcon';
 import { RefreshIcon } from '../components/icons/RefreshIcon';
+import { Building2, Warehouse, Store, Car, DollarSign, Clock, ArrowUpDown, Copy, Layers, ShieldCheck, Check, Sparkles, AlertCircle, Search } from 'lucide-react';
 import Toast from '../components/Toast';
 import Spinner from '../components/Spinner';
 import PersianDatePicker from '../components/PersianDatePicker';
@@ -22,6 +23,20 @@ import Pagination from '../components/Pagination';
 
 // Declare moment from global scope
 declare const moment: any;
+
+export const STORAGE_LOCATIONS = [
+    'نمایشگاه',
+    'انبار مرکزی',
+];
+
+export const SALE_STATUS_OPTIONS = [
+    'فروخته شده (نقدی)',
+    'فروخته شده (اقساطی)',
+    'امانی',
+    'موجود و آماده فروش',
+    'پیش‌خرید / حواله',
+    'رزرو شده',
+];
 
 const STATUS_CONFIG: Record<string, { label: string; bgClass: string; textClass: string; borderClass: string }> = {
     'تحويل به مشتري': { label: 'تحویل به مشتری', bgClass: 'bg-emerald-100 dark:bg-emerald-950/60', textClass: 'text-emerald-800 dark:text-emerald-300', borderClass: 'border-emerald-300 dark:border-emerald-800' },
@@ -33,12 +48,10 @@ const STATUS_CONFIG: Record<string, { label: string; bgClass: string; textClass:
     'آماده تحویل': { label: 'آماده تحویل', bgClass: 'bg-teal-100 dark:bg-teal-950/60', textClass: 'text-teal-800 dark:text-teal-300', borderClass: 'border-teal-300 dark:border-teal-800' },
     'در حال آماده‌سازی': { label: 'در حال آماده‌سازی', bgClass: 'bg-blue-100 dark:bg-blue-950/60', textClass: 'text-blue-800 dark:text-blue-300', borderClass: 'border-blue-300 dark:border-blue-800' },
     'PROCESSING': { label: 'در حال آماده‌سازی', bgClass: 'bg-blue-100 dark:bg-blue-950/60', textClass: 'text-blue-800 dark:text-blue-300', borderClass: 'border-blue-300 dark:border-blue-800' },
-    'در سالن': { label: 'در سالن', bgClass: 'bg-purple-100 dark:bg-purple-950/60', textClass: 'text-purple-800 dark:text-purple-300', borderClass: 'border-purple-300 dark:border-purple-800' },
-    'IN_SHOWROOM': { label: 'در سالن', bgClass: 'bg-purple-100 dark:bg-purple-950/60', textClass: 'text-purple-800 dark:text-purple-300', borderClass: 'border-purple-300 dark:border-purple-800' },
-    'در انبار ۱': { label: 'در انبار ۱', bgClass: 'bg-indigo-100 dark:bg-indigo-950/60', textClass: 'text-indigo-800 dark:text-indigo-300', borderClass: 'border-indigo-300 dark:border-indigo-800' },
-    'IN_WAREHOUSE_1': { label: 'در انبار ۱', bgClass: 'bg-indigo-100 dark:bg-indigo-950/60', textClass: 'text-indigo-800 dark:text-indigo-300', borderClass: 'border-indigo-300 dark:border-indigo-800' },
-    'در انبار ۲': { label: 'در انبار ۲', bgClass: 'bg-sky-100 dark:bg-sky-950/60', textClass: 'text-sky-800 dark:text-sky-300', borderClass: 'border-sky-300 dark:border-sky-800' },
-    'IN_WAREHOUSE_2': { label: 'در انبار ۲', bgClass: 'bg-sky-100 dark:bg-sky-950/60', textClass: 'text-sky-800 dark:text-sky-300', borderClass: 'border-sky-300 dark:border-sky-800' },
+    'در سالن': { label: 'در سالن (نمایشگاه)', bgClass: 'bg-purple-100 dark:bg-purple-950/60', textClass: 'text-purple-800 dark:text-purple-300', borderClass: 'border-purple-300 dark:border-purple-800' },
+    'IN_SHOWROOM': { label: 'در سالن (نمایشگاه)', bgClass: 'bg-purple-100 dark:bg-purple-950/60', textClass: 'text-purple-800 dark:text-purple-300', borderClass: 'border-purple-300 dark:border-purple-800' },
+    'در انبار مرکزی': { label: 'در انبار مرکزی', bgClass: 'bg-amber-100 dark:bg-amber-950/60', textClass: 'text-amber-800 dark:text-amber-300', borderClass: 'border-amber-300 dark:border-amber-800' },
+    'IN_CENTRAL_WAREHOUSE': { label: 'در انبار مرکزی', bgClass: 'bg-amber-100 dark:bg-amber-950/60', textClass: 'text-amber-800 dark:text-amber-300', borderClass: 'border-amber-300 dark:border-amber-800' },
 };
 
 const STANDARD_STATUS_OPTIONS = [
@@ -46,9 +59,8 @@ const STANDARD_STATUS_OPTIONS = [
     { value: 'تایید مدارک', label: 'تایید مدارک' },
     { value: 'در حال آماده‌سازی', label: 'در حال آماده‌سازی' },
     { value: 'آماده تحویل', label: 'آماده تحویل' },
-    { value: 'در سالن', label: 'در سالن' },
-    { value: 'در انبار ۱', label: 'در انبار ۱' },
-    { value: 'در انبار ۲', label: 'در انبار ۲' },
+    { value: 'در سالن', label: 'در نمایشگاه' },
+    { value: 'در انبار مرکزی', label: 'در انبار مرکزی' },
 ];
 
 const POPULAR_CAR_MODELS = [
@@ -57,8 +69,42 @@ const POPULAR_CAR_MODELS = [
     'SR3', 'KMC SR3', 'EAGLE', 'KMC EAGLE', 'SHADOW', 'KMC SHADOW', 'SR6', 'KMC SR6'
 ];
 
-type SortField = 'deliveryDateTime' | 'arrivalDateTime' | 'contactDateTime' | 'documentDate' | 'createdAt' | 'customerName' | 'carModel' | 'chassisNumber' | 'contractNumber' | 'id';
+type SortField = 'deliveryDateTime' | 'arrivalDateTime' | 'contactDateTime' | 'documentDate' | 'createdAt' | 'customerName' | 'carModel' | 'chassisNumber' | 'contractNumber' | 'carPrice' | 'storageLocation' | 'id';
 type SortOrder = 'desc' | 'asc';
+
+// Helper to resolve effective storage location (Strictly: نمایشگاه or انبار مرکزی or خارج شده از نمایندگی)
+export const resolveStorageLocation = (item: Partial<ZeroCarDelivery>): string => {
+    if (item.storageLocation && item.storageLocation.trim() !== '') {
+        const loc = item.storageLocation.trim();
+        if (loc.includes('نمایشگاه') || loc.includes('سالن')) return 'نمایشگاه';
+        if (loc.includes('خارج') || loc.includes('تحویل') || loc.includes('تحويل')) return 'خارج شده از نمایندگی';
+        return 'انبار مرکزی';
+    }
+    const status = (item.status || '').trim();
+    if (status === 'در سالن' || status === 'IN_SHOWROOM') return 'نمایشگاه';
+    if (status === 'تحويل به مشتري' || status === 'تحویل به مشتری' || status === 'تحویل شده' || status === 'DELIVERED' || Boolean(item.deliveryDateTime)) {
+        return 'خارج شده از نمایندگی';
+    }
+    return 'انبار مرکزی';
+};
+
+// Format Persian price with verbal helper
+export const formatPricePersian = (val?: number | string | null): string => {
+    if (val === undefined || val === null || val === '') return '-';
+    const num = typeof val === 'string' ? Number(String(val).replace(/[^\d.-]/g, '')) : Number(val);
+    if (isNaN(num) || num <= 0) return '-';
+    
+    const formatted = num.toLocaleString('fa-IR');
+    if (num >= 1_000_000_000) {
+        const b = (num / 1_000_000_000).toFixed(num % 1_000_000_000 === 0 ? 0 : 2);
+        return `${formatted} تومان (${b.replace('.', '/')} میلیارد)`;
+    }
+    if (num >= 1_000_000) {
+        const m = (num / 1_000_000).toFixed(num % 1_000_000 === 0 ? 0 : 1);
+        return `${formatted} تومان (${m} م)`;
+    }
+    return `${formatted} تومان`;
+};
 
 // Helper to format Persian date/time values nicely (handles "14050525", "1405/05/25 19:00", etc.)
 const formatPersianDateTime = (val?: string | null): string => {
@@ -91,6 +137,64 @@ const normalizeDateForSort = (val?: string | null): string => {
         return digits.padEnd(14, '0');
     }
     return str;
+};
+
+const getLocationBadge = (loc?: string | null) => {
+    const l = (loc || '').trim();
+    if (l.includes('نمایشگاه') || l.includes('سالن')) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800 shadow-2xs">
+                <Store className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                <span>نمایشگاه (سالن اصلی)</span>
+            </span>
+        );
+    }
+    if (l.includes('خارج') || l.includes('تحویل')) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                <span>خارج شده از نمایندگی</span>
+            </span>
+        );
+    }
+    return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 shadow-2xs">
+            <Warehouse className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>انبار مرکزی</span>
+        </span>
+    );
+};
+
+const getSaleStatusBadge = (status?: string | null, contract?: string | null) => {
+    if (!status && !contract) return <span className="text-slate-400 text-xs">-</span>;
+    const s = (status || '').trim();
+    let colorClass = 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+    if (s.includes('نقدی')) {
+        colorClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800';
+    } else if (s.includes('اقساطی')) {
+        colorClass = 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/70 dark:text-blue-300 dark:border-blue-800';
+    } else if (s.includes('امانی')) {
+        colorClass = 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/70 dark:text-purple-300 dark:border-purple-800';
+    } else if (s.includes('آزاد') || s.includes('موجود')) {
+        colorClass = 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800';
+    } else if (s.includes('رزرو')) {
+        colorClass = 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/70 dark:text-rose-300 dark:border-rose-800';
+    }
+
+    return (
+        <div className="flex flex-col gap-0.5 items-start">
+            {status ? (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black border ${colorClass}`}>
+                    {status}
+                </span>
+            ) : null}
+            {contract ? (
+                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                    قرارداد: {contract}
+                </span>
+            ) : null}
+        </div>
+    );
 };
 
 const getStatusBadge = (status?: string | null) => {
@@ -184,19 +288,22 @@ const ZeroCarDeliveryPage: React.FC = () => {
     // Filter States (List View)
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [storageLocationFilter, setStorageLocationFilter] = useState('all');
+    const [saleStatusFilter, setSaleStatusFilter] = useState('all');
     const [carModelFilter, setCarModelFilter] = useState('all');
-    const [dateFieldFilter, setDateFieldFilter] = useState<'deliveryDateTime' | 'arrivalDateTime' | 'contactDateTime' | 'documentDate'>('contactDateTime');
+    const [dateFieldFilter, setDateFieldFilter] = useState<'deliveryDateTime' | 'arrivalDateTime' | 'contactDateTime' | 'documentDate'>('arrivalDateTime');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [deliveryStatusQuickFilter, setDeliveryStatusQuickFilter] = useState<'ALL' | 'DELIVERED' | 'PENDING_DELIVERY' | 'HAS_DELIVERY_DATE' | 'NO_PLATE' | 'WITH_SURVEY' | 'WITHOUT_SURVEY'>('ALL');
+    const [deliveryStatusQuickFilter, setDeliveryStatusQuickFilter] = useState<'ALL' | 'IN_DEALERSHIP' | 'SHOWROOM' | 'CENTRAL_WAREHOUSE' | 'DELIVERED' | 'NO_PLATE' | 'WITH_SURVEY' | 'WITHOUT_SURVEY'>('ALL');
 
-    // Sorting State (Default sort by contactDateTime descending -> Latest customer contact date first)
-    const [sortField, setSortField] = useState<SortField>('contactDateTime');
+    // Sorting State (Default: arrivalDateTime descending -> Latest arrivals first, or contactDateTime)
+    const [sortField, setSortField] = useState<SortField>('arrivalDateTime');
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
     // Filter States (Report View)
     const [reportCarModel, setReportCarModel] = useState('all');
     const [reportStatus, setReportStatus] = useState('all');
+    const [reportStorageLocation, setReportStorageLocation] = useState('all');
     const [reportStartDate, setReportStartDate] = useState('');
     const [reportEndDate, setReportEndDate] = useState('');
 
@@ -222,7 +329,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
             const data = await zeroCarDeliveryService.getAll();
             setDeliveries(Array.isArray(data) ? data : []);
         } catch (error) {
-            setToast({ message: 'خطا در بارگذاری اطلاعات تحویل خودرو', type: 'error' });
+            setToast({ message: 'خطا در بارگذاری اطلاعات تردد و خروج خودروها', type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -243,7 +350,61 @@ const ZeroCarDeliveryPage: React.FC = () => {
     // Reset pagination when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, carModelFilter, dateFieldFilter, startDate, endDate, deliveryStatusQuickFilter, sortField, sortOrder, itemsPerPage]);
+    }, [searchQuery, statusFilter, storageLocationFilter, saleStatusFilter, carModelFilter, dateFieldFilter, startDate, endDate, deliveryStatusQuickFilter, sortField, sortOrder, itemsPerPage]);
+
+    // Live Instant Storage Measurement Metrics
+    const storageMetrics = useMemo(() => {
+        let showroomCount = 0;
+        let showroomPriceSum = 0;
+        let warehouse1Count = 0;
+        let warehouse1PriceSum = 0;
+        let warehouse2Count = 0;
+        let warehouse2PriceSum = 0;
+        let centralWarehouseCount = 0;
+        let centralWarehousePriceSum = 0;
+        let parkingCount = 0;
+        let parkingPriceSum = 0;
+        let totalPresentCount = 0;
+        let totalPresentPriceSum = 0;
+        let totalExitedCount = 0;
+        let totalExitedPriceSum = 0;
+
+        deliveries.forEach(item => {
+            const loc = resolveStorageLocation(item);
+            const price = typeof item.carPrice === 'string' ? Number(String(item.carPrice).replace(/[^\d.-]/g, '')) : (Number(item.carPrice) || 0);
+            const validPrice = !isNaN(price) && price > 0 ? price : 0;
+
+            const isDelivered = loc === 'خارج شده از نمایندگی' || Boolean(item.deliveryDateTime) || item.status === 'تحويل به مشتري' || item.status === 'تحویل به مشتری' || item.status === 'تحویل شده' || item.status === 'DELIVERED';
+
+            if (isDelivered && !loc.includes('نمایشگاه') && !loc.includes('انبار')) {
+                totalExitedCount++;
+                totalExitedPriceSum += validPrice;
+            } else {
+                totalPresentCount++;
+                totalPresentPriceSum += validPrice;
+
+                if (loc.includes('نمایشگاه') || loc.includes('سالن')) {
+                    showroomCount++;
+                    showroomPriceSum += validPrice;
+                } else {
+                    centralWarehouseCount++;
+                    centralWarehousePriceSum += validPrice;
+                }
+            }
+        });
+
+        return {
+            showroomCount,
+            showroomPriceSum,
+            centralWarehouseCount,
+            centralWarehousePriceSum,
+            totalPresentCount,
+            totalPresentPriceSum,
+            totalExitedCount,
+            totalExitedPriceSum,
+            totalAll: deliveries.length
+        };
+    }, [deliveries]);
 
     // Unique options derived from data
     const availableStatuses = useMemo(() => {
@@ -267,6 +428,8 @@ const ZeroCarDeliveryPage: React.FC = () => {
     // Filter & Sort Logic (List View)
     const filteredDeliveries = useMemo(() => {
         const filtered = deliveries.filter(item => {
+            const loc = resolveStorageLocation(item);
+
             // Text search
             const searchLower = searchQuery.toLowerCase().trim();
             if (searchLower) {
@@ -279,9 +442,9 @@ const ZeroCarDeliveryPage: React.FC = () => {
                 const contract = (item.contractNumber || '').toLowerCase();
                 const docNum = (item.documentNumber || '').toLowerCase();
                 const secondOwner = (item.secondOwnerName || '').toLowerCase();
-                const verNotes = (item.verificationNotes || '').toLowerCase();
-                const delNotes = (item.deliveryNotes || '').toLowerCase();
-                const options = (item.installedOptions || '').toLowerCase();
+                const storage = loc.toLowerCase();
+                const saleSt = (item.saleStatus || '').toLowerCase();
+                const price = String(item.carPrice || '').toLowerCase();
 
                 const matchesSearch =
                     customer.includes(searchLower) ||
@@ -293,11 +456,33 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     contract.includes(searchLower) ||
                     docNum.includes(searchLower) ||
                     secondOwner.includes(searchLower) ||
-                    verNotes.includes(searchLower) ||
-                    delNotes.includes(searchLower) ||
-                    options.includes(searchLower);
+                    storage.includes(searchLower) ||
+                    saleSt.includes(searchLower) ||
+                    price.includes(searchLower);
 
                 if (!matchesSearch) return false;
+            }
+
+            // Storage Location Filter
+            if (storageLocationFilter !== 'all') {
+                if (storageLocationFilter === 'PRESENT_ALL') {
+                    const isExited = loc === 'خارج شده از نمایندگی' || Boolean(item.deliveryDateTime);
+                    if (isExited) return false;
+                } else if (storageLocationFilter === 'EXITED') {
+                    const isExited = loc === 'خارج شده از نمایندگی' || Boolean(item.deliveryDateTime);
+                    if (!isExited) return false;
+                } else if (storageLocationFilter === 'SHOWROOM' || storageLocationFilter === 'نمایشگاه') {
+                    if (!loc.includes('نمایشگاه') && !loc.includes('سالن')) return false;
+                } else if (storageLocationFilter === 'CENTRAL_WAREHOUSE' || storageLocationFilter === 'انبار مرکزی') {
+                    if (loc !== 'انبار مرکزی') return false;
+                } else if (loc !== storageLocationFilter) {
+                    return false;
+                }
+            }
+
+            // Sale Status Filter
+            if (saleStatusFilter !== 'all') {
+                if (item.saleStatus !== saleStatusFilter) return false;
             }
 
             // Status filter
@@ -311,14 +496,16 @@ const ZeroCarDeliveryPage: React.FC = () => {
             }
 
             // Quick Status Pills
-            if (deliveryStatusQuickFilter === 'DELIVERED') {
-                const isDelivered = item.status === 'تحويل به مشتري' || item.status === 'تحویل به مشتری' || item.status === 'تحویل شده' || item.status === 'DELIVERED' || Boolean(item.deliveryDateTime);
+            if (deliveryStatusQuickFilter === 'IN_DEALERSHIP') {
+                const isExited = loc === 'خارج شده از نمایندگی' || Boolean(item.deliveryDateTime);
+                if (isExited) return false;
+            } else if (deliveryStatusQuickFilter === 'SHOWROOM') {
+                if (!loc.includes('نمایشگاه') && !loc.includes('سالن')) return false;
+            } else if (deliveryStatusQuickFilter === 'CENTRAL_WAREHOUSE') {
+                if (loc !== 'انبار مرکزی') return false;
+            } else if (deliveryStatusQuickFilter === 'DELIVERED') {
+                const isDelivered = item.status === 'تحويل به مشتري' || item.status === 'تحویل به مشتری' || item.status === 'تحویل شده' || item.status === 'DELIVERED' || Boolean(item.deliveryDateTime) || loc === 'خارج شده از نمایندگی';
                 if (!isDelivered) return false;
-            } else if (deliveryStatusQuickFilter === 'PENDING_DELIVERY') {
-                const isDelivered = item.status === 'تحويل به مشتري' || item.status === 'تحویل به مشتری' || item.status === 'تحویل شده' || item.status === 'DELIVERED';
-                if (isDelivered) return false;
-            } else if (deliveryStatusQuickFilter === 'HAS_DELIVERY_DATE') {
-                if (!item.deliveryDateTime) return false;
             } else if (deliveryStatusQuickFilter === 'NO_PLATE') {
                 if (item.plateNumber && item.plateNumber.trim() !== '') return false;
             } else if (deliveryStatusQuickFilter === 'WITH_SURVEY') {
@@ -328,7 +515,6 @@ const ZeroCarDeliveryPage: React.FC = () => {
             } else if (deliveryStatusQuickFilter === 'WITHOUT_SURVEY') {
                 const p = normalizePhoneNumber(item.phoneNumber);
                 const info = p ? surveyCache[p] : null;
-                // If checked and has survey, exclude
                 if (info && info.checked && info.hasSurvey) return false;
             }
 
@@ -347,7 +533,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
             return true;
         });
 
-        // Sorting Logic (Default: deliveryDateTime descending -> Latest Deliveries First)
+        // Sorting Logic (Default: arrivalDateTime or contactDateTime descending -> Latest First)
         return filtered.sort((a, b) => {
             let valA: any = a[sortField];
             let valB: any = b[sortField];
@@ -370,6 +556,21 @@ const ZeroCarDeliveryPage: React.FC = () => {
                 }
                 // Secondary fallback sort by ID descending
                 return (Number(b.id) || 0) - (Number(a.id) || 0);
+            }
+
+            // Numeric price sort
+            if (sortField === 'carPrice') {
+                const numA = typeof a.carPrice === 'string' ? Number(String(a.carPrice).replace(/[^\d.-]/g, '')) : (Number(a.carPrice) || 0);
+                const numB = typeof b.carPrice === 'string' ? Number(String(b.carPrice).replace(/[^\d.-]/g, '')) : (Number(b.carPrice) || 0);
+                return sortOrder === 'desc' ? numB - numA : numA - numB;
+            }
+
+            // Storage Location sort
+            if (sortField === 'storageLocation') {
+                const locA = resolveStorageLocation(a);
+                const locB = resolveStorageLocation(b);
+                const comp = locA.localeCompare(locB, 'fa-IR');
+                return sortOrder === 'desc' ? -comp : comp;
             }
 
             // Numeric ID sort
@@ -395,7 +596,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
             }
             return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
-    }, [deliveries, searchQuery, statusFilter, carModelFilter, dateFieldFilter, startDate, endDate, deliveryStatusQuickFilter, sortField, sortOrder, surveyCache]);
+    }, [deliveries, searchQuery, statusFilter, storageLocationFilter, saleStatusFilter, carModelFilter, dateFieldFilter, startDate, endDate, deliveryStatusQuickFilter, sortField, sortOrder, surveyCache]);
 
     // Survey stats for quick filter badges
     const surveyStats = useMemo(() => {
@@ -770,7 +971,10 @@ const ZeroCarDeliveryPage: React.FC = () => {
             documentNumber: '',
             documentDate: '',
             secondOwnerName: '',
-            arrivalDateTime: '',
+            storageLocation: 'نمایشگاه (سالن اصلی)',
+            carPrice: '',
+            saleStatus: 'فروخته شده (نقدی)',
+            arrivalDateTime: moment().locale('fa').format('jYYYY/jMM/jDD HH:mm'),
             contactDateTime: '',
             deliveryDateTime: '',
             installedOptions: '',
@@ -789,12 +993,14 @@ const ZeroCarDeliveryPage: React.FC = () => {
     const handleResetFilters = () => {
         setSearchQuery('');
         setStatusFilter('all');
+        setStorageLocationFilter('all');
+        setSaleStatusFilter('all');
         setCarModelFilter('all');
-        setDateFieldFilter('contactDateTime');
+        setDateFieldFilter('arrivalDateTime');
         setStartDate('');
         setEndDate('');
         setDeliveryStatusQuickFilter('ALL');
-        setSortField('contactDateTime');
+        setSortField('arrivalDateTime');
         setSortOrder('desc');
         setCurrentPage(1);
     };
@@ -809,16 +1015,16 @@ const ZeroCarDeliveryPage: React.FC = () => {
                             <ChartBarIcon className="w-6 h-6" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-black text-slate-800 dark:text-white">گزارش‌گیری تحویل خودرو صفر</h2>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">تحلیل آماری و رهگیری زمان‌بندی فرآیند تحویل</p>
+                            <h2 className="text-xl font-black text-slate-800 dark:text-white">گزارش‌گیری ورود، خروج و محل نگهداری خودروها</h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">تحلیل آماری تردد، موجودی انبارها و نمایشگاه، ارزش ریالی و زمان‌بندی تحویل</p>
                         </div>
                     </div>
                     <button 
                         onClick={() => setViewMode('LIST')}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-colors font-bold text-sm shadow-xs"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-colors font-bold text-sm shadow-xs cursor-pointer"
                     >
                         <CloseIcon className="w-4 h-4" />
-                        بازگشت به لیست پرونده‌ها
+                        بازگشت به لیست تردد و خودروها
                     </button>
                 </div>
 
@@ -932,12 +1138,12 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">تحویل خودرو صفر</h2>
+                            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white">ورود و خروج خودروها</h2>
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800">
                                 {filteredDeliveries.length.toLocaleString('fa-IR')} رکورد
                             </span>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">مدیریت پرونده‌های مدارک، انبارداری، تماس و زمان‌بندی تحویل به مشتری</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">مدیریت ورود، خروج، محل نگهداری (نمایشگاه و انبارها)، زمان‌بندی و وضعیت فروش خودروها</p>
                     </div>
                 </div>
 
@@ -945,7 +1151,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     <button 
                         onClick={scanAllSurveys}
                         disabled={isScanningAllSurveys}
-                        className="flex-1 sm:flex-initial bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 px-3.5 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs shadow-2xs transition-all active:scale-95 disabled:opacity-50"
+                        className="flex-1 sm:flex-initial bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 px-3.5 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs shadow-2xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                         title="بررسی سوابق نظرسنجی تمام پرونده‌ها از CustomerJournals"
                     >
                         <RefreshIcon className={`w-4 h-4 text-cyan-600 ${isScanningAllSurveys ? 'animate-spin' : ''}`} />
@@ -953,43 +1159,165 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     </button>
                     <button 
                         onClick={() => setViewMode('REPORT')} 
-                        className="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs shadow-2xs transition-all active:scale-95"
+                        className="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
                     >
                         <ChartBarIcon className="w-4 h-4 text-indigo-500" />
                         <span>گزارش آماری</span>
                     </button>
                     <button 
                         onClick={() => setIsExcelModalOpen(true)} 
-                        className="flex-1 sm:flex-initial bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs shadow-2xs transition-all active:scale-95"
+                        className="flex-1 sm:flex-initial bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
                     >
                         <UploadIcon className="w-4 h-4 text-emerald-600" />
                         <span>ورود اکسل</span>
                     </button>
                     <button 
                         onClick={() => openEditModal()} 
-                        className="flex-1 sm:flex-initial bg-cyan-600 hover:bg-cyan-700 text-white px-5 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-black text-xs shadow-sm transition-all active:scale-95"
+                        className="flex-1 sm:flex-initial bg-cyan-600 hover:bg-cyan-700 text-white px-5 py-2.5 rounded-2xl flex items-center justify-center gap-2 font-black text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
                     >
                         <PlusIcon className="w-4 h-4" />
-                        <span>ثبت پرونده جدید</span>
+                        <span>ثبت خودرو جدید</span>
                     </button>
+                </div>
+            </div>
+
+            {/* Instant Storage & Inventory Measurement Counter (پایش و اندازه‌گیری فوری محل نگهداری خودروها: نمایشگاه و انبار مرکزی) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+                {/* Showroom */}
+                <div 
+                    onClick={() => {
+                        setStorageLocationFilter(storageLocationFilter === 'نمایشگاه' ? 'all' : 'نمایشگاه');
+                        setDeliveryStatusQuickFilter('ALL');
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs relative overflow-hidden ${
+                        storageLocationFilter === 'نمایشگاه' || storageLocationFilter === 'SHOWROOM'
+                            ? 'bg-purple-600 text-white border-purple-700 ring-2 ring-purple-400' 
+                            : 'bg-purple-50/70 hover:bg-purple-100/80 dark:bg-purple-950/30 dark:hover:bg-purple-900/40 border-purple-200/80 dark:border-purple-800/60'
+                    }`}
+                >
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-[11px] font-bold ${storageLocationFilter === 'نمایشگاه' || storageLocationFilter === 'SHOWROOM' ? 'text-purple-100' : 'text-purple-700 dark:text-purple-300'}`}>🏢 نمایشگاه</span>
+                        <Store className={`w-4 h-4 ${storageLocationFilter === 'نمایشگاه' || storageLocationFilter === 'SHOWROOM' ? 'text-purple-200' : 'text-purple-600 dark:text-purple-400'}`} />
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-black font-mono ${storageLocationFilter === 'نمایشگاه' || storageLocationFilter === 'SHOWROOM' ? 'text-white' : 'text-purple-950 dark:text-purple-100'}`}>
+                            {storageMetrics.showroomCount.toLocaleString('fa-IR')}
+                        </span>
+                        <span className={`text-[10px] ${storageLocationFilter === 'نمایشگاه' || storageLocationFilter === 'SHOWROOM' ? 'text-purple-200' : 'text-purple-600 dark:text-purple-400'}`}>خودرو</span>
+                    </div>
+                    {storageMetrics.showroomPriceSum > 0 && (
+                        <span className={`text-[10px] font-bold block truncate mt-1 ${storageLocationFilter === 'نمایشگاه' || storageLocationFilter === 'SHOWROOM' ? 'text-purple-100' : 'text-purple-800 dark:text-purple-300'}`}>
+                            {formatPricePersian(storageMetrics.showroomPriceSum)}
+                        </span>
+                    )}
+                </div>
+
+                {/* Central Warehouse */}
+                <div 
+                    onClick={() => {
+                        setStorageLocationFilter(storageLocationFilter === 'انبار مرکزی' ? 'all' : 'انبار مرکزی');
+                        setDeliveryStatusQuickFilter('ALL');
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs relative overflow-hidden ${
+                        storageLocationFilter === 'انبار مرکزی' || storageLocationFilter === 'CENTRAL_WAREHOUSE'
+                            ? 'bg-amber-600 text-white border-amber-700 ring-2 ring-amber-400' 
+                            : 'bg-amber-50/70 hover:bg-amber-100/80 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 border-amber-200/80 dark:border-amber-800/60'
+                    }`}
+                >
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-[11px] font-bold ${storageLocationFilter === 'انبار مرکزی' || storageLocationFilter === 'CENTRAL_WAREHOUSE' ? 'text-amber-100' : 'text-amber-700 dark:text-amber-300'}`}>🏭 انبار مرکزی</span>
+                        <Building2 className={`w-4 h-4 ${storageLocationFilter === 'انبار مرکزی' || storageLocationFilter === 'CENTRAL_WAREHOUSE' ? 'text-amber-200' : 'text-amber-600 dark:text-amber-400'}`} />
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-black font-mono ${storageLocationFilter === 'انبار مرکزی' || storageLocationFilter === 'CENTRAL_WAREHOUSE' ? 'text-white' : 'text-amber-950 dark:text-amber-100'}`}>
+                            {storageMetrics.centralWarehouseCount.toLocaleString('fa-IR')}
+                        </span>
+                        <span className={`text-[10px] ${storageLocationFilter === 'انبار مرکزی' || storageLocationFilter === 'CENTRAL_WAREHOUSE' ? 'text-amber-200' : 'text-amber-600 dark:text-amber-400'}`}>خودرو</span>
+                    </div>
+                    {storageMetrics.centralWarehousePriceSum > 0 && (
+                        <span className={`text-[10px] font-bold block truncate mt-1 ${storageLocationFilter === 'انبار مرکزی' || storageLocationFilter === 'CENTRAL_WAREHOUSE' ? 'text-amber-100' : 'text-amber-800 dark:text-amber-300'}`}>
+                            {formatPricePersian(storageMetrics.centralWarehousePriceSum)}
+                        </span>
+                    )}
+                </div>
+
+                {/* Total Present in Dealership */}
+                <div 
+                    onClick={() => {
+                        setStorageLocationFilter(storageLocationFilter === 'PRESENT_ALL' ? 'all' : 'PRESENT_ALL');
+                        setDeliveryStatusQuickFilter('ALL');
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs relative overflow-hidden ${
+                        storageLocationFilter === 'PRESENT_ALL' 
+                            ? 'bg-teal-600 text-white border-teal-700 ring-2 ring-teal-400' 
+                            : 'bg-teal-50/70 hover:bg-teal-100/80 dark:bg-teal-950/30 dark:hover:bg-teal-900/40 border-teal-200/80 dark:border-teal-800/60'
+                    }`}
+                >
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-[11px] font-black ${storageLocationFilter === 'PRESENT_ALL' ? 'text-teal-100' : 'text-teal-800 dark:text-teal-300'}`}>🚗 کل موجودی حاضر</span>
+                        <Car className={`w-4 h-4 ${storageLocationFilter === 'PRESENT_ALL' ? 'text-teal-200' : 'text-teal-600 dark:text-teal-400'}`} />
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-black font-mono ${storageLocationFilter === 'PRESENT_ALL' ? 'text-white' : 'text-teal-950 dark:text-teal-100'}`}>
+                            {storageMetrics.totalPresentCount.toLocaleString('fa-IR')}
+                        </span>
+                        <span className={`text-[10px] ${storageLocationFilter === 'PRESENT_ALL' ? 'text-teal-200' : 'text-teal-700 dark:text-teal-400'}`}>خودرو</span>
+                    </div>
+                    {storageMetrics.totalPresentPriceSum > 0 && (
+                        <span className={`text-[10px] font-bold block truncate mt-1 ${storageLocationFilter === 'PRESENT_ALL' ? 'text-teal-100' : 'text-teal-900 dark:text-teal-200'}`}>
+                            {formatPricePersian(storageMetrics.totalPresentPriceSum)}
+                        </span>
+                    )}
+                </div>
+
+                {/* Total Exited */}
+                <div 
+                    onClick={() => {
+                        setStorageLocationFilter(storageLocationFilter === 'EXITED' ? 'all' : 'EXITED');
+                        setDeliveryStatusQuickFilter('ALL');
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-xs relative overflow-hidden ${
+                        storageLocationFilter === 'EXITED' 
+                            ? 'bg-slate-800 text-white border-slate-900 ring-2 ring-slate-400' 
+                            : 'bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
+                    }`}
+                >
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-[11px] font-bold ${storageLocationFilter === 'EXITED' ? 'text-slate-200' : 'text-slate-700 dark:text-slate-300'}`}>🏁 خارج شده / تحویل</span>
+                        <Check className={`w-4 h-4 ${storageLocationFilter === 'EXITED' ? 'text-emerald-400' : 'text-emerald-500'}`} />
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-black font-mono ${storageLocationFilter === 'EXITED' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                            {storageMetrics.totalExitedCount.toLocaleString('fa-IR')}
+                        </span>
+                        <span className={`text-[10px] ${storageLocationFilter === 'EXITED' ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>خودرو</span>
+                    </div>
+                    {storageMetrics.totalExitedPriceSum > 0 && (
+                        <span className={`text-[10px] font-bold block truncate mt-1 ${storageLocationFilter === 'EXITED' ? 'text-slate-200' : 'text-slate-600 dark:text-slate-400'}`}>
+                            {formatPricePersian(storageMetrics.totalExitedPriceSum)}
+                        </span>
+                    )}
                 </div>
             </div>
 
             {/* Quick Status Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-thin">
                 <button
-                    onClick={() => setDeliveryStatusQuickFilter('ALL')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                        deliveryStatusQuickFilter === 'ALL'
+                    onClick={() => {
+                        setDeliveryStatusQuickFilter('ALL');
+                        setStorageLocationFilter('all');
+                    }}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        deliveryStatusQuickFilter === 'ALL' && storageLocationFilter === 'all'
                             ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-xs'
                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                     }`}
                 >
-                    همه پرونده‌ها ({deliveries.length.toLocaleString('fa-IR')})
+                    همه خودروها ({deliveries.length.toLocaleString('fa-IR')})
                 </button>
                 <button
                     onClick={() => setDeliveryStatusQuickFilter('WITH_SURVEY')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                         deliveryStatusQuickFilter === 'WITH_SURVEY'
                             ? 'bg-emerald-600 text-white shadow-xs'
                             : 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-50/50'
@@ -1005,7 +1333,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                 </button>
                 <button
                     onClick={() => setDeliveryStatusQuickFilter('WITHOUT_SURVEY')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                         deliveryStatusQuickFilter === 'WITHOUT_SURVEY'
                             ? 'bg-rose-600 text-white shadow-xs'
                             : 'bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-50/50'
@@ -1021,7 +1349,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                 </button>
                 <button
                     onClick={() => setDeliveryStatusQuickFilter('DELIVERED')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                         deliveryStatusQuickFilter === 'DELIVERED'
                             ? 'bg-emerald-600 text-white shadow-xs'
                             : 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-50/50'
@@ -1030,28 +1358,8 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     تحویل شده به مشتری
                 </button>
                 <button
-                    onClick={() => setDeliveryStatusQuickFilter('PENDING_DELIVERY')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                        deliveryStatusQuickFilter === 'PENDING_DELIVERY'
-                            ? 'bg-amber-600 text-white shadow-xs'
-                            : 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-50/50'
-                    }`}
-                >
-                    در انتظار تحویل
-                </button>
-                <button
-                    onClick={() => setDeliveryStatusQuickFilter('HAS_DELIVERY_DATE')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                        deliveryStatusQuickFilter === 'HAS_DELIVERY_DATE'
-                            ? 'bg-teal-600 text-white shadow-xs'
-                            : 'bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800/60 hover:bg-teal-50/50'
-                    }`}
-                >
-                    دارای تاریخ تحویل (برنامه‌ریزی شده)
-                </button>
-                <button
                     onClick={() => setDeliveryStatusQuickFilter('NO_PLATE')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                         deliveryStatusQuickFilter === 'NO_PLATE'
                             ? 'bg-rose-600 text-white shadow-xs'
                             : 'bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-50/50'
@@ -1065,25 +1373,23 @@ const ZeroCarDeliveryPage: React.FC = () => {
             <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-700/80 mb-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-end">
                     {/* Search Field */}
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-3">
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">جستجوی جامع</label>
                         <div className="relative">
                             <input 
                                 type="text" 
-                                placeholder="نام مشتری، تلفن، شاسی، پلاک، قرارداد، سند..." 
-                                className="w-full pl-4 pr-10 py-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none transition-all placeholder:text-slate-400"
+                                placeholder="شاسی، صاحب خودرو، تلفن، مدل، پلاک..." 
+                                className="w-full pl-4 pr-10 py-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none transition-all placeholder:text-slate-400 font-bold"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                             <div className="absolute right-3.5 top-2.5 text-slate-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
+                                <Search className="w-4 h-4" />
                             </div>
                             {searchQuery && (
                                 <button 
                                     onClick={() => setSearchQuery('')}
-                                    className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-600"
+                                    className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                                 >
                                     <CloseIcon className="w-3.5 h-3.5" />
                                 </button>
@@ -1091,17 +1397,36 @@ const ZeroCarDeliveryPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Status Filter */}
+                    {/* Storage Location Filter */}
                     <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">وضعیت</label>
+                        <label className="block text-xs font-bold text-purple-700 dark:text-purple-300 mb-1.5 flex items-center gap-1">
+                            <Warehouse className="w-3.5 h-3.5" />
+                            <span>محل نگهداری</span>
+                        </label>
+                        <select 
+                            className="w-full px-3 py-2.5 text-xs bg-purple-50/50 dark:bg-slate-900 border border-purple-200 dark:border-purple-800 rounded-2xl dark:text-white focus:ring-2 focus:ring-purple-500 outline-none font-black"
+                            value={storageLocationFilter}
+                            onChange={(e) => setStorageLocationFilter(e.target.value)}
+                        >
+                            <option value="all">همه اماکن ({deliveries.length})</option>
+                            <option value="PRESENT_ALL">🚗 موجودی حاضر در نمایندگی ({storageMetrics.totalPresentCount})</option>
+                            <option value="نمایشگاه">🏢 نمایشگاه ({storageMetrics.showroomCount})</option>
+                            <option value="انبار مرکزی">🏭 انبار مرکزی ({storageMetrics.centralWarehouseCount})</option>
+                            <option value="EXITED">🏁 خارج شده از نمایندگی ({storageMetrics.totalExitedCount})</option>
+                        </select>
+                    </div>
+
+                    {/* Sale Status Filter */}
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">وضعیت فروش</label>
                         <select 
                             className="w-full px-3 py-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none font-bold"
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            value={saleStatusFilter}
+                            onChange={(e) => setSaleStatusFilter(e.target.value)}
                         >
-                            <option value="all">همه وضعیت‌ها</option>
-                            {availableStatuses.map(st => (
-                                <option key={st} value={st}>{STATUS_CONFIG[st]?.label || st}</option>
+                            <option value="all">همه وضعیت‌های فروش</option>
+                            {SALE_STATUS_OPTIONS.map(st => (
+                                <option key={st} value={st}>{st}</option>
                             ))}
                         </select>
                     </div>
@@ -1121,13 +1446,13 @@ const ZeroCarDeliveryPage: React.FC = () => {
                         </select>
                     </div>
 
-                    {/* Sorting Field & Direction (Default: contactDateTime desc) */}
-                    <div className="md:col-span-4 flex items-center gap-2">
+                    {/* Sorting Field & Direction */}
+                    <div className="md:col-span-3 flex items-center gap-2">
                         <div className="flex-1">
                             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center justify-between">
-                                <span>مرتب‌سازی بر اساس</span>
-                                {sortField === 'contactDateTime' && (
-                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-black">پیش‌فرض: آخرین تماس با مشتری</span>
+                                <span>مرتب‌سازی</span>
+                                {sortField === 'arrivalDateTime' && (
+                                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-black">پیش‌فرض: تاریخ ورود</span>
                                 )}
                             </label>
                             <select 
@@ -1135,23 +1460,23 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 value={sortField}
                                 onChange={(e) => setSortField(e.target.value as SortField)}
                             >
-                                <option value="contactDateTime">تاریخ تماس با مشتری - از جدیدترین (contactDateTime)</option>
-                                <option value="deliveryDateTime">تاریخ و ساعت تحویل (deliveryDateTime)</option>
-                                <option value="arrivalDateTime">تاریخ ورود خودرو (arrivalDateTime)</option>
-                                <option value="documentDate">تاریخ سند (documentDate)</option>
-                                <option value="id">شناسه پرونده (ID)</option>
-                                <option value="createdAt">تاریخ ثبت سیستم (createdAt)</option>
-                                <option value="customerName">نام مشتری (الفبایی)</option>
-                                <option value="carModel">مدل خودرو</option>
+                                <option value="arrivalDateTime">تاریخ ورود به نمایندگی (arrivalDateTime)</option>
+                                <option value="deliveryDateTime">تاریخ خروج از نمایندگی (deliveryDateTime)</option>
+                                <option value="carPrice">مبلغ خودرو (بیشترین/کمترین)</option>
+                                <option value="storageLocation">محل نگهداری</option>
+                                <option value="contactDateTime">تاریخ تماس با مشتری</option>
+                                <option value="documentDate">تاریخ سند</option>
+                                <option value="customerName">نام صاحب خودرو</option>
                                 <option value="chassisNumber">شماره شاسی</option>
-                                <option value="contractNumber">شماره قرارداد</option>
+                                <option value="carModel">مدل خودرو</option>
+                                <option value="id">شناسه پرونده (ID)</option>
                             </select>
                         </div>
                         <button
                             type="button"
                             onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
                             title={sortOrder === 'desc' ? 'ترتیب نزولی (جدیدترین به قدیمی‌ترین)' : 'ترتیب صعودی (قدیمی‌ترین به جدیدترین)'}
-                            className="mt-6 p-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-2xl border border-slate-200 dark:border-slate-600 flex items-center gap-1.5 text-xs font-bold transition-colors"
+                            className="mt-6 p-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-2xl border border-slate-200 dark:border-slate-600 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
                         >
                             <span>{sortOrder === 'desc' ? 'نزولی ↓' : 'صعودی ↑'}</span>
                         </button>
@@ -1161,14 +1486,14 @@ const ZeroCarDeliveryPage: React.FC = () => {
                 {/* Date Range Sub-Bar */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center text-xs">
                     <div className="sm:col-span-3 flex items-center gap-2">
-                        <span className="text-slate-400 font-bold whitespace-nowrap">فیلتر بازه زمانی:</span>
+                        <span className="text-slate-400 font-bold whitespace-nowrap">فیلتر بازه تاریخی:</span>
                         <select
                             value={dateFieldFilter}
                             onChange={(e) => setDateFieldFilter(e.target.value as any)}
                             className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white"
                         >
-                            <option value="deliveryDateTime">تاریخ تحویل</option>
-                            <option value="arrivalDateTime">تاریخ ورود</option>
+                            <option value="arrivalDateTime">تاریخ ورود به نمایندگی</option>
+                            <option value="deliveryDateTime">تاریخ خروج از نمایندگی</option>
                             <option value="contactDateTime">تاریخ تماس</option>
                             <option value="documentDate">تاریخ سند</option>
                         </select>
@@ -1182,10 +1507,10 @@ const ZeroCarDeliveryPage: React.FC = () => {
                     </div>
                     
                     <div className="sm:col-span-1 flex justify-end">
-                        {(searchQuery || statusFilter !== 'all' || carModelFilter !== 'all' || startDate || endDate || deliveryStatusQuickFilter !== 'ALL' || sortField !== 'contactDateTime' || sortOrder !== 'desc') && (
+                        {(searchQuery || statusFilter !== 'all' || storageLocationFilter !== 'all' || saleStatusFilter !== 'all' || carModelFilter !== 'all' || startDate || endDate || deliveryStatusQuickFilter !== 'ALL' || sortField !== 'arrivalDateTime' || sortOrder !== 'desc') && (
                             <button
                                 onClick={handleResetFilters}
-                                className="px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors whitespace-nowrap"
+                                className="px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
                             >
                                 بازنشانی
                             </button>
@@ -1198,77 +1523,126 @@ const ZeroCarDeliveryPage: React.FC = () => {
             {loading ? (
                 <div className="flex flex-col items-center justify-center p-16 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
                     <Spinner />
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-3">در حال فراخوانی اطلاعات خودروهای صفر...</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-3">در حال فراخوانی اطلاعات ورود و خروج خودروها...</span>
                 </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-right text-xs">
-                            <thead className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black">
+                            <thead className="bg-slate-50/90 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-black">
                                 <tr>
-                                    <th className="p-4 w-12 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('id')}>
+                                    <th className="p-3.5 w-12 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('id')}>
                                         <span>ردیف</span>
                                         {sortField === 'id' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
                                     </th>
-                                    <th className="p-4">وضعیت</th>
-                                    <th className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('customerName')}>
-                                        <span>مشتری و تماس</span>
-                                        {sortField === 'customerName' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
-                                    </th>
-                                    <th className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('carModel')}>
-                                        <span>خودرو و رنگ</span>
-                                        {sortField === 'carModel' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
-                                    </th>
-                                    <th className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('chassisNumber')}>
-                                        <span>شماره شاسی / قرارداد</span>
+                                    {/* 1. شاسی */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('chassisNumber')}>
+                                        <span>شماره شاسی</span>
                                         {sortField === 'chassisNumber' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
                                     </th>
-                                    <th className="p-4">پلاک</th>
-                                    <th className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('deliveryDateTime')}>
+                                    {/* 2. صاحب خودرو */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('customerName')}>
+                                        <span>صاحب خودرو</span>
+                                        {sortField === 'customerName' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
+                                    </th>
+                                    {/* 3. ورود */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-950/40 bg-cyan-50/40 dark:bg-cyan-950/20 text-cyan-950 dark:text-cyan-200" onClick={() => handleSort('arrivalDateTime')}>
                                         <div className="flex items-center gap-1">
                                             <CalendarIcon className="w-3.5 h-3.5 text-cyan-600" />
-                                            <span>تاریخ تحویل</span>
+                                            <span>تاریخ ورود به نمایندگی</span>
+                                            {sortField === 'arrivalDateTime' && <span className="mr-1 font-black text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
+                                        </div>
+                                    </th>
+                                    {/* 4. محل */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-950/40 bg-purple-50/30 dark:bg-purple-950/20 text-purple-950 dark:text-purple-200" onClick={() => handleSort('storageLocation')}>
+                                        <div className="flex items-center gap-1">
+                                            <Warehouse className="w-3.5 h-3.5 text-purple-600" />
+                                            <span>محل نگهداری</span>
+                                            {sortField === 'storageLocation' && <span className="mr-1 font-black text-purple-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
+                                        </div>
+                                    </th>
+                                    {/* 5. نام خودرو */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('carModel')}>
+                                        <span>نام خودرو و رنگ</span>
+                                        {sortField === 'carModel' && <span className="mr-1 text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
+                                    </th>
+                                    {/* 6. مبلغ خودرو */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/40 bg-emerald-50/30 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-200" onClick={() => handleSort('carPrice')}>
+                                        <div className="flex items-center gap-1">
+                                            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span>مبلغ خودرو</span>
+                                            {sortField === 'carPrice' && <span className="mr-1 font-black text-emerald-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
+                                        </div>
+                                    </th>
+                                    {/* 7. تاریخ خروج */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => handleSort('deliveryDateTime')}>
+                                        <div className="flex items-center gap-1">
+                                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span>تاریخ خروج از نمایندگی</span>
                                             {sortField === 'deliveryDateTime' && <span className="mr-1 font-black text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
                                         </div>
                                     </th>
-                                    <th className="p-4 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-950/40 bg-cyan-50/40 dark:bg-cyan-950/20 text-cyan-900 dark:text-cyan-200" onClick={() => handleSort('contactDateTime')} title="مرتب‌سازی بر اساس تاریخ تماس با مشتری">
-                                        <div className="flex items-center gap-1">
-                                            <PhoneIcon className="w-3.5 h-3.5 text-cyan-600" />
-                                            <span>تاریخ تماس / ورود</span>
-                                            {sortField === 'contactDateTime' && <span className="mr-1 font-black text-cyan-600">{sortOrder === 'desc' ? '↓' : '↑'}</span>}
-                                        </div>
+                                    {/* 8. فروش */}
+                                    <th className="p-3.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800">
+                                        <span>وضعیت فروش / قرارداد</span>
                                     </th>
-                                    <th className="p-4 text-center">
-                                        <div className="flex items-center justify-center gap-1.5" title="بررسی تاریخچه نظرسنجی در CustomerJournals با شماره موبایل">
+                                    {/* 9. نظرسنجی */}
+                                    <th className="p-3.5 text-center">
+                                        <div className="flex items-center justify-center gap-1">
                                             <PollIcon className="w-3.5 h-3.5 text-slate-500" />
-                                            <span>نظرسنجی تحویل</span>
+                                            <span>نظرسنجی</span>
                                         </div>
                                     </th>
-                                    <th className="p-4 text-center">عملیات</th>
+                                    {/* 10. عملیات */}
+                                    <th className="p-3.5 text-center">عملیات</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {paginatedDeliveries.map((item, index) => {
                                     const rowNumber = (currentPage - 1) * itemsPerPage + index + 1;
-                                    const isDelivered = item.status === 'تحويل به مشتري' || item.status === 'تحویل به مشتری' || item.status === 'تحویل شده' || item.status === 'DELIVERED';
+                                    const loc = resolveStorageLocation(item);
+                                    const isDelivered = loc === 'خارج شده از نمایندگی' || Boolean(item.deliveryDateTime) || item.status === 'تحويل به مشتري' || item.status === 'تحویل به مشتری' || item.status === 'تحویل شده' || item.status === 'DELIVERED';
 
                                     return (
-                                        <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/40 transition-colors text-slate-800 dark:text-slate-200 group">
+                                        <tr key={item.id} className="hover:bg-slate-50/90 dark:hover:bg-slate-700/40 transition-colors text-slate-800 dark:text-slate-200 group">
                                             {/* Row Number & ID */}
-                                            <td className="p-4 text-center">
+                                            <td className="p-3.5 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{rowNumber.toLocaleString('fa-IR')}</span>
                                                     <span className="font-mono text-[10px] text-slate-400">#{item.id}</span>
                                                 </div>
                                             </td>
 
-                                            {/* Status Badge */}
-                                            <td className="p-4">
-                                                {getStatusBadge(item.status)}
+                                            {/* 1. شاسی */}
+                                            <td className="p-3.5">
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-mono font-black text-xs text-slate-900 dark:text-white select-all bg-slate-100 dark:bg-slate-700/60 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-600">{item.chassisNumber}</span>
+                                                        <button 
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(item.chassisNumber);
+                                                                setToast({ message: 'شماره شاسی کپی شد', type: 'success' });
+                                                            }}
+                                                            className="text-slate-400 hover:text-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                                                            title="کپی شماره شاسی"
+                                                        >
+                                                            <Copy className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                    {item.plateNumber ? (
+                                                        <span className="bg-slate-100 dark:bg-slate-700/80 px-2 py-0.5 rounded-md font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 inline-block w-fit direction-ltr">
+                                                            {item.plateNumber}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-800/50 font-bold w-fit">
+                                                            بدون پلاک
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
 
-                                            {/* Customer Name & Phone */}
-                                            <td className="p-4">
+                                            {/* 2. صاحب خودرو */}
+                                            <td className="p-3.5">
                                                 <div className="flex flex-col gap-1">
                                                     <span className="font-black text-slate-900 dark:text-white text-xs">{item.customerName}</span>
                                                     <div className="flex items-center gap-2">
@@ -1280,7 +1654,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                             <span>{item.phoneNumber}</span>
                                                         </a>
                                                         {item.secondOwnerName && (
-                                                            <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                                                            <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-800">
                                                                 مالک ۲: {item.secondOwnerName}
                                                             </span>
                                                         )}
@@ -1288,8 +1662,27 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                 </div>
                                             </td>
 
-                                            {/* Car Model & Color */}
-                                            <td className="p-4">
+                                            {/* 3. ورود (تاریخ ورود به نمایندگی) */}
+                                            <td className="p-3.5 bg-cyan-50/20 dark:bg-cyan-950/10">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-mono font-bold text-xs text-cyan-900 dark:text-cyan-200">
+                                                        {formatPersianDateTime(item.arrivalDateTime || item.entryDate)}
+                                                    </span>
+                                                    {item.contactDateTime && (
+                                                        <span className="text-[10px] text-slate-400 font-mono" title="تاریخ تماس">
+                                                            تماس: {formatPersianDateTime(item.contactDateTime)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* 4. محل (محل نگهداری) */}
+                                            <td className="p-3.5 bg-purple-50/20 dark:bg-purple-950/10">
+                                                {getLocationBadge(loc)}
+                                            </td>
+
+                                            {/* 5. نام خودرو */}
+                                            <td className="p-3.5">
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="font-black text-slate-800 dark:text-slate-100">{item.carModel || '-'}</span>
                                                     <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
@@ -1297,77 +1690,59 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                         <span>{item.color || 'رنگ نامشخص'}</span>
                                                     </div>
                                                     {item.installedOptions && (
-                                                        <span className="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded mt-0.5 max-w-[140px] truncate" title={item.installedOptions}>
-                                                            آپشن: {item.installedOptions}
+                                                        <span className="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.2 rounded mt-0.5 max-w-[140px] truncate" title={item.installedOptions}>
+                                                            {item.installedOptions}
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
 
-                                            {/* Chassis & Contract */}
-                                            <td className="p-4">
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="font-mono font-bold text-xs text-slate-700 dark:text-slate-300 select-all">{item.chassisNumber}</span>
-                                                    {item.contractNumber ? (
-                                                        <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-md w-fit">
-                                                            قرارداد: {item.contractNumber}
+                                            {/* 6. مبلغ خودرو */}
+                                            <td className="p-3.5 bg-emerald-50/20 dark:bg-emerald-950/10">
+                                                {item.carPrice ? (
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="font-mono font-black text-xs text-emerald-800 dark:text-emerald-300">
+                                                            {formatPricePersian(item.carPrice)}
                                                         </span>
-                                                    ) : (
-                                                        <span className="text-[10px] text-slate-400">فاقد قرارداد</span>
-                                                    )}
-                                                </div>
-                                            </td>
-
-                                            {/* Plate Number */}
-                                            <td className="p-4">
-                                                {item.plateNumber ? (
-                                                    <span className="bg-slate-100 dark:bg-slate-700/80 px-2.5 py-1 rounded-xl font-mono text-xs font-bold text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600 inline-block direction-ltr shadow-2xs">
-                                                        {item.plateNumber}
-                                                    </span>
+                                                    </div>
                                                 ) : (
-                                                    <span className="text-[11px] text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-800/60 font-bold">
-                                                        بدون پلاک
-                                                    </span>
+                                                    <span className="text-slate-400 text-xs">-</span>
                                                 )}
                                             </td>
 
-                                            {/* Delivery DateTime (Highlighted) */}
-                                            <td className="p-4 bg-cyan-50/30 dark:bg-cyan-950/10">
-                                                {item.deliveryDateTime ? (
+                                            {/* 7. تاریخ خروج (تاریخ خروج از نمایندگی) */}
+                                            <td className="p-3.5">
+                                                {item.deliveryDateTime || item.exitDate ? (
                                                     <div className="flex flex-col gap-0.5">
-                                                        <span className="font-mono font-black text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-2 py-1 rounded-lg border border-emerald-300/80 dark:border-emerald-800 inline-block w-fit">
-                                                            {formatPersianDateTime(item.deliveryDateTime)}
+                                                        <span className="font-mono font-black text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-300/80 dark:border-emerald-800 inline-block w-fit">
+                                                            {formatPersianDateTime(item.deliveryDateTime || item.exitDate)}
                                                         </span>
                                                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                                                             <CheckCircleIcon className="w-3 h-3 inline" />
-                                                            تحویل قطعی
+                                                            خروج قطعی
                                                         </span>
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center gap-1.5">
-                                                        <span className="text-slate-400 text-xs">ثبت‌نشده</span>
+                                                        <span className="text-slate-400 text-xs">در نمایندگی</span>
                                                         <button
                                                             onClick={() => handleQuickDeliverNow(item)}
-                                                            className="text-[10px] bg-cyan-100 hover:bg-cyan-200 text-cyan-800 dark:bg-cyan-900/60 dark:hover:bg-cyan-800 dark:text-cyan-200 px-2 py-1 rounded-lg font-bold border border-cyan-300 dark:border-cyan-700 transition-colors opacity-0 group-hover:opacity-100"
-                                                            title="ثبت تحویل در تاریخ و ساعت جاری"
+                                                            className="text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 dark:text-emerald-300 px-2 py-1 rounded-lg font-bold border border-emerald-300 dark:border-emerald-700 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                                                            title="ثبت خروج خودرو در تاریخ و ساعت جاری"
                                                         >
-                                                            تحویل اکنون
+                                                            ثبت خروج
                                                         </button>
                                                     </div>
                                                 )}
                                             </td>
 
-                                            {/* Document & Arrival details */}
-                                            <td className="p-4">
-                                                <div className="flex flex-col gap-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                                                    {item.documentNumber && <span>سند: <strong className="font-mono text-slate-700 dark:text-slate-300">{item.documentNumber}</strong></span>}
-                                                    {item.arrivalDateTime && <span>ورود: <strong className="font-mono text-slate-700 dark:text-slate-300">{formatPersianDateTime(item.arrivalDateTime)}</strong></span>}
-                                                    {item.contactDateTime && <span>تماس: <strong className="font-mono text-slate-700 dark:text-slate-300">{formatPersianDateTime(item.contactDateTime)}</strong></span>}
-                                                </div>
+                                            {/* 8. فروش */}
+                                            <td className="p-3.5">
+                                                {getSaleStatusBadge(item.saleStatus, item.contractNumber)}
                                             </td>
 
-                                            {/* Customer Survey Status Indicator (Green/Red based on CustomerJournals) */}
-                                            <td className="p-4 text-center">
+                                            {/* 9. Customer Survey Status Indicator (CustomerJournals) */}
+                                            <td className="p-3.5 text-center">
                                                 {(() => {
                                                     const p = normalizePhoneNumber(item.phoneNumber);
                                                     if (!p) {
@@ -1382,9 +1757,9 @@ const ZeroCarDeliveryPage: React.FC = () => {
 
                                                     if (info?.loading) {
                                                         return (
-                                                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 animate-pulse">
+                                                            <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 animate-pulse">
                                                                 <RefreshIcon className="w-3 h-3 animate-spin text-cyan-600" />
-                                                                <span>بررسی...</span>
+                                                                <span>...</span>
                                                             </div>
                                                         );
                                                     }
@@ -1394,34 +1769,24 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                             return (
                                                                 <button
                                                                     onClick={() => openSurveyModal(item.customerName, item.phoneNumber, info, item.id)}
-                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
                                                                     title={`نظرسنجی انجام شده است (${info.surveys.length} مورد) - کلیک برای مشاهده جزییات`}
                                                                 >
-                                                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                                                     <PollIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                                                                     <span>ثبت شد</span>
-                                                                    {info.surveys.length > 1 && (
-                                                                        <span className="text-[10px] bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 px-1.5 rounded-full font-mono font-bold">
-                                                                            {info.surveys.length}
-                                                                        </span>
-                                                                    )}
                                                                 </button>
                                                             );
                                                         } else {
                                                             return (
                                                                 <button
                                                                     onClick={() => openSurveyModal(item.customerName, item.phoneNumber, info, item.id)}
-                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/80 dark:hover:bg-rose-900/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
-                                                                    title="هیچ تاریخچه نظرسنجی در CustomerJournals وجود ندارد - کلیک برای مشاهده"
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/80 dark:hover:bg-rose-900/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                                                                    title="فاقد تاریخچه نظرسنجی در CustomerJournals - کلیک برای بررسی"
                                                                 >
-                                                                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                                                                     <PollIcon className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                                                                     <span>فاقد نظرسنجی</span>
-                                                                    {info.totalJournals > 0 && (
-                                                                        <span className="text-[10px] bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-200 px-1.5 rounded-full font-mono font-bold" title={`${info.totalJournals} فعالیت دیگر ثبت شده است`}>
-                                                                            {info.totalJournals}
-                                                                        </span>
-                                                                    )}
                                                                 </button>
                                                             );
                                                         }
@@ -1430,37 +1795,37 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                     return (
                                                         <button
                                                             onClick={() => refreshSurveyForPhone(item.phoneNumber)}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-cyan-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-cyan-300 border border-slate-200 dark:border-slate-700 transition-colors"
-                                                            title="کلیک برای استعلام نظرسنجی از CustomerJournals"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-slate-500 hover:text-cyan-600 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                                                            title="کلیک برای استعلام نظرسنجی"
                                                         >
-                                                            <RefreshIcon className="w-3 h-3 text-slate-400 hover:text-cyan-500" />
-                                                            <span>بررسی</span>
+                                                            <RefreshIcon className="w-3 h-3" />
+                                                            <span>استعلام</span>
                                                         </button>
                                                     );
                                                 })()}
                                             </td>
 
-                                            {/* Actions */}
-                                            <td className="p-4 text-center">
-                                                <div className="flex items-center justify-center gap-1.5">
+                                            {/* 10. Actions */}
+                                            <td className="p-3.5 text-center">
+                                                <div className="flex items-center justify-center gap-1">
                                                     <button 
-                                                        onClick={() => openViewModal(item)} 
-                                                        className="p-2 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50 rounded-xl transition-colors"
-                                                        title="مشاهده پرونده کامل"
+                                                        onClick={() => openViewModal(item)}
+                                                        className="p-1.5 text-slate-500 hover:text-cyan-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                                                        title="مشاهده جزئیات پرونده"
                                                     >
                                                         <EyeIcon className="w-4 h-4" />
                                                     </button>
                                                     <button 
-                                                        onClick={() => openEditModal(item)} 
-                                                        className="p-2 text-cyan-600 hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-950/50 rounded-xl transition-colors"
-                                                        title="ویرایش پرونده"
+                                                        onClick={() => openEditModal(item)}
+                                                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                                                        title="ویرایش خودرو"
                                                     >
                                                         <EditIcon className="w-4 h-4" />
                                                     </button>
                                                     <button 
-                                                        onClick={() => handleDelete(item.id)} 
-                                                        className="p-2 text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/50 rounded-xl transition-colors"
-                                                        title="حذف پرونده"
+                                                        onClick={() => handleDelete(item.id)}
+                                                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition-colors cursor-pointer"
+                                                        title="حذف رکورد"
                                                     >
                                                         <TrashIcon className="w-4 h-4" />
                                                     </button>
@@ -1472,8 +1837,8 @@ const ZeroCarDeliveryPage: React.FC = () => {
 
                                 {paginatedDeliveries.length === 0 && (
                                     <tr>
-                                        <td colSpan={10} className="p-12 text-center text-slate-400 font-bold text-sm">
-                                            هیچ پرونده‌ای با شرایط فیلتر انتخاب‌شده یافت نشد.
+                                        <td colSpan={11} className="p-12 text-center text-slate-400 font-bold">
+                                            هیچ خودرویی با شرایط فیلتر انتخاب‌شده یافت نشد.
                                         </td>
                                     </tr>
                                 )}
@@ -1505,7 +1870,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                     <TruckIcon className="w-6 h-6" />
                                 </div>
                                 <div>
-                                    <h3 className="font-black text-lg text-slate-900 dark:text-white">پرونده تحویل خودرو صفر</h3>
+                                    <h3 className="font-black text-lg text-slate-900 dark:text-white">پرونده ورود و خروج خودرو</h3>
                                     <span className="text-xs text-slate-400 font-mono">شناسه رکورد: #{viewRecord.id}</span>
                                 </div>
                             </div>
@@ -1516,20 +1881,32 @@ const ZeroCarDeliveryPage: React.FC = () => {
 
                         <div className="p-6 overflow-y-auto space-y-5 text-xs">
                             {/* Status Header Bar */}
-                            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <span className="font-bold text-slate-600 dark:text-slate-400">وضعیت فرآیند تحویل:</span>
-                                <div>{getStatusBadge(viewRecord.status)}</div>
+                            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-600 dark:text-slate-400">وضعیت فرآیند:</span>
+                                    <div>{getStatusBadge(viewRecord.status)}</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-600 dark:text-slate-400">محل فعلی:</span>
+                                    <div>{getLocationBadge(resolveStorageLocation(viewRecord))}</div>
+                                </div>
+                                {viewRecord.carPrice && (
+                                    <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                                        <span className="font-bold">مبلغ:</span>
+                                        <strong className="font-mono font-black">{formatPricePersian(viewRecord.carPrice)}</strong>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Section 1: Customer & Contract */}
                             <div className="space-y-2.5">
                                 <h4 className="font-black text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                                    اطلاعات مشتری و قرارداد
+                                    اطلاعات صاحب خودرو و قرارداد فروش
                                 </h4>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50/70 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-700/60">
                                     <div>
-                                        <span className="text-slate-400 block mb-0.5">نام مشتری:</span>
+                                        <span className="text-slate-400 block mb-0.5">نام صاحب خودرو:</span>
                                         <strong className="font-bold text-slate-900 dark:text-white">{viewRecord.customerName}</strong>
                                     </div>
                                     <div>
@@ -1541,16 +1918,16 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                         <span className="font-bold">{viewRecord.secondOwnerName || '-'}</span>
                                     </div>
                                     <div>
+                                        <span className="text-slate-400 block mb-0.5">وضعیت فروش:</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">{viewRecord.saleStatus || (viewRecord.contractNumber ? 'فروخته شده' : 'نامشخص')}</span>
+                                    </div>
+                                    <div>
                                         <span className="text-slate-400 block mb-0.5">شماره قرارداد:</span>
                                         <span className="font-mono font-bold">{viewRecord.contractNumber || '-'}</span>
                                     </div>
                                     <div>
                                         <span className="text-slate-400 block mb-0.5">شماره سند:</span>
                                         <span className="font-mono font-bold">{viewRecord.documentNumber || '-'}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-400 block mb-0.5">تاریخ سند:</span>
-                                        <span className="font-mono font-bold">{formatPersianDateTime(viewRecord.documentDate)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1570,7 +1947,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                             {p && (
                                                 <button
                                                     onClick={() => refreshSurveyForPhone(viewRecord.phoneNumber)}
-                                                    className="flex items-center gap-1 text-[11px] font-bold text-cyan-600 hover:text-cyan-700 dark:text-cyan-400"
+                                                    className="flex items-center gap-1 text-[11px] font-bold text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 cursor-pointer"
                                                 >
                                                     <RefreshIcon className={`w-3 h-3 ${surveyInfo?.loading ? 'animate-spin' : ''}`} />
                                                     <span>استعلام مجدد</span>
@@ -1605,7 +1982,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => openSurveyModal(viewRecord.customerName, viewRecord.phoneNumber, surveyInfo, viewRecord.id)}
-                                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-transform active:scale-95"
+                                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-transform active:scale-95 cursor-pointer"
                                                 >
                                                     مشاهده نظرسنجی
                                                 </button>
@@ -1625,7 +2002,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => openSurveyModal(viewRecord.customerName, viewRecord.phoneNumber, surveyInfo, viewRecord.id)}
-                                                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-xs transition-transform active:scale-95"
+                                                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-xs transition-transform active:scale-95 cursor-pointer"
                                                 >
                                                     بررسی فعالیت‌ها
                                                 </button>
@@ -1635,19 +2012,19 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 );
                             })()}
 
-                            {/* Section 2: Vehicle Specs */}
+                            {/* Section 2: Vehicle Specs & Location */}
                             <div className="space-y-2.5">
                                 <h4 className="font-black text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                                    مشخصات فنی و پلاک خودرو
+                                    مشخصات فنی، محل نگهداری و قیمت
                                 </h4>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50/70 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-700/60">
                                     <div>
-                                        <span className="text-slate-400 block mb-0.5">مدل خودرو:</span>
+                                        <span className="text-slate-400 block mb-0.5">نام و مدل خودرو:</span>
                                         <strong className="font-bold text-slate-900 dark:text-white">{viewRecord.carModel}</strong>
                                     </div>
                                     <div>
-                                        <span className="text-slate-400 block mb-0.5">رنگ:</span>
+                                        <span className="text-slate-400 block mb-0.5">رنگ خودرو:</span>
                                         <span className="font-bold">{viewRecord.color}</span>
                                     </div>
                                     <div>
@@ -1655,33 +2032,41 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                         <span className="font-mono font-bold select-all text-cyan-700 dark:text-cyan-300">{viewRecord.chassisNumber}</span>
                                     </div>
                                     <div>
-                                        <span className="text-slate-400 block mb-0.5">پلاک خودرو:</span>
+                                        <span className="text-slate-400 block mb-0.5">محل نگهداری:</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200">{viewRecord.storageLocation || 'ثبت نشده'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-400 block mb-0.5">مبلغ خودرو:</span>
+                                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatPricePersian(viewRecord.carPrice)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-400 block mb-0.5">شماره پلاک:</span>
                                         <span className="font-mono font-bold">{viewRecord.plateNumber || 'فاقد پلاک'}</span>
                                     </div>
-                                    <div className="col-span-2">
+                                    <div className="col-span-2 sm:col-span-3">
                                         <span className="text-slate-400 block mb-0.5">آپشن‌های نصب شده:</span>
                                         <span>{viewRecord.installedOptions || 'هیچ آپشنی ثبت نشده است'}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Section 3: Delivery Timeline */}
+                            {/* Section 3: Entry & Exit Timeline */}
                             <div className="space-y-2.5">
                                 <h4 className="font-black text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
                                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                    گاه‌شمار و زمان‌بندی تحویل
+                                    گاه‌شمار ورود به نمایندگی و خروج
                                 </h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 rounded-2xl border border-emerald-200/70 dark:border-emerald-800/60">
                                     <div>
-                                        <span className="text-slate-500 dark:text-slate-400 block mb-0.5">تاریخ ورود خودرو:</span>
-                                        <strong className="font-mono text-emerald-800 dark:text-emerald-300">{formatPersianDateTime(viewRecord.arrivalDateTime)}</strong>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-0.5 font-bold">تاریخ ورود به نمایندگی:</span>
+                                        <strong className="font-mono text-emerald-800 dark:text-emerald-300 font-black">{formatPersianDateTime(viewRecord.arrivalDateTime)}</strong>
                                     </div>
                                     <div>
-                                        <span className="text-slate-500 dark:text-slate-400 block mb-0.5">تاریخ تماس با مشتری:</span>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-0.5 font-bold">تاریخ تماس با مشتری:</span>
                                         <strong className="font-mono text-emerald-800 dark:text-emerald-300">{formatPersianDateTime(viewRecord.contactDateTime)}</strong>
                                     </div>
                                     <div>
-                                        <span className="text-slate-500 dark:text-slate-400 block mb-0.5">تاریخ و ساعت تحویل:</span>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-0.5 font-bold">تاریخ خروج از نمایندگی:</span>
                                         <strong className="font-mono text-emerald-700 dark:text-emerald-300 font-black">{formatPersianDateTime(viewRecord.deliveryDateTime)}</strong>
                                     </div>
                                 </div>
@@ -1699,7 +2084,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                     )}
                                     {viewRecord.deliveryNotes && (
                                         <div className="p-3 bg-cyan-50/60 dark:bg-cyan-950/30 rounded-xl border border-cyan-200/60 dark:border-cyan-800/50 text-cyan-900 dark:text-cyan-200">
-                                            <strong className="block text-[11px] mb-1">توضیحات فرآیند تحویل:</strong>
+                                            <strong className="block text-[11px] mb-1">توضیحات فرآیند تحویل و خروج:</strong>
                                             <p className="whitespace-pre-wrap">{viewRecord.deliveryNotes}</p>
                                         </div>
                                     )}
@@ -1721,14 +2106,14 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                     setIsViewModalOpen(false);
                                     openEditModal(viewRecord);
                                 }}
-                                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-bold flex items-center gap-1.5 transition-colors"
+                                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                                 <EditIcon className="w-4 h-4" />
                                 ویرایش پرونده
                             </button>
                             <button 
                                 onClick={() => setIsViewModalOpen(false)} 
-                                className="px-5 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl font-bold transition-colors"
+                                className="px-5 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl font-bold transition-colors cursor-pointer"
                             >
                                 بستن
                             </button>
@@ -1748,12 +2133,12 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-lg text-slate-800 dark:text-white">
-                                        {currentRecord.id ? `ویرایش پرونده تحویل #${currentRecord.id}` : 'ثبت پرونده جدید تحویل خودرو'}
+                                        {currentRecord.id ? `ویرایش پرونده خودرو #${currentRecord.id}` : 'ثبت ورود خودرو جدید به نمایندگی'}
                                     </h3>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">تمام فیلدهای هماهنگ با پایگاه‌داده خودروهای صفر</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">ثبت اطلاعات شاسی، صاحب خودرو، محل نگهداری، مبلغ، تاریخ ورود و خروج</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                                 <CloseIcon className="w-5 h-5" />
                             </button>
                         </div>
@@ -1762,46 +2147,46 @@ const ZeroCarDeliveryPage: React.FC = () => {
                         <div className="flex border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-6 gap-2">
                             <button 
                                 onClick={() => setActiveTab(1)}
-                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 ${
+                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
                                     activeTab === 1 ? 'border-cyan-600 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
                                 }`}
                             >
-                                <span>۱. مشتری و قرارداد</span>
+                                <span>۱. صاحب خودرو و فروش</span>
                             </button>
                             <button 
                                 onClick={() => setActiveTab(2)}
-                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 ${
+                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
                                     activeTab === 2 ? 'border-cyan-600 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
                                 }`}
                             >
-                                <span>۲. خودرو و آپشن‌ها</span>
+                                <span>۲. شاسی، محل نگهداری و قیمت</span>
                             </button>
                             <button 
                                 onClick={() => setActiveTab(3)}
-                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 ${
+                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
                                     activeTab === 3 ? 'border-cyan-600 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
                                 }`}
                             >
-                                <span>۳. زمان‌بندی و تحویل</span>
+                                <span>۳. تاریخ‌های ورود و خروج</span>
                             </button>
                             <button 
                                 onClick={() => setActiveTab(4)}
-                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 ${
+                                className={`py-3.5 px-3 text-xs font-black border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
                                     activeTab === 4 ? 'border-cyan-600 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
                                 }`}
                             >
-                                <span>۴. توضیحات و مستندات</span>
+                                <span>۴. توضیحات و وضعیت فرآیند</span>
                             </button>
                         </div>
 
                         <div className="p-6 overflow-y-auto flex-1">
-                            {/* Tab 1: Customer & Documents */}
+                            {/* Tab 1: Customer & Sales */}
                             {activeTab === 1 && (
                                 <div className="space-y-4 animate-fade-in text-xs">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                                                <span>نام و نام خانوادگی مشتری</span>
+                                                <span>صاحب خودرو (نام و نام خانوادگی)</span>
                                                 <span className="text-rose-500">*</span>
                                             </label>
                                             <input 
@@ -1834,7 +2219,20 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="font-bold text-slate-700 dark:text-slate-300">شماره قرارداد</label>
+                                            <label className="font-bold text-slate-700 dark:text-slate-300">وضعیت فروش خودرو</label>
+                                            <select 
+                                                className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500" 
+                                                value={currentRecord.saleStatus || ''} 
+                                                onChange={e => setCurrentRecord({...currentRecord, saleStatus: e.target.value})}
+                                            >
+                                                <option value="">انتخاب وضعیت فروش...</option>
+                                                {SALE_STATUS_OPTIONS.map(opt => (
+                                                    <option key={opt} value={opt}>{opt}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="font-bold text-slate-700 dark:text-slate-300">شماره قرارداد فروش</label>
                                             <input 
                                                 type="text" 
                                                 className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono dir-ltr outline-none focus:ring-2 focus:ring-cyan-500" 
@@ -1853,7 +2251,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                 placeholder="مثال: 20315248"
                                             />
                                         </div>
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-1.5 md:col-span-2">
                                             <label className="font-bold text-slate-700 dark:text-slate-300">تاریخ سند</label>
                                             <PersianDatePicker 
                                                 value={currentRecord.documentDate || ''}
@@ -1866,12 +2264,29 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Tab 2: Vehicle Specs */}
+                            {/* Tab 2: Vehicle Specs, Chassis, Location, Price */}
                             {activeTab === 2 && (
                                 <div className="space-y-4 animate-fade-in text-xs">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
-                                            <label className="font-bold text-slate-700 dark:text-slate-300">مدل خودرو</label>
+                                            <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                                <span>شماره شاسی خودرو</span>
+                                                <span className="text-rose-500">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono dir-ltr font-black outline-none focus:ring-2 focus:ring-cyan-500 uppercase tracking-wider" 
+                                                value={currentRecord.chassisNumber || ''} 
+                                                onChange={e => setCurrentRecord({...currentRecord, chassisNumber: e.target.value.toUpperCase()})} 
+                                                placeholder="مثال: NAKNF7526TB175622"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                                <span>نام و مدل خودرو</span>
+                                                <span className="text-rose-500">*</span>
+                                            </label>
                                             <div className="flex gap-2">
                                                 <input 
                                                     type="text" 
@@ -1901,25 +2316,11 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                 className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500" 
                                                 value={currentRecord.color || ''} 
                                                 onChange={e => setCurrentRecord({...currentRecord, color: e.target.value})} 
-                                                placeholder="سفید، مشکی، خاکستری..."
+                                                placeholder="سفید، مشکی، خاکستری طوسی..."
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                                                <span>شماره شاسی خودرو</span>
-                                                <span className="text-rose-500">*</span>
-                                            </label>
-                                            <input 
-                                                type="text" 
-                                                className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono dir-ltr font-black outline-none focus:ring-2 focus:ring-cyan-500 uppercase" 
-                                                value={currentRecord.chassisNumber || ''} 
-                                                onChange={e => setCurrentRecord({...currentRecord, chassisNumber: e.target.value.toUpperCase()})} 
-                                                placeholder="مثال: NAKNF7526TB175622"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="font-bold text-slate-700 dark:text-slate-300">شماره پلاک</label>
+                                            <label className="font-bold text-slate-700 dark:text-slate-300">شماره پلاک خودرو</label>
                                             <input 
                                                 type="text" 
                                                 className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono outline-none focus:ring-2 focus:ring-cyan-500" 
@@ -1928,6 +2329,66 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                 placeholder="مثال: 88ص187-93ايران"
                                             />
                                         </div>
+
+                                        {/* Storage Location Input with quick buttons */}
+                                        <div className="space-y-1.5 md:col-span-2 p-3.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-200/70 dark:border-blue-800/60">
+                                            <div className="flex justify-between items-center">
+                                                <label className="font-black text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                                                    <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                    <span>محل نگهداری خودرو</span>
+                                                </label>
+                                                <span className="text-[11px] text-blue-600 dark:text-blue-400">برای اندازه گیری فوری موجودی انبارها</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full px-3.5 py-2.5 border rounded-2xl bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold outline-none focus:ring-2 focus:ring-blue-500" 
+                                                    value={currentRecord.storageLocation || ''} 
+                                                    onChange={e => setCurrentRecord({...currentRecord, storageLocation: e.target.value})} 
+                                                    placeholder="مثال: نمایشگاه (سالن اصلی)، انبار شماره ۱..."
+                                                />
+                                            </div>
+                                            {/* Quick select buttons */}
+                                            <div className="flex flex-wrap gap-1.5 pt-1">
+                                                {STORAGE_LOCATIONS.map(loc => (
+                                                    <button
+                                                        key={loc}
+                                                        type="button"
+                                                        onClick={() => setCurrentRecord({...currentRecord, storageLocation: loc})}
+                                                        className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
+                                                            currentRecord.storageLocation === loc
+                                                                ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                                                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+                                                        }`}
+                                                    >
+                                                        {loc}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Car Price */}
+                                        <div className="space-y-1.5 md:col-span-2 p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/70 dark:border-emerald-800/60">
+                                            <div className="flex justify-between items-center">
+                                                <label className="font-black text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                                                    <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                    <span>مبلغ خودرو (تومان)</span>
+                                                </label>
+                                                {currentRecord.carPrice ? (
+                                                    <span className="text-[11px] font-bold font-mono text-emerald-700 dark:text-emerald-300">
+                                                        {formatPricePersian(currentRecord.carPrice)}
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                            <input 
+                                                type="number" 
+                                                className="w-full px-3.5 py-2.5 border rounded-2xl bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono font-bold text-left dir-ltr outline-none focus:ring-2 focus:ring-emerald-500" 
+                                                value={currentRecord.carPrice || ''} 
+                                                onChange={e => setCurrentRecord({...currentRecord, carPrice: e.target.value ? Number(e.target.value) : ''})} 
+                                                placeholder="مثال: 1250000000"
+                                            />
+                                        </div>
+
                                         <div className="space-y-1.5 md:col-span-2">
                                             <label className="font-bold text-slate-700 dark:text-slate-300">آپشن‌های نصب شده</label>
                                             <input 
@@ -1942,35 +2403,23 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Tab 3: Logistics & Timelines */}
+                            {/* Tab 3: Entry & Exit Timelines */}
                             {activeTab === 3 && (
                                 <div className="space-y-4 animate-fade-in text-xs">
-                                    <div className="space-y-1.5">
-                                        <label className="font-bold text-slate-700 dark:text-slate-300">وضعیت فرآیند تحویل</label>
-                                        <div className="flex gap-2">
-                                            <select 
-                                                className="flex-1 px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500" 
-                                                value={currentRecord.status || 'تایید مدارک'} 
-                                                onChange={e => setCurrentRecord({...currentRecord, status: e.target.value})}
-                                            >
-                                                {availableStatuses.map(st => (
-                                                    <option key={st} value={st}>{STATUS_CONFIG[st]?.label || st}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                                        {/* Arrival Date */}
-                                        <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {/* Arrival Date (ورود به نمایندگی) */}
+                                        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <label className="font-bold text-slate-700 dark:text-slate-300">تاریخ و ساعت ورود خودرو</label>
+                                                <label className="font-black text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                    <span>تاریخ ورود به نمایندگی</span>
+                                                </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSetNow('arrivalDateTime')}
-                                                    className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg border border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300 font-bold"
+                                                    className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg border border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300 font-bold cursor-pointer"
                                                 >
-                                                    ثبت اکنون
+                                                    ورود هم‌اکنون
                                                 </button>
                                             </div>
                                             <PersianDatePicker 
@@ -1982,13 +2431,13 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                         </div>
 
                                         {/* Contact Date */}
-                                        <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                                        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <label className="font-bold text-slate-700 dark:text-slate-300">تاریخ و ساعت تماس با مشتری</label>
+                                                <label className="font-bold text-slate-700 dark:text-slate-300">تاریخ تماس با مشتری</label>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSetNow('contactDateTime')}
-                                                    className="text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-200 hover:bg-amber-100 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300 font-bold"
+                                                    className="text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-200 hover:bg-amber-100 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300 font-bold cursor-pointer"
                                                 >
                                                     ثبت اکنون
                                                 </button>
@@ -2001,16 +2450,19 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                             />
                                         </div>
 
-                                        {/* Delivery Date */}
-                                        <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 space-y-2">
+                                        {/* Delivery/Exit Date (خروج از نمایندگی) */}
+                                        <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <label className="font-black text-emerald-800 dark:text-emerald-300">تاریخ و ساعت تحویل نهایی</label>
+                                                <label className="font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                    <span>تاریخ خروج از نمایندگی</span>
+                                                </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSetNow('deliveryDateTime', true)}
-                                                    className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-lg font-black hover:bg-emerald-700 shadow-2xs"
+                                                    className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-lg font-black hover:bg-emerald-700 shadow-2xs cursor-pointer"
                                                 >
-                                                    تحویل قطعی اکنون
+                                                    خروج و تحویل اکنون
                                                 </button>
                                             </div>
                                             <PersianDatePicker 
@@ -2024,16 +2476,30 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Tab 4: Notes */}
+                            {/* Tab 4: Notes & Status */}
                             {activeTab === 4 && (
                                 <div className="space-y-4 animate-fade-in text-xs">
+                                    <div className="space-y-1.5">
+                                        <label className="font-bold text-slate-700 dark:text-slate-300">وضعیت گردش کار</label>
+                                        <div className="flex gap-2">
+                                            <select 
+                                                className="flex-1 px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold outline-none focus:ring-2 focus:ring-cyan-500" 
+                                                value={currentRecord.status || 'تایید مدارک'} 
+                                                onChange={e => setCurrentRecord({...currentRecord, status: e.target.value})}
+                                            >
+                                                {availableStatuses.map(st => (
+                                                    <option key={st} value={st}>{STATUS_CONFIG[st]?.label || st}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
                                     <div className="space-y-1.5">
                                         <label className="font-bold text-slate-700 dark:text-slate-300">توضیحات تایید مدارک و سلامت خودرو</label>
                                         <textarea 
                                             rows={3} 
                                             className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500" 
                                             value={currentRecord.verificationNotes || ''} 
-                                            onChange={e => setCurrentRecord({...currentRecord, verificationNotes: e.target.value})}
+                                            onChange={e => setCurrentRecord({...currentRecord, verificationNotes: e.target.value})} 
                                             placeholder="نکات مربوط به احراز هویت، مدارک شناسایی، وضعیت بدنه و سند..."
                                         />
                                     </div>
@@ -2043,7 +2509,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                             rows={3} 
                                             className="w-full px-3.5 py-2.5 border rounded-2xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500" 
                                             value={currentRecord.deliveryNotes || ''} 
-                                            onChange={e => setCurrentRecord({...currentRecord, deliveryNotes: e.target.value})}
+                                            onChange={e => setCurrentRecord({...currentRecord, deliveryNotes: e.target.value})} 
                                             placeholder="توضیحات مربوط به تحویل فیزیکی، فرم رضایت، اقلام همراه..."
                                         />
                                     </div>
@@ -2064,7 +2530,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                     <button 
                                         type="button"
                                         onClick={() => setActiveTab((activeTab - 1) as any)} 
-                                        className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-bold transition-colors"
+                                        className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                                     >
                                         مرحله قبل
                                     </button>
@@ -2073,7 +2539,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                     <button 
                                         type="button"
                                         onClick={() => setActiveTab((activeTab + 1) as any)} 
-                                        className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold transition-colors"
+                                        className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                                     >
                                         مرحله بعد
                                     </button>
@@ -2084,14 +2550,14 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                 <button 
                                     type="button"
                                     onClick={() => setIsModalOpen(false)} 
-                                    className="px-4 py-2.5 text-slate-500 hover:bg-slate-200/80 dark:text-slate-400 dark:hover:bg-slate-700 rounded-2xl text-xs font-bold transition-colors"
+                                    className="px-4 py-2.5 text-slate-500 hover:bg-slate-200/80 dark:text-slate-400 dark:hover:bg-slate-700 rounded-2xl text-xs font-bold transition-colors cursor-pointer"
                                 >
                                     انصراف
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={handleSave} 
-                                    className="px-6 py-2.5 bg-cyan-600 text-white rounded-2xl hover:bg-cyan-700 text-xs font-black shadow-sm transition-transform active:scale-95"
+                                    className="px-6 py-2.5 bg-cyan-600 text-white rounded-2xl hover:bg-cyan-700 text-xs font-black shadow-sm transition-transform active:scale-95 cursor-pointer"
                                 >
                                     ذخیره اطلاعات
                                 </button>
@@ -2222,9 +2688,9 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                         <span className="font-black text-emerald-900 dark:text-emerald-200 text-xs">
                                                             🚗 نظرسنجی #{sIdx + 1}
                                                         </span>
-                                                        {survey.username && (
+                                                        {survey.author && (
                                                             <span className="text-[10px] bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 px-2 py-0.5 rounded-full font-bold">
-                                                                کاربر: {survey.username}
+                                                                ثبت کننده: {survey.author}
                                                             </span>
                                                         )}
                                                     </div>
@@ -2267,7 +2733,7 @@ const ZeroCarDeliveryPage: React.FC = () => {
                                                         <div className="flex items-center gap-1.5">
                                                             {isSurvey && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
                                                             <span className="font-bold text-slate-700 dark:text-slate-300">
-                                                                {journal.username || 'سیستم'}
+                                                                {journal.author || 'سیستم'}
                                                             </span>
                                                         </div>
                                                         {journal.createdAt && (

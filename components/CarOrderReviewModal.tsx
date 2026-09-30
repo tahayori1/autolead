@@ -206,7 +206,7 @@ const CarOrderReviewModal: React.FC<CarOrderReviewModalProps> = ({
                                             </span>
                                         </div>
                                         <div className="bg-yellow-50 dark:bg-yellow-950/40 p-2.5 rounded-xl border border-yellow-200 dark:border-yellow-800">
-                                            <span className="text-yellow-800 dark:text-yellow-300 block text-[10px] font-bold">پورسانت کل (۱۰٪):</span>
+                                            <span className="text-yellow-800 dark:text-yellow-300 block text-[10px] font-bold">پورسانت کل ({order.commissionRatePercent || 10}٪):</span>
                                             <span className="font-mono font-black text-yellow-900 dark:text-yellow-200">
                                                 {(order.totalCommissionBonus || 0).toLocaleString('fa-IR')} ت
                                             </span>

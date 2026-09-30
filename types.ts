@@ -347,12 +347,19 @@ export interface CarOrder {
     sellingPrice?: number;          // قیمت فروش خودرو (تومان)
     shippingCost?: number;          // هزینه حمل (تومان)
     netCommission?: number;         // کمیسیون خالص: قیمت فروش - قیمت خرید - هزینه حمل
-    totalCommissionBonus?: number;  // ۱۰ درصد کمیسیون خالص (پورسانت کل)
+    commissionRatePercent?: number; // درصد پورسانت معامله (پیش‌فرض ۱۰ درصد)
+    totalCommissionBonus?: number;  // درصد پورسانت از کمیسیون خالص (پورسانت کل)
     partnerCommissionShare?: number;// سهم پورسانت هر یک از همکاران
 
     // Seller & Warehouse info
     sellerType?: 'COMPANY_WAREHOUSE' | 'OTHER' | string; // انبار خود شرکت یا سایر
     sellerName?: string;            // نام فروشنده یا انبار
+    sellerPhone?: string;           // شماره تماس فروشنده / مالک
+    sellerNationalId?: string;      // کد ملی فروشنده / مالک
+    sellerSheba?: string;           // شماره شبا / کارت فروشنده
+    sellerCity?: string;            // شهر فروشنده
+    sellerAddress?: string;         // نشانی فروشنده
+    sellerNotes?: string;           // توضیحات فروشنده / مالک خودرو
 
     // Collaborating Partners (Max 4 partners, either sale side or buy side)
     partners?: OrderPartner[];
@@ -666,7 +673,7 @@ export interface OvertimeRequest {
     notes?: string;
 }
 
-// --- Zero Car Delivery Types ---
+// --- Zero Car Delivery / Vehicle Entry & Exit Types ---
 
 export interface ZeroCarDelivery {
     id: number;
@@ -683,6 +690,13 @@ export interface ZeroCarDelivery {
     status: string;
     secondOwnerName?: string | null;
     verificationNotes?: string | null;
+
+    // Vehicle Location, Pricing & Sale Flow
+    storageLocation?: string | null; // محل نگهداری: نمایشگاه (سالن)، انبار ۱، انبار ۲، انبار مرکزی، پارکینگ تحویل
+    carPrice?: number | string | null; // مبلغ خودرو (تومان/ریال)
+    saleStatus?: string | null; // وضعیت فروش: فروخته شده، امانی، نقدی، اقساطی، موجود/آزاد، رزرو
+    entryDate?: string | null; // تاریخ ورود به نمایندگی (fallback to arrivalDateTime)
+    exitDate?: string | null; // تاریخ خروج از نمایندگی (fallback to deliveryDateTime)
 
     // Section 2: Delivery Process & Logistics
     arrivalDateTime?: string | null;

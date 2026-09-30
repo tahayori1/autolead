@@ -63,7 +63,7 @@ const MODULE_LABELS: Record<string, string> = {
     'attendance': 'حضور و غیاب و مرخصی',
     'leave-requests': 'مرخصی‌ها',
     'anonymous-feedback': 'صدای همکار',
-    'zero-car-delivery': 'تحویل خودرو',
+    'zero-car-delivery': 'ورود و خروج خودروها',
     'settings': 'تنظیمات',
     'access-control': 'دسترسی‌ها',
     'poll': 'نظرسنجی'

@@ -1188,7 +1188,7 @@ export const getAnnouncements = async (): Promise<Announcement[]> => {
     } else if (data && typeof data === 'object') {
         items = [data];
     }
-    return items.map((item: any) => {
+    const mappedItems: Announcement[] = items.map((item: any) => {
         const rawCreated = item.createdAt || item.created_at;
         const rawUpdated = item.updatedAt || item.updated_at;
         const mysqlCreated = rawCreated ? toMySQLDateTime(rawCreated) : toMySQLDateTime();
@@ -2349,6 +2349,12 @@ const normalizeCarOrder = (order: any): CarOrder => {
         // Seller & Warehouse
         sellerType: order.sellerType || order.seller_type || (order.deductFromStock ? 'COMPANY_WAREHOUSE' : 'OTHER'),
         sellerName: order.sellerName || order.seller_name || '',
+        sellerPhone: order.sellerPhone || order.seller_phone || '',
+        sellerNationalId: order.sellerNationalId || order.seller_national_id || '',
+        sellerSheba: order.sellerSheba || order.seller_sheba || '',
+        sellerCity: order.sellerCity || order.seller_city || '',
+        sellerAddress: order.sellerAddress || order.seller_address || '',
+        sellerNotes: order.sellerNotes || order.seller_notes || '',
 
         // Collaborating Partners
         partners: partners,
@@ -2438,6 +2444,18 @@ const denormalizeCarOrder = (order: Partial<CarOrder>): any => {
         seller_type: order.sellerType || 'OTHER',
         sellerName: order.sellerName || '',
         seller_name: order.sellerName || '',
+        sellerPhone: order.sellerPhone || '',
+        seller_phone: order.sellerPhone || '',
+        sellerNationalId: order.sellerNationalId || '',
+        seller_national_id: order.sellerNationalId || '',
+        sellerSheba: order.sellerSheba || '',
+        seller_sheba: order.sellerSheba || '',
+        sellerCity: order.sellerCity || '',
+        seller_city: order.sellerCity || '',
+        sellerAddress: order.sellerAddress || '',
+        seller_address: order.sellerAddress || '',
+        sellerNotes: order.sellerNotes || '',
+        seller_notes: order.sellerNotes || '',
 
         // Collaborating Partners
         partners: partnersJson,

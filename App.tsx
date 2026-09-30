@@ -298,7 +298,7 @@ const App: React.FC = () => {
         { view: 'advertising-ctas' as ActiveView, label: 'CTA ساز', icon: <RocketIcon className="w-5 h-5 text-pink-500" /> },
         { view: 'advertising-contact' as ActiveView, label: 'contact ساز', icon: <Phone className="w-5 h-5 text-cyan-500" /> },
         { view: 'cars' as ActiveView, label: 'کاتالوگ خودروها', icon: <CarIcon className="w-5 h-5" /> },
-        { view: 'zero-car-delivery' as ActiveView, label: 'تحویل خودرو صفر', icon: <TruckIcon className="w-5 h-5" /> },
+        { view: 'zero-car-delivery' as ActiveView, label: 'ورود و خروج خودروها', icon: <TruckIcon className="w-5 h-5" /> },
         { view: 'used-cars' as ActiveView, label: 'کارشناسی خودرو کارکرده', icon: <ClipboardListIcon className="w-5 h-5" /> },
         { view: 'vehicle-exit' as ActiveView, label: 'خروج نهایی خودرو', icon: <ExitFormIcon className="w-5 h-5" /> },
         { view: 'commission' as ActiveView, label: 'کمیسیون و پورسانت', icon: <CalculatorIcon className="w-5 h-5" /> },
@@ -368,7 +368,7 @@ const App: React.FC = () => {
             isCollapsible: true,
             icon: <CarIcon className="w-5 h-5" />,
             items: [
-                { view: 'zero-car-delivery' as ActiveView, label: 'تحویل خودرو صفر', icon: <TruckIcon className="w-5 h-5" /> },
+                { view: 'zero-car-delivery' as ActiveView, label: 'ورود و خروج خودروها', icon: <TruckIcon className="w-5 h-5" /> },
                 { view: 'used-cars' as ActiveView, label: 'کارشناسی خودرو کارکرده', icon: <ClipboardListIcon className="w-5 h-5" /> },
                 { view: 'vehicle-exit' as ActiveView, label: 'خروج نهایی خودرو', icon: <ExitFormIcon className="w-5 h-5" /> },
             ]

@@ -126,6 +126,22 @@ const numberToPersianWords = (num: number): string => {
     return result.trim();
 };
 
+// Helper to verify if approved price (نرخ مصوب) was updated within last 24 hours
+export const isPriceUpdatedWithin24Hours = (capturedAt?: string | null): boolean => {
+    if (!capturedAt) return false;
+    try {
+        let date = new Date(capturedAt);
+        if (isNaN(date.getTime())) {
+            date = new Date(capturedAt.replace(' ', 'T'));
+        }
+        if (isNaN(date.getTime())) return false;
+        const diffMs = Date.now() - date.getTime();
+        return diffMs >= 0 && diffMs <= 24 * 60 * 60 * 1000;
+    } catch {
+        return false;
+    }
+};
+
 const SALE_TYPE_TABS = [
     { id: 'ALL', label: 'همه شرایط', type: null, icon: Layers },
     { id: 'FACTORY', label: 'ثبت‌نام کارخانه', type: SaleType.FACTORY_REGISTRATION, icon: Building2 },
@@ -197,11 +213,18 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         purchasePrice: 0,
         sellingPrice: 0,
         shippingCost: 0,
+        commissionRatePercent: 10,
         netCommission: 0,
         totalCommissionBonus: 0,
         partnerCommissionShare: 0,
         sellerType: 'COMPANY_WAREHOUSE' as 'COMPANY_WAREHOUSE' | 'OTHER',
         sellerName: 'انبار مرکزی شرکت (حسینی خودرو)',
+        sellerPhone: '',
+        sellerNationalId: '',
+        sellerSheba: '',
+        sellerCity: '',
+        sellerAddress: '',
+        sellerNotes: '',
         partners: [] as OrderPartner[],
         carExperts: [] as string[]
     });
@@ -219,8 +242,9 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 const sPrice = editOrder.sellingPrice || editOrder.proposedPrice || 0;
                 const pPrice = editOrder.purchasePrice || 0;
                 const sCost = editOrder.shippingCost || 0;
+                const commRate = editOrder.commissionRatePercent !== undefined ? editOrder.commissionRatePercent : 10;
                 const netComm = editOrder.netCommission !== undefined ? editOrder.netCommission : (sPrice - pPrice - sCost);
-                const bonus = editOrder.totalCommissionBonus !== undefined ? editOrder.totalCommissionBonus : (netComm > 0 ? Math.round(netComm * 0.1) : 0);
+                const bonus = editOrder.totalCommissionBonus !== undefined ? editOrder.totalCommissionBonus : (netComm > 0 ? Math.round(netComm * (commRate / 100)) : 0);
                 const partnerList: OrderPartner[] = editOrder.partners && editOrder.partners.length > 0 
                     ? editOrder.partners 
                     : (editOrder.carExperts || []).map(exp => ({
@@ -245,11 +269,18 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     purchasePrice: pPrice,
                     sellingPrice: sPrice,
                     shippingCost: sCost,
+                    commissionRatePercent: commRate,
                     netCommission: netComm,
                     totalCommissionBonus: bonus,
                     partnerCommissionShare: share,
                     sellerType: (editOrder.sellerType as any) || (editOrder.deductFromStock ? 'COMPANY_WAREHOUSE' : 'OTHER'),
                     sellerName: editOrder.sellerName || (editOrder.sellerType === 'OTHER' ? '' : 'انبار مرکزی شرکت (حسینی خودرو)'),
+                    sellerPhone: editOrder.sellerPhone || '',
+                    sellerNationalId: editOrder.sellerNationalId || '',
+                    sellerSheba: editOrder.sellerSheba || '',
+                    sellerCity: editOrder.sellerCity || '',
+                    sellerAddress: editOrder.sellerAddress || '',
+                    sellerNotes: editOrder.sellerNotes || '',
                     partners: partnerList,
                     carExperts: editOrder.carExperts || []
                 });
@@ -262,6 +293,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     buyerNationalId: initialBuyerData.nationalId || prev.buyerNationalId,
                     buyerAddress: initialBuyerData.address || prev.buyerAddress,
                     buyerPostalCode: initialBuyerData.postalCode || prev.buyerPostalCode,
+                    commissionRatePercent: 10,
                     partners: [],
                     carExperts: []
                 }));
@@ -282,11 +314,18 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     purchasePrice: 0,
                     sellingPrice: 0,
                     shippingCost: 0,
+                    commissionRatePercent: 10,
                     netCommission: 0,
                     totalCommissionBonus: 0,
                     partnerCommissionShare: 0,
                     sellerType: 'COMPANY_WAREHOUSE',
                     sellerName: 'انبار مرکزی شرکت (حسینی خودرو)',
+                    sellerPhone: '',
+                    sellerNationalId: '',
+                    sellerSheba: '',
+                    sellerCity: '',
+                    sellerAddress: '',
+                    sellerNotes: '',
                     partners: [],
                     carExperts: []
                 });
@@ -523,7 +562,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
             year: string | null;
             stat?: CarPriceStats;
             manualPrice?: ScrapedCarPrice;
+            isApprovedFresh: boolean;
             otherPrices: ScrapedCarPrice[];
+            divarPrices: ScrapedCarPrice[];
+            divarAveragePrice: number;
             sourcePricesMap: Record<string, ScrapedCarPrice>;
             sourceCount: number;
             isSufficientSources: boolean;
@@ -549,6 +591,17 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
             const otherPrices = matchingPrices
                 .filter(p => (p.model_name === rawModelName || allModelNames.size === 1) && p.source_name !== 'custom' && p.price_rial > 0)
                 .sort((a, b) => a.price_rial - b.price_rial);
+
+            const divarPrices = otherPrices.filter(p => {
+                const s = (p.source_name || '').toLowerCase();
+                return s.includes('divar') || s.includes('دیوار');
+            });
+            const divarPriceValues = divarPrices.map(p => p.price_rial).filter(p => p > 0);
+            const divarAveragePrice = divarPriceValues.length > 0
+                ? Math.round(divarPriceValues.reduce((sum, p) => sum + p, 0) / divarPriceValues.length)
+                : 0;
+
+            const isApprovedFresh = isPriceUpdatedWithin24Hours(manualPrice?.captured_at);
 
             const sourcePricesMap: Record<string, ScrapedCarPrice> = {};
             otherPrices.forEach(p => {
@@ -595,7 +648,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 year,
                 stat,
                 manualPrice,
+                isApprovedFresh,
                 otherPrices,
+                divarPrices,
+                divarAveragePrice,
                 sourcePricesMap,
                 sourceCount,
                 isSufficientSources,
@@ -638,16 +694,20 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
             if (found) return found;
         }
 
-        const withApproved = matchedCarPriceGroup.variants.find(v => v.manualPrice && v.manualPrice.price_rial > 0);
+        const withApproved = matchedCarPriceGroup.variants.find(v => v.manualPrice && v.manualPrice.price_rial > 0 && v.isApprovedFresh);
         if (withApproved) return withApproved;
+
+        const anyApproved = matchedCarPriceGroup.variants.find(v => v.manualPrice && v.manualPrice.price_rial > 0);
+        if (anyApproved) return anyApproved;
 
         return matchedCarPriceGroup.variants[0];
     }, [matchedCarPriceGroup, selectedPriceYear, selectedConditionObj]);
 
-    // Proposed Price Credibility & Soundness Assessment
+    // Proposed Price Credibility & Soundness Assessment with 24-Hour Approved Rate Rule
     const credibilityVerdict = useMemo(() => {
         const proposed = formData.proposedPrice;
         const manualPrice = activePriceVariant?.manualPrice;
+        const isApprovedFresh = activePriceVariant?.isApprovedFresh || false;
         const hasApproved = !!(manualPrice && manualPrice.price_rial > 0);
         const approvedVal = manualPrice?.price_rial || 0;
 
@@ -656,6 +716,9 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         const lowestMarket = activePriceVariant?.lowestMarketPrice || currentPriceStat?.minimum || 0;
         const highestMarket = activePriceVariant?.highestMarketPrice || currentPriceStat?.maximum || 0;
         const avgMarket = activePriceVariant?.averageMarketPrice || currentPriceStat?.average || 0;
+        const divarAvg = (activePriceVariant?.divarAveragePrice && activePriceVariant.divarAveragePrice > 0)
+            ? activePriceVariant.divarAveragePrice
+            : avgMarket;
 
         const isHavaleh = selectedConditionObj?.sale_type === SaleType.TRANSFER;
 
@@ -666,13 +729,13 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 title: 'در انتظار ورود قیمت معامله پیشنهادی',
                 badgeText: 'نیازمند ورود مبلغ',
                 badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
-                description: 'جهت بررسی استناد، انطباق با نرخ مصوب یا بازه کارشناسی بازار، مبلغ پیشنهادی را در کادر زیر وارد کنید.',
+                description: 'جهت بررسی استناد، انطباق با نرخ مصوب یا میانگین دیوار، مبلغ پیشنهادی را در کادر زیر وارد کنید.',
                 icon: <HelpCircle className="w-5 h-5 text-slate-500" />
             };
         }
 
-        // SCENARIO 1: APPROVED PRICE EXISTS (قیمت مصوب وارد شده است)
-        if (hasApproved && approvedVal > 0) {
+        // SCENARIO 1: APPROVED PRICE EXISTS AND UPDATED WITHIN 24 HOURS (نرخ مصوب معتبر حداکثر ۲۴ ساعت قبل)
+        if (hasApproved && approvedVal > 0 && isApprovedFresh) {
             const threshold = approvedVal * 0.98; // 2% tolerance
             if (proposed >= threshold) {
                 const isExact = proposed === approvedVal;
@@ -680,11 +743,11 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     status: 'VALID',
                     isCredible: true,
                     title: isExact 
-                        ? 'قیمت پیشنهادی کاملاً قابل استناد است (منطبق با نرخ مصوب نمایندگی)'
-                        : 'قیمت پیشنهادی قابل استناد است (در محدوده مجاز نرخ مصوب نمایندگی)',
-                    badgeText: 'قابل استناد (مصوب شرکت) ⭐',
+                        ? 'قیمت پیشنهادی کاملاً قابل استناد است (منطبق با نرخ مصوب معتبر ۲۴ ساعت اخیر)'
+                        : 'قیمت پیشنهادی قابل استناد است (در محدوده مجاز نرخ مصوب معتبر نمایندگی)',
+                    badgeText: 'نرخ مصوب معتبر (۲۴h) ⭐',
                     badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800',
-                    description: `مبلغ پیشنهادی (${proposed.toLocaleString('fa-IR')} تومان) با نرخ مصوب شرکت (${approvedVal.toLocaleString('fa-IR')} تومان) مطابقت کامل دارد و از رسمیت قطعی برخوردار است.`,
+                    description: `مبلغ پیشنهادی (${proposed.toLocaleString('fa-IR')} تومان) با نرخ مصوب رسمی شرکت (${approvedVal.toLocaleString('fa-IR')} تومان - بروزرسانی در ۲۴ ساعت گذشته) مطابقت کامل دارد.`,
                     icon: <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 };
             } else {
@@ -692,16 +755,50 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 return {
                     status: 'INVALID',
                     isCredible: false,
-                    title: 'قیمت پیشنهادی فاقد استناد قطعی است (کمتر از نرخ مصوب نمایندگی)',
+                    title: 'قیمت پیشنهادی فاقد استناد قطعی است (کمتر از نرخ مصوب ۲۴ ساعت اخیر)',
                     badgeText: 'زیر نرخ مصوب ⚠️',
                     badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800',
-                    description: `مبلغ پیشنهادی ${diff.toLocaleString('fa-IR')} تومان کمتر از نرخ مصوب نمایندگی (${approvedVal.toLocaleString('fa-IR')} تومان) است و ثبت آن منوط به تایید ویژه مدیریت است.`,
+                    description: `مبلغ پیشنهادی ${diff.toLocaleString('fa-IR')} تومان کمتر از نرخ مصوب معتبر نمایندگی (${approvedVal.toLocaleString('fa-IR')} تومان) است و ثبت آن منوط به تایید ویژه مدیریت است.`,
                     icon: <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                 };
             }
         }
 
-        // SCENARIO 2: NO APPROVED PRICE (استناد بر مبنای مراجع برخط بازار)
+        // SCENARIO 2: APPROVED PRICE EXPIRED (>24h) OR ABSENT -> RELY ON DIVAR AVERAGE PRICE
+        const isExpiredApproved = hasApproved && !isApprovedFresh;
+        const benchmarkPrice = divarAvg > 0 ? divarAvg : (lowestMarket > 0 ? lowestMarket : avgMarket);
+
+        if (benchmarkPrice > 0) {
+            const minAllowed = benchmarkPrice * 0.96;
+            if (proposed >= minAllowed) {
+                return {
+                    status: 'VALID',
+                    isCredible: true,
+                    title: isExpiredApproved
+                        ? 'قیمت پیشنهادی منطبق بر میانگین دیوار است (نرخ مصوب به دلیل گذشت بیش از ۲۴ ساعت منقضی است)'
+                        : 'قیمت پیشنهادی قابل استناد است (منطبق با میانگین قیمت آگهی‌های دیوار)',
+                    badgeText: isExpiredApproved ? 'مبنا: میانگین دیوار (مصوب منقضی)' : 'مبنا: میانگین دیوار 📱',
+                    badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-300 dark:border-sky-800',
+                    description: isExpiredApproved
+                        ? `به دلیل گذشت بیش از ۲۴ ساعت از آخرین بروزرسانی نرخ مصوب، میانگین قیمت دیوار (${benchmarkPrice.toLocaleString('fa-IR')} تومان) مبنا قرار گرفت و مبلغ پیشنهادی (${proposed.toLocaleString('fa-IR')} تومان) موجه است.`
+                        : `مبلغ پیشنهادی (${proposed.toLocaleString('fa-IR')} تومان) با میانگین روز دیوار (${benchmarkPrice.toLocaleString('fa-IR')} تومان) همخوانی دارد.`,
+                    icon: <ShieldCheck className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                };
+            } else {
+                const diff = Math.round(minAllowed - proposed);
+                return {
+                    status: 'INVALID',
+                    isCredible: false,
+                    title: 'قیمت پیشنهادی کمتر از میانگین قیمت دیوار است',
+                    badgeText: 'کمتر از میانگین دیوار 📉',
+                    badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800',
+                    description: `مبلغ وارد شده ${diff.toLocaleString('fa-IR')} تومان کمتر از حداقل مجاز میانگین دیوار (${Math.round(minAllowed).toLocaleString('fa-IR')} تومان) است.${isExpiredApproved ? ' (نرخ مصوب قبلی بیش از ۲۴ ساعت است بروز نشده و فاقد اعتبار است)' : ''}`,
+                    icon: <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                };
+            }
+        }
+
+        // SCENARIO 3: FALLBACK TO MARKET CHECKS
         if (!isSufficient) {
             return {
                 status: 'WARNING',
@@ -709,48 +806,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 title: 'قیمت پیشنهادی قابل استناد قطعی نیست (مراجع بازار ناکافی و فاقد نرخ مصوب)',
                 badgeText: 'غیرقابل استناد قطعی ⚠️',
                 badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800',
-                description: `برای این خودرو نرخ مصوب ثبت نشده و تعداد مراجع برخط (${sourceCount} مرجع) به حدنصاب ۳ مرجع نرسیده است. قیمت وارد شده پیش از تایید نیازمند استعلام تلفنی و تایید مدیریت است.`,
+                description: `برای این خودرو نرخ مصوب ۲۴ ساعت اخیر ثبت نشده و تعداد مراجع برخط (${sourceCount} مرجع) به حدنصاب ۳ مرجع نرسیده است. قیمت وارد شده پیش از تایید نیازمند استعلام تلفنی و تایید مدیریت است.`,
                 icon: <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            };
-        }
-
-        // If sources are sufficient:
-        if (isHavaleh && highestMarket > 0) {
-            const h2Min = highestMarket * 0.90;
-            if (proposed >= h2Min * 0.98) {
-                return {
-                    status: 'VALID',
-                    isCredible: true,
-                    title: 'قیمت پیشنهادی قابل استناد است (منطبق با فرمول کارشناسی حواله بازار)',
-                    badgeText: 'قابل استناد (حواله) 📈',
-                    badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800',
-                    description: `مبلغ پیشنهادی با توجه به سقف روز بازار (${highestMarket.toLocaleString('fa-IR')} تومان) در بازه مجاز ۹۰ الی ۹۷ درصد کارشناسی حواله قرار دارد.`,
-                    icon: <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                };
-            } else {
-                return {
-                    status: 'INVALID',
-                    isCredible: false,
-                    title: 'هشدار زیرفروشی حواله (کمتر از حداقل مجاز کارشناسی بازار)',
-                    badgeText: 'زیرفروشی حواله ⚠️',
-                    badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800',
-                    description: `مبلغ پیشنهادی از حداقل کارشناسی حواله (${Math.round(h2Min).toLocaleString('fa-IR')} تومان) پایین‌تر بوده و قابل استناد نیست.`,
-                    icon: <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                };
-            }
-        }
-
-        const lowestAllowed = (lowestMarket > 0 ? lowestMarket : avgMarket) * 0.98;
-        if (lowestAllowed > 0 && proposed < lowestAllowed) {
-            const diff = Math.round(lowestAllowed - proposed);
-            return {
-                status: 'INVALID',
-                isCredible: false,
-                title: 'غیرقابل استناد / هشدار زیرفروشی (کمتر از کف مراجع برخط بازار)',
-                badgeText: 'هشدار زیرفروشی 📉',
-                badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800',
-                description: `مبلغ وارد شده ${diff.toLocaleString('fa-IR')} تومان کمتر از کف مجاز مراجع برخط بازار (${Math.round(lowestAllowed).toLocaleString('fa-IR')} تومان) است.`,
-                icon: <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
             };
         }
 
@@ -869,6 +926,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         sellingPrice?: number; 
         shippingCost?: number; 
         proposedPrice?: number;
+        commissionRatePercent?: number;
         sellerType?: 'COMPANY_WAREHOUSE' | 'OTHER';
         sellerName?: string;
     }) => {
@@ -878,9 +936,12 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 : (partial.proposedPrice !== undefined ? partial.proposedPrice : (prev.sellingPrice || prev.proposedPrice || 0));
             const purchase = partial.purchasePrice !== undefined ? partial.purchasePrice : (prev.purchasePrice || 0);
             const shipping = partial.shippingCost !== undefined ? partial.shippingCost : (prev.shippingCost || 0);
+            const ratePercent = partial.commissionRatePercent !== undefined
+                ? partial.commissionRatePercent
+                : (prev.commissionRatePercent !== undefined ? prev.commissionRatePercent : 10);
 
             const netCommission = selling - purchase - shipping;
-            const totalCommissionBonus = netCommission > 0 ? Math.round(netCommission * 0.1) : 0;
+            const totalCommissionBonus = netCommission > 0 ? Math.round(netCommission * (ratePercent / 100)) : 0;
             const partnersCount = (prev.partners || []).length;
             const partnerCommissionShare = partnersCount > 0 && totalCommissionBonus > 0 
                 ? Math.round(totalCommissionBonus / partnersCount) 
@@ -893,6 +954,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 proposedPrice: selling,
                 purchasePrice: purchase,
                 shippingCost: shipping,
+                commissionRatePercent: ratePercent,
                 netCommission,
                 totalCommissionBonus,
                 partnerCommissionShare
@@ -918,7 +980,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
             };
             const updated = [...currentPartners, newPartner];
             const netComm = (prev.sellingPrice || prev.proposedPrice || 0) - (prev.purchasePrice || 0) - (prev.shippingCost || 0);
-            const bonus = netComm > 0 ? Math.round(netComm * 0.1) : 0;
+            const ratePercent = prev.commissionRatePercent !== undefined ? prev.commissionRatePercent : 10;
+            const bonus = netComm > 0 ? Math.round(netComm * (ratePercent / 100)) : 0;
             const share = updated.length > 0 && bonus > 0 ? Math.round(bonus / updated.length) : 0;
 
             return {
@@ -934,7 +997,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
         setFormData(prev => {
             const updated = (prev.partners || []).filter(p => p.name !== partnerName);
             const netComm = (prev.sellingPrice || prev.proposedPrice || 0) - (prev.purchasePrice || 0) - (prev.shippingCost || 0);
-            const bonus = netComm > 0 ? Math.round(netComm * 0.1) : 0;
+            const ratePercent = prev.commissionRatePercent !== undefined ? prev.commissionRatePercent : 10;
+            const bonus = netComm > 0 ? Math.round(netComm * (ratePercent / 100)) : 0;
             const share = updated.length > 0 && bonus > 0 ? Math.round(bonus / updated.length) : 0;
 
             return {
@@ -1224,10 +1288,11 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                 {editOrder ? 'ویرایش سفارش فروش خودرو' : 'ثبت سفارش فروش خودرو'}
                             </h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                گام {step} از ۴: {
+                                گام {step} از ۵: {
                                     step === 1 ? 'انتخاب خودرو از لیست' :
-                                    step === 2 ? 'انتخاب نوع فروش و شرایط' :
-                                    step === 3 ? 'قیمت‌گذاری هوشمند و پیشنهادی' : 'پیکربندی و مشخصات خریدار'
+                                    step === 2 ? 'نوع فروش و شرایط' :
+                                    step === 3 ? 'قیمت‌گذاری معامله و ارقام مالی' :
+                                    step === 4 ? 'همکاران مشارکت‌کننده در معامله' : 'اطلاعات فروشنده و خریدار و ثبت نهایی'
                                 }
                             </p>
                         </div>
@@ -1241,12 +1306,13 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                 </div>
 
                 {/* Stepper Progress Bar */}
-                <div className="px-6 py-3 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="px-4 sm:px-6 py-3 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between overflow-x-auto">
                     {[
                         { num: 1, title: 'انتخاب خودرو', icon: CarIcon },
                         { num: 2, title: 'نوع فروش و شرایط', icon: Layers },
                         { num: 3, title: 'قیمت‌گذاری معامله', icon: DollarSign },
-                        { num: 4, title: 'خریدار و ثبت نهایی', icon: UserIcon },
+                        { num: 4, title: 'همکاران معامله', icon: Users },
+                        { num: 5, title: 'طرفین و ثبت نهایی', icon: UserIcon },
                     ].map((s, idx) => {
                         const Icon = s.icon;
                         const isCompleted = step > s.num;
@@ -1259,7 +1325,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                         if (isCompleted) setStep(s.num);
                                     }}
                                     disabled={!isCompleted}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${
+                                    className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl transition-all whitespace-nowrap ${
                                         isCurrent 
                                             ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 font-black ring-1 ring-sky-500/30 shadow-sm'
                                             : isCompleted 
@@ -1267,7 +1333,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                 : 'text-slate-400 dark:text-slate-600 cursor-not-allowed font-medium'
                                     }`}
                                 >
-                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs ${
+                                    <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center text-[11px] sm:text-xs ${
                                         isCurrent 
                                             ? 'bg-sky-600 text-white font-black' 
                                             : isCompleted 
@@ -1276,10 +1342,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                     }`}>
                                         {isCompleted ? <Check className="w-3.5 h-3.5" /> : s.num}
                                     </div>
-                                    <span className="text-xs hidden sm:inline">{s.title}</span>
+                                    <span className="text-xs hidden md:inline">{s.title}</span>
                                 </button>
-                                {idx < 3 && (
-                                    <div className={`flex-1 h-0.5 mx-2 rounded-full transition-colors ${
+                                {idx < 4 && (
+                                    <div className={`flex-1 min-w-2 h-0.5 mx-1 sm:mx-2 rounded-full transition-colors ${
                                         step > idx + 1 ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'
                                     }`} />
                                 )}
@@ -2240,33 +2306,74 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                     </div>
                                                 )}
 
+                                                {/* Pricing Freshness & Rule Explanatory Banner */}
+                                                <div className="bg-amber-50/80 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200/80 dark:border-amber-800/60 text-xs flex items-start gap-2">
+                                                    <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                                    <div className="space-y-0.5">
+                                                        <span className="font-bold text-amber-900 dark:text-amber-200 block">
+                                                            قانون استناد به نرخ مصوب و میانگین دیوار:
+                                                        </span>
+                                                        <span className="text-[11px] text-amber-800/90 dark:text-amber-300/90 leading-relaxed block">
+                                                            نرخ مصوب تنها در صورتی معتبر و قابل استناد است که آخرین بروزرسانی آن حداکثر طی ۲۴ ساعت گذشته ثبت شده باشد؛ در غیر این صورت به صورت خودکار میانگین قیمت آگهی‌های دیوار ملاک قرار می‌گیرد.
+                                                        </span>
+                                                    </div>
+                                                </div>
+
                                                 {/* Fast Fill Buttons for Selling Price */}
-                                                <div className="flex items-center gap-1 flex-wrap pt-1">
-                                                    {activePriceVariant?.manualPrice && activePriceVariant.manualPrice.price_rial > 0 && (
+                                                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                                    {activePriceVariant?.manualPrice && activePriceVariant.manualPrice.price_rial > 0 && activePriceVariant.isApprovedFresh && (
                                                         <button
                                                             type="button"
                                                             onClick={() => updateFinancials({ sellingPrice: activePriceVariant.manualPrice!.price_rial, proposedPrice: activePriceVariant.manualPrice!.price_rial })}
-                                                            className="text-[10px] bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md font-bold transition-colors border border-indigo-200 dark:border-indigo-800"
+                                                            className="text-[10px] bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-lg font-bold transition-colors border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 cursor-pointer"
                                                         >
-                                                            نرخ مصوب
+                                                            <Check className="w-3 h-3" />
+                                                            <span>نرخ مصوب معتبر ({activePriceVariant.manualPrice.price_rial.toLocaleString('fa-IR')} ت)</span>
                                                         </button>
                                                     )}
+
+                                                    {activePriceVariant?.manualPrice && activePriceVariant.manualPrice.price_rial > 0 && !activePriceVariant.isApprovedFresh && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateFinancials({ sellingPrice: activePriceVariant.manualPrice!.price_rial, proposedPrice: activePriceVariant.manualPrice!.price_rial })}
+                                                            className="text-[10px] bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-lg font-bold transition-colors border border-amber-300 dark:border-amber-800 flex items-center gap-1 cursor-pointer"
+                                                            title="آخرین بروزرسانی بیش از ۲۴ ساعت قبل بوده و منقضی است"
+                                                        >
+                                                            <span>نرخ مصوب قدیمی (منقضی &gt;۲۴h)</span>
+                                                        </button>
+                                                    )}
+
+                                                    {activePriceVariant?.divarAveragePrice && activePriceVariant.divarAveragePrice > 0 ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateFinancials({ sellingPrice: activePriceVariant.divarAveragePrice, proposedPrice: activePriceVariant.divarAveragePrice })}
+                                                            className={`text-[10px] px-2.5 py-1 rounded-lg font-black transition-all flex items-center gap-1 cursor-pointer ${
+                                                                !activePriceVariant.isApprovedFresh
+                                                                    ? 'bg-sky-600 text-white shadow-xs hover:bg-sky-700'
+                                                                    : 'bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/60 dark:hover:bg-sky-900 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
+                                                            }`}
+                                                        >
+                                                            <span>📱 میانگین قیمت دیوار: {activePriceVariant.divarAveragePrice.toLocaleString('fa-IR')} ت {!activePriceVariant.isApprovedFresh ? '(مبنای خودکار)' : ''}</span>
+                                                        </button>
+                                                    ) : null}
+
                                                     {selectedConditionObj?.initial_deposit ? (
                                                         <button
                                                             type="button"
                                                             onClick={() => updateFinancials({ sellingPrice: selectedConditionObj.initial_deposit, proposedPrice: selectedConditionObj.initial_deposit })}
-                                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-bold"
+                                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg font-bold cursor-pointer"
                                                         >
-                                                            قیمت بخشنامه
+                                                            قیمت بخشنامه: {selectedConditionObj.initial_deposit.toLocaleString('fa-IR')} ت
                                                         </button>
                                                     ) : null}
+
                                                     {activePriceVariant?.averageMarketPrice ? (
                                                         <button
                                                             type="button"
                                                             onClick={() => updateFinancials({ sellingPrice: activePriceVariant.averageMarketPrice, proposedPrice: activePriceVariant.averageMarketPrice })}
-                                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-bold"
+                                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg font-bold cursor-pointer"
                                                         >
-                                                            میانگین بازار
+                                                            میانگین بازار: {activePriceVariant.averageMarketPrice.toLocaleString('fa-IR')} ت
                                                         </button>
                                                     ) : null}
                                                 </div>
@@ -2338,7 +2445,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                     </div>
 
                                     {/* ------------------------------------------------------------- */}
-                                    {/* STEP 3.3: LIVE COMMISSION & 10% BONUS BREAKDOWN CARD          */}
+                                    {/* STEP 3.3: LIVE COMMISSION & EDITABLE BONUS CALCULATION CARD   */}
                                     {/* ------------------------------------------------------------- */}
                                     <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl border border-indigo-800 shadow-xl space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-800/60 pb-3">
@@ -2348,17 +2455,17 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                 </div>
                                                 <div>
                                                     <h4 className="font-black text-sm text-white flex items-center gap-2">
-                                                        محاسبه کمیسیون خالص و پورسانت ۱۰ درصدی معامله
+                                                        محاسبه کمیسیون خالص و پورسانت معامله
                                                     </h4>
                                                     <span className="text-[10px] text-indigo-300">
                                                         فرمول: (قیمت فروش) - (قیمت خرید) - (هزینه حمل) = کمیسیون خالص
                                                     </span>
                                                 </div>
                                             </div>
-                                            <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-xl font-bold flex items-center gap-1">
+                                            <div className="flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-xl text-xs font-bold">
                                                 <Percent className="w-3.5 h-3.5" />
-                                                پورسانت ۱۰٪ از کمیسیون
-                                            </span>
+                                                <span>درصد پورسانت معامله: {formData.commissionRatePercent || 10}٪</span>
+                                            </div>
                                         </div>
 
                                         {/* Step-by-Step Financial Equation Cards */}
@@ -2396,7 +2503,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                     ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' 
                                                     : 'bg-rose-950/60 border-rose-500/40 text-rose-300'
                                             }`}>
-                                                <span className="block text-[11px] mb-1 font-bold">کمیسیون خالص:</span>
+                                                <span className="block text-[11px] mb-1 font-bold">کمیسیون خالص معامله:</span>
                                                 <span className="font-mono font-black text-lg">
                                                     {(formData.netCommission || 0).toLocaleString('fa-IR')}
                                                 </span>
@@ -2404,73 +2511,146 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                             </div>
                                         </div>
 
-                                        {/* Commission Bonus (10%) and Partner Division Card */}
-                                        <div className="bg-indigo-900/40 border border-indigo-700/60 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                                            <div className="space-y-1 text-right w-full md:w-auto">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-indigo-300 font-bold">مبلغ پورسانت کل (۱۰ درصد کمیسیون):</span>
-                                                    <span className="font-mono font-black text-xl text-yellow-300">
-                                                        {(formData.totalCommissionBonus || 0).toLocaleString('fa-IR')} تومان
+                                        {/* Commission Rate (%) Input & Live Total Bonus */}
+                                        <div className="bg-indigo-900/40 border border-indigo-700/60 rounded-xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                                            {/* Commission Rate (%) Setting */}
+                                            <div className="space-y-2 flex-1">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
+                                                        <Percent className="w-3.5 h-3.5 text-yellow-400" />
+                                                        <span>درصد پورسانت معامله (پیش‌فرض ۱۰٪ و قابل ویرایش):</span>
+                                                    </label>
+                                                    <span className="text-[10px] text-indigo-300 font-bold">
+                                                        قابل تغییر
                                                     </span>
                                                 </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    <div className="relative w-32">
+                                                        <input 
+                                                            type="number" 
+                                                            min="0"
+                                                            max="100"
+                                                            step="0.5"
+                                                            value={formData.commissionRatePercent !== undefined ? formData.commissionRatePercent : 10}
+                                                            onChange={e => updateFinancials({ commissionRatePercent: Number(e.target.value) })}
+                                                            className="w-full px-3 py-2 bg-slate-900 border border-indigo-500 rounded-xl text-yellow-300 font-mono text-center text-lg font-black outline-none focus:ring-2 focus:ring-yellow-400"
+                                                        />
+                                                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-300 font-bold text-xs">
+                                                            ٪
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Quick Percentage Presets */}
+                                                    <div className="flex items-center gap-1 flex-wrap">
+                                                        {[5, 10, 15, 20, 25].map(pct => {
+                                                            const isSelected = (formData.commissionRatePercent || 10) === pct;
+                                                            return (
+                                                                <button
+                                                                    key={pct}
+                                                                    type="button"
+                                                                    onClick={() => updateFinancials({ commissionRatePercent: pct })}
+                                                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                                                        isSelected
+                                                                            ? 'bg-yellow-400 text-slate-950 font-black shadow-sm'
+                                                                            : 'bg-white/10 hover:bg-white/20 text-indigo-200'
+                                                                    }`}
+                                                                >
+                                                                    {pct}٪ {pct === 10 ? '(پیش‌فرض)' : ''}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Calculated Total Bonus */}
+                                            <div className="bg-slate-950/70 border border-indigo-500/50 p-3.5 rounded-xl text-right min-w-[240px] space-y-1">
+                                                <span className="text-[11px] text-slate-400 block">
+                                                    مبلغ پورسانت کل ({formData.commissionRatePercent || 10}٪ از کمیسیون خالص):
+                                                </span>
+                                                <div className="font-mono font-black text-xl text-yellow-300">
+                                                    {(formData.totalCommissionBonus || 0).toLocaleString('fa-IR')} <span className="text-xs font-sans text-yellow-400">تومان</span>
+                                                </div>
                                                 {formData.totalCommissionBonus > 0 && (
-                                                    <span className="text-[11px] text-indigo-200 block">
+                                                    <span className="text-[10px] text-slate-300 block">
                                                         به حروف: {numberToPersianWords(formData.totalCommissionBonus)} تومان
                                                     </span>
                                                 )}
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
-                                            <div className="bg-white/10 px-4 py-2.5 rounded-xl border border-white/15 text-center w-full md:w-auto">
-                                                <span className="text-[11px] text-slate-300 block mb-0.5">
-                                                    سهم پورسانت هر همکار (تقسیم بین {(formData.partners || []).length || 1} نفر):
+                            {/* ------------------------------------------------------------- */}
+                            {/* STEP 4: COLLABORATING PARTNERS (همکاران مشارکت‌کننده در معامله) */}
+                            {/* ------------------------------------------------------------- */}
+                            {step === 4 && (
+                                <div className="space-y-6 animate-fade-in">
+                                    {/* Step 4 Top Banner & Financials from Step 3 */}
+                                    <div className="bg-gradient-to-r from-violet-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl border border-violet-800 shadow-md flex flex-wrap justify-between items-center gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 rounded-2xl bg-violet-600 text-white flex items-center justify-center font-black shadow-md shadow-violet-500/30">
+                                                <Users className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-base text-white flex items-center gap-2">
+                                                    همکاران مشارکت‌کننده در معامله
+                                                    <span className="text-[10px] bg-violet-500/30 text-violet-200 border border-violet-400/30 px-2.5 py-0.5 rounded-full font-bold">
+                                                        گام ۴
+                                                    </span>
+                                                </h4>
+                                                <span className="text-xs text-violet-200">
+                                                    تعیین پرسنل و کارشناسان همکار در سمت فروش یا خرید خودرو (حداکثر ۴ همکار)
                                                 </span>
-                                                <span className="font-mono font-black text-lg text-emerald-300">
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-xl border border-white/15">
+                                            <div className="text-right">
+                                                <span className="text-[10px] text-slate-300 block">پورسانت کل معامله ({formData.commissionRatePercent || 10}٪):</span>
+                                                <span className="font-mono font-black text-yellow-300 text-base">
+                                                    {(formData.totalCommissionBonus || 0).toLocaleString('fa-IR')} تومان
+                                                </span>
+                                            </div>
+                                            <div className="h-8 w-px bg-white/20"></div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] text-slate-300 block">سهم هر همکار (تقسیم بر {(formData.partners || []).length || 1}):</span>
+                                                <span className="font-mono font-black text-emerald-300 text-base">
                                                     {(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')} تومان
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* ------------------------------------------------------------- */}
-                                    {/* STEP 3.4: COLLABORATING PARTNERS (MAX 4 - SALE / BUY SIDE)    */}
-                                    {/* ------------------------------------------------------------- */}
+                                    {/* Rule & Guidelines Banner */}
+                                    <div className="bg-violet-50/80 dark:bg-violet-950/30 p-4 rounded-2xl border border-violet-200 dark:border-violet-900/40 text-xs text-violet-950 dark:text-violet-200 flex items-start gap-3">
+                                        <Info className="w-5 h-5 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
+                                        <div className="space-y-1 leading-relaxed">
+                                            <p className="font-bold">قوانین و تسهیم پورسانت همکاران معامله:</p>
+                                            <p className="text-slate-600 dark:text-slate-300">
+                                                در هر معامله حداکثر ۴ همکار می‌توانند ثبت شوند (سمت فروش و سمت خرید). کل مبلغ پورسانت معامله ({formData.totalCommissionBonus?.toLocaleString('fa-IR') || 0} تومان) به نسبت مساوی بین همکاران منتخب تقسیم می‌گردد.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Current Selected Partners List */}
                                     <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center font-black">
-                                                    <Users className="w-4 h-4" />
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                                                        همکاران مشارکت‌کننده در معامله
-                                                        <span className="text-[10px] bg-violet-100 dark:bg-violet-900/60 text-violet-800 dark:text-violet-200 px-2 py-0.5 rounded-full font-bold">
-                                                            حداکثر ۴ همکار
-                                                        </span>
-                                                    </h4>
-                                                    <span className="text-[11px] text-slate-400">
-                                                        همکاری در سمت فروش یا خرید خودرو - پورسانت ۱۰٪ معامله بین این افراد تقسیم می‌شود
-                                                    </span>
-                                                </div>
+                                                <span className="font-black text-sm text-slate-900 dark:text-white">
+                                                    لیست همکاران اختصاص‌یافته به معامله
+                                                </span>
+                                                <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-lg font-mono font-bold">
+                                                    {(formData.partners || []).length} / ۴
+                                                </span>
                                             </div>
-
-                                            <span className={`text-xs px-3 py-1 rounded-xl font-bold transition-all ${
-                                                (formData.partners || []).length === 4
-                                                    ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 font-black'
-                                                    : 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300'
-                                            }`}>
-                                                {(formData.partners || []).length} از ۴ همکار انتخاب شده
+                                            <span className="text-xs text-slate-400">
+                                                برای تغییر سمت همکاری، روی دکمه سمت هر همکار کلیک نمایید
                                             </span>
                                         </div>
 
-                                        {/* Explanation Note according to user prompt */}
-                                        <div className="bg-violet-50/70 dark:bg-violet-950/30 p-3 rounded-xl border border-violet-100 dark:border-violet-900/40 text-xs text-violet-900 dark:text-violet-200 flex items-start gap-2">
-                                            <Info className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
-                                            <span>
-                                                یک معامله می‌تواند حداکثر ۴ همکار داشته باشد (مثلاً ۱ نفر در سمت فروش و ۳ نفر در سمت خرید، یا ترکیبات دیگر). پورسانت ۸ میلیون تومانی در این مثال، بین افراد همکار تقسیم می‌شود.
-                                            </span>
-                                        </div>
-
-                                        {/* Selected Partners Display Cards */}
                                         {(formData.partners || []).length > 0 ? (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 {(formData.partners || []).map((partner, idx) => {
@@ -2478,14 +2658,14 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                     return (
                                                         <div 
                                                             key={partner.name}
-                                                            className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                                                            className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 ${
                                                                 isSaleSide
-                                                                    ? 'bg-sky-50/60 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800'
-                                                                    : 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                                                                    ? 'bg-sky-50/70 dark:bg-sky-950/30 border-sky-300 dark:border-sky-800'
+                                                                    : 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
                                                             }`}
                                                         >
-                                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-xs ${
                                                                     isSaleSide 
                                                                         ? 'bg-sky-600 text-white' 
                                                                         : 'bg-emerald-600 text-white'
@@ -2493,27 +2673,27 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                                     {idx + 1}
                                                                 </div>
                                                                 <div className="min-w-0">
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <span className="font-bold text-xs text-slate-800 dark:text-white truncate">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-black text-sm text-slate-800 dark:text-white truncate">
                                                                             {partner.name}
                                                                         </span>
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => handleTogglePartnerSide(partner.name)}
-                                                                            className={`text-[10px] px-2 py-0.5 rounded-md font-black flex items-center gap-1 transition-all ${
+                                                                            className={`text-[10px] px-2.5 py-1 rounded-lg font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs ${
                                                                                 isSaleSide
-                                                                                    ? 'bg-sky-100 dark:bg-sky-900 text-sky-800 dark:text-sky-200 hover:bg-sky-200'
-                                                                                    : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200'
+                                                                                    ? 'bg-sky-600 text-white hover:bg-sky-700'
+                                                                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
                                                                             }`}
-                                                                            title="کلیک برای تغییر سمت همکاری"
+                                                                            title="کلیک برای تغییر سمت همکاری بین خرید و فروش"
                                                                         >
                                                                             <ArrowRightLeft className="w-2.5 h-2.5" />
                                                                             <span>سمت {partner.side}</span>
                                                                         </button>
                                                                     </div>
-                                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                                        <span className="text-[10px] text-slate-400">
-                                                                            سهم پورسانت: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')}</strong> ت
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                                                                            سهم پورسانت: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')}</strong> تومان
                                                                         </span>
                                                                         {partner.role && (
                                                                             <span className="text-[10px] text-slate-400 font-normal">({partner.role})</span>
@@ -2526,8 +2706,8 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleRemovePartner(partner.name)}
-                                                                    className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                                                                    title="حذف همکار"
+                                                                    className="p-2 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                                                                    title="حذف همکار از معامله"
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </button>
@@ -2537,17 +2717,23 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                 })}
                                             </div>
                                         ) : (
-                                            <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-center text-xs text-slate-400">
-                                                هنوز همکار مشارکت‌کننده‌ای به این سفارش اختصاص نیافته است. از بخش زیر همکاران سمت فروش یا خرید را انتخاب نمایید.
+                                            <div className="p-8 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center space-y-2">
+                                                <Users className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                                                    هنوز همکار مشارکت‌کننده‌ای به این سفارش اختصاص نیافته است.
+                                                </p>
+                                                <p className="text-[11px] text-slate-400">
+                                                    می‌توانید از فرم زیر همکاران سمت فروش یا سمت خرید را به سادگی اضافه کنید. در صورت عدم وجود همکار، کل پورسانت برای ثبت‌کننده لحاظ می‌شود.
+                                                </p>
                                             </div>
                                         )}
 
-                                        {/* Add Partner Control Form */}
+                                        {/* Add Partner Form */}
                                         {(formData.partners || []).length < 4 ? (
-                                            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                                            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
                                                 <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                                                     <span>افزودن همکار جدید به معامله (انتخاب از لیست پرسنل و کاربران دارای دسترسی):</span>
-                                                    <span className="text-[11px] text-violet-600 dark:text-violet-400">
+                                                    <span className="text-[11px] text-violet-600 dark:text-violet-400 font-bold">
                                                         {4 - (formData.partners || []).length} جایگاه خالی
                                                     </span>
                                                 </div>
@@ -2558,7 +2744,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                         <select
                                                             value={newPartnerStaffName}
                                                             onChange={e => setNewPartnerStaffName(e.target.value)}
-                                                            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-bold outline-none focus:ring-2 focus:ring-violet-500"
+                                                            className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-bold outline-none focus:ring-2 focus:ring-violet-500"
                                                         >
                                                             <option value="">-- انتخاب نام همکار از لیست کاربران --</option>
                                                             {filteredStaffUsers
@@ -2577,10 +2763,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setNewPartnerSide('فروش')}
-                                                            className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all ${
+                                                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
                                                                 newPartnerSide === 'فروش'
                                                                     ? 'bg-sky-600 text-white shadow-sm'
-                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                                                             }`}
                                                         >
                                                             سمت فروش
@@ -2588,10 +2774,10 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setNewPartnerSide('خرید')}
-                                                            className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all ${
+                                                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
                                                                 newPartnerSide === 'خرید'
                                                                     ? 'bg-emerald-600 text-white shadow-sm'
-                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                                                             }`}
                                                         >
                                                             سمت خرید
@@ -2609,7 +2795,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                                     setNewPartnerStaffName('');
                                                                 }
                                                             }}
-                                                            className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                                            className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                                                         >
                                                             <Plus className="w-4 h-4" />
                                                             <span>افزودن همکار</span>
@@ -2620,19 +2806,19 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                 {/* Fast Staff Chips */}
                                                 <div className="pt-1">
                                                     <span className="text-[10px] text-slate-400 block mb-1.5">انتخاب سریع با یک کلیک:</span>
-                                                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                                                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                                                         {filteredStaffUsers
                                                             .filter(u => !(formData.partners || []).some(p => p.name === (u.fullName || u.username)))
-                                                            .slice(0, 10)
+                                                            .slice(0, 12)
                                                             .map(u => {
                                                                 const name = u.fullName || u.username;
                                                                 return (
                                                                     <div key={u.id} className="inline-flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 text-[10px]">
-                                                                        <span className="px-1.5 font-bold text-slate-700 dark:text-slate-300">{name}</span>
+                                                                        <span className="px-2 font-bold text-slate-700 dark:text-slate-300">{name}</span>
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => handleAddPartner(name, 'فروش')}
-                                                                            className="px-1.5 py-0.5 bg-sky-100 hover:bg-sky-200 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 rounded font-bold transition-colors ml-0.5"
+                                                                            className="px-1.5 py-0.5 bg-sky-100 hover:bg-sky-200 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 rounded font-bold transition-colors ml-0.5 cursor-pointer"
                                                                             title="افزودن در سمت فروش"
                                                                         >
                                                                             + فروش
@@ -2640,7 +2826,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => handleAddPartner(name, 'خرید')}
-                                                                            className="px-1.5 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded font-bold transition-colors"
+                                                                            className="px-1.5 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded font-bold transition-colors cursor-pointer"
                                                                             title="افزودن در سمت خرید"
                                                                         >
                                                                             + خرید
@@ -2663,15 +2849,15 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                             )}
 
                             {/* ------------------------------------------------------------- */}
-                            {/* STEP 4: CONFIGURATION (COLOR & NOTES) & BUYER DETAILS (CRM)   */}
+                            {/* STEP 5: SELLER & BUYER INFORMATION AND FINAL SUBMISSION       */}
                             {/* ------------------------------------------------------------- */}
-                            {step === 4 && (
+                            {step === 5 && (
                                 <div className="space-y-6 animate-fade-in">
                                     
-                                    {/* Order Summary Snapshot */}
-                                    <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap justify-between items-center gap-3 text-xs">
+                                    {/* Order & Financial Summary Snapshot */}
+                                    <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap justify-between items-center gap-4 text-xs">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black">
+                                            <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black shadow-sm">
                                                 <CarIcon className="w-5 h-5" />
                                             </div>
                                             <div>
@@ -2683,11 +2869,32 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="text-left">
-                                            <span className="text-slate-400 block text-[11px]">قیمت معامله پیشنهادی:</span>
-                                            <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-base">
-                                                {(formData.proposedPrice || 0).toLocaleString('fa-IR')} تومان
-                                            </span>
+
+                                        <div className="flex items-center gap-4 flex-wrap">
+                                            <div className="text-right">
+                                                <span className="text-slate-400 block text-[10px]">قیمت فروش:</span>
+                                                <span className="font-mono font-black text-slate-800 dark:text-white text-sm">
+                                                    {(formData.proposedPrice || 0).toLocaleString('fa-IR')} ت
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-slate-400 block text-[10px]">کمیسیون خالص:</span>
+                                                <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                                                    {(formData.netCommission || 0).toLocaleString('fa-IR')} ت
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-slate-400 block text-[10px]">پورسانت ({formData.commissionRatePercent || 10}٪):</span>
+                                                <span className="font-mono font-black text-yellow-600 dark:text-yellow-400 text-sm">
+                                                    {(formData.totalCommissionBonus || 0).toLocaleString('fa-IR')} ت
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-slate-400 block text-[10px]">تعداد همکاران:</span>
+                                                <span className="font-bold text-violet-600 dark:text-violet-400 text-xs">
+                                                    {(formData.partners || []).length} نفر
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -2768,53 +2975,6 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                                 ))}
                                             </div>
                                         </div>
-                                    </div>
-
-                                    {/* Collaborating Partners Summary in Step 4 */}
-                                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-2.5">
-                                            <h4 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
-                                                <Users className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                                                <span>همکاران مشارکت‌کننده در معامله (سمت فروش و خرید)</span>
-                                            </h4>
-                                            <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-                                                {(formData.partners || []).length} از ۴ همکار
-                                            </span>
-                                        </div>
-
-                                        {(formData.partners || []).length > 0 ? (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                {(formData.partners || []).map((partner) => {
-                                                    const isSaleSide = partner.side === 'فروش';
-                                                    return (
-                                                        <div 
-                                                            key={partner.name}
-                                                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs ${
-                                                                isSaleSide
-                                                                    ? 'bg-sky-50/50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800 text-sky-900 dark:text-sky-200'
-                                                                    : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-black">{partner.name}</span>
-                                                                <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
-                                                                    isSaleSide ? 'bg-sky-200 dark:bg-sky-800 text-sky-900 dark:text-sky-100' : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100'
-                                                                }`}>
-                                                                    سمت {partner.side}
-                                                                </span>
-                                                            </div>
-                                                            <span className="font-mono font-bold text-slate-500 dark:text-slate-400 text-[11px]">
-                                                                پورسانت: {(formData.partnerCommissionShare || 0).toLocaleString('fa-IR')} ت
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <div className="p-2.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl text-center text-xs text-slate-400">
-                                                بدون همکار مشارکت‌کننده (می‌توانید در گام قبل همکاران را مشخص نمایید)
-                                            </div>
-                                        )}
                                     </div>
 
                                     {/* Buyer Details Form & CRM Auto-fill */}
@@ -2993,6 +3153,118 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Seller Details Form (فقط در صورتی که مالک خودرو فردی به غیر از انبار باشد) */}
+                                    {formData.sellerType !== 'COMPANY_WAREHOUSE' && (
+                                        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/80 shadow-xs space-y-4 animate-fade-in">
+                                            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2.5">
+                                                <h4 className="font-black text-sm text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                                                    <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                                    <span>مشخصات و اطلاعات فروشنده / مالک خودرو (به غیر از انبار شرکت)</span>
+                                                </h4>
+                                                <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950 px-2.5 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                                                    مالک غیر انبار
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                                                <div>
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        نام و نام خانوادگی فروشنده / نام نمایشگاه مالک *
+                                                    </label>
+                                                    <input 
+                                                        type="text" 
+                                                        required={formData.sellerType !== 'COMPANY_WAREHOUSE'}
+                                                        className="w-full px-4 py-2.5 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-bold" 
+                                                        value={formData.sellerName} 
+                                                        onChange={e => setFormData({...formData, sellerName: e.target.value})} 
+                                                        placeholder="مثلاً: آقای بهرامی، نمایشگاه الماس..."
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        شماره تلفن همراه فروشنده
+                                                    </label>
+                                                    <input 
+                                                        type="tel" 
+                                                        dir="ltr"
+                                                        className="w-full px-4 py-2.5 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-mono" 
+                                                        value={formData.sellerPhone || ''} 
+                                                        onChange={e => setFormData({...formData, sellerPhone: e.target.value})} 
+                                                        placeholder="09170000000"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        کد ملی / شناسه ملی فروشنده
+                                                    </label>
+                                                    <input 
+                                                        type="text" 
+                                                        dir="ltr"
+                                                        className="w-full px-4 py-2.5 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-mono" 
+                                                        value={formData.sellerNationalId || ''} 
+                                                        onChange={e => setFormData({...formData, sellerNationalId: e.target.value})} 
+                                                        placeholder="10 رقمی"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        شماره شبا / کارت بانکی جهت تسویه
+                                                    </label>
+                                                    <input 
+                                                        type="text" 
+                                                        dir="ltr"
+                                                        className="w-full px-4 py-2.5 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-mono" 
+                                                        value={formData.sellerSheba || ''} 
+                                                        onChange={e => setFormData({...formData, sellerSheba: e.target.value})} 
+                                                        placeholder="IR000000000000000000000000"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        شهر فروشنده
+                                                    </label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full px-4 py-2.5 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
+                                                        value={formData.sellerCity || ''} 
+                                                        onChange={e => setFormData({...formData, sellerCity: e.target.value})} 
+                                                        placeholder="مثلاً: شیراز، تهران..."
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        توضیحات و توافقات اختصاصی فروشنده
+                                                    </label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full px-4 py-2.5 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
+                                                        value={formData.sellerNotes || ''} 
+                                                        onChange={e => setFormData({...formData, sellerNotes: e.target.value})} 
+                                                        placeholder="مثلاً: سند امانی، تسویه نقدی پس از تعویض پلاک..."
+                                                    />
+                                                </div>
+
+                                                <div className="sm:col-span-2">
+                                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                                        آدرس کامل پستی فروشنده
+                                                    </label>
+                                                    <textarea 
+                                                        rows={2} 
+                                                        className="w-full px-4 py-2 border rounded-xl dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-xs" 
+                                                        value={formData.sellerAddress || ''} 
+                                                        onChange={e => setFormData({...formData, sellerAddress: e.target.value})} 
+                                                        placeholder="استان، شهر، خیابان، پلاک..."
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -3011,7 +3283,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                     </button>
 
                     <div className="flex items-center gap-2.5">
-                        {step < 4 ? (
+                        {step < 5 ? (
                             <button 
                                 type="button"
                                 disabled={
@@ -3021,7 +3293,7 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                     (step === 3 && (!formData.proposedPrice || formData.proposedPrice <= 0))
                                 } 
                                 onClick={handleNext} 
-                                className="px-7 py-2.5 bg-sky-600 text-white text-xs font-black rounded-xl hover:bg-sky-700 disabled:opacity-40 shadow-md shadow-sky-500/20 transition-all flex items-center gap-1.5"
+                                className="px-7 py-2.5 bg-sky-600 text-white text-xs font-black rounded-xl hover:bg-sky-700 disabled:opacity-40 shadow-md shadow-sky-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
                             >
                                 <span>مرحله بعد</span>
                                 <ArrowLeft className="w-4 h-4" />
@@ -3032,15 +3304,15 @@ const CarOrderModal: React.FC<CarOrderModalProps> = ({
                                     type="button"
                                     onClick={handleSaveAsDraft}
                                     disabled={isSubmitting}
-                                    className="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
+                                    className="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-all disabled:opacity-50 cursor-pointer"
                                 >
                                     {isSubmitting ? 'در حال ثبت...' : 'ذخیره در پیش‌نویس'}
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={handleFinalSubmit} 
-                                    disabled={!formData.buyerName || !formData.buyerPhone || isSubmitting}
-                                    className="px-7 py-2.5 bg-emerald-600 text-white text-xs font-black rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 disabled:opacity-40 transition-all flex items-center gap-1.5"
+                                    disabled={!formData.buyerName || !formData.buyerPhone || (formData.sellerType !== 'COMPANY_WAREHOUSE' && !formData.sellerName) || isSubmitting}
+                                    className="px-7 py-2.5 bg-emerald-600 text-white text-xs font-black rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer"
                                 >
                                     {isSubmitting ? (
                                         <>
