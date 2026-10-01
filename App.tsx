@@ -140,7 +140,7 @@ const App: React.FC = () => {
         sales: true,
         crm: true,
         'advertising-group': false,
-        ops: true,
+        ops: false,
         stats: false,
         hr: false,
         system: false,
