@@ -416,6 +416,25 @@ export interface CollaborationCar {
 
 // --- Access Control Types ---
 
+// --- Storage Center (انبار اداری و مصرفی) Types ---
+export interface StorageItem {
+    id: string | number;
+    name: string;                // نام کالا (مثلاً چای سیاه دبش، لیوان کاغذی، خودکار آبی، مایع دستشویی و...)
+    category: string;            // دسته بندی: لوازم تحریر | شوینده و سلولوزی | ظروف یکبار مصرف | قهوه، چای و دمنوش | مواد غذایی | سایر مصرفی اداری
+    quantity: number;            // موجودی فعلی
+    unit: string;                // واحد: بسته، کارتن، عدد، کیلوگرم، قوطی، لیتر، پاکت
+    minStock: number;            // حداقل موجودی هشدار
+    location: string;            // محل نگهداری: قفسه انبار اداری | آبدارخانه | اتاق مدیران | بایگانی
+    unitPrice?: number;          // قیمت واحد (تومان)
+    totalValue?: number;         // ارزش کل
+    supplier?: string;           // تامین کننده / برند
+    lastRestockDate?: string;    // آخرین تاریخ ورود به انبار
+    description?: string;        // توضیحات و مشخصات
+    createdAt?: string;
+    updatedAt?: string;
+    [key: string]: any;
+}
+
 export type AppModule = 
     | 'users' 
     | 'conditions' 
@@ -444,7 +463,8 @@ export type AppModule =
     | 'poll'
     | 'access-control'
     | 'collaboration'
-    | 'collaboration-cars';
+    | 'collaboration-cars'
+    | 'storage-center';
 
 export type ActionType = 'view' | 'add' | 'edit' | 'delete';
 

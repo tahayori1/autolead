@@ -3109,6 +3109,63 @@ export const deleteCollabCar = async (id: string | number): Promise<void> => {
     return handleResponse(response);
 };
 
+// --- Storage Center Services (انبار اداری و مصرفی) ---
+export const STORAGE_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/storage-center';
+
+export const getStorageItems = async (): Promise<StorageItem[]> => {
+    try {
+        const response = await fetch(STORAGE_WEBHOOK_URL, {
+            headers: getAuthHeaders()
+        });
+        const data = await handleResponse(response);
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && Array.isArray(data.items)) return data.items;
+        return [];
+    } catch (e) {
+        return [];
+    }
+};
+
+export const createStorageItem = async (payload: Omit<StorageItem, 'id'>): Promise<StorageItem> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify(payload)
+    });
+    return handleResponse(response);
+};
+
+export const updateStorageItem = async (id: string | number, payload: Partial<StorageItem>): Promise<StorageItem> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id, ...payload })
+    });
+    return handleResponse(response);
+};
+
+export const deleteStorageItem = async (id: string | number): Promise<void> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id })
+    });
+    return handleResponse(response);
+};
+
 // --- Attendance / Timesheet Services ---
 export * from './timesheetService';
 
