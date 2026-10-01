@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { StorageItem } from '../types';
-import { getStorageItems, createStorageItem } from '../services/api';
+import { getStorageItems, createStorageItem, updateStorageItem, deleteStorageItem } from '../services/api';
 import Spinner from '../components/Spinner';
-import { Boxes, Plus, Search, AlertTriangle, ArrowUpRight, ArrowDownLeft, Package, CheckCircle2, RefreshCw, Layers, BookOpen } from 'lucide-react';
+import { Boxes, Plus, Search, Edit3, Trash2, AlertTriangle, ArrowUpRight, ArrowDownLeft, Package, CheckCircle2, RefreshCw, Layers, History, BookOpen, Tag } from 'lucide-react';
 
 const CATEGORIES = [
     'همه دسته‌ها',
@@ -82,7 +82,7 @@ export const StorageCenterPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    // Modal state for "افزودن تبادل" (Append-only Ledger entry)
+    // Modal state for "افزودن تبادل"
     const [isExchangeModalOpen, setIsExchangeModalOpen] = useState<boolean>(false);
     const [exchangeData, setExchangeData] = useState({
         itemId: 'NEW',
@@ -98,6 +98,21 @@ export const StorageCenterPage: React.FC = () => {
         newItemPrice: 0,
         newItemSupplier: '',
         newItemDescription: ''
+    });
+
+    // Modal for editing catalog item
+    const [isCatalogModalOpen, setIsCatalogModalOpen] = useState<boolean>(false);
+    const [editingItem, setEditingItem] = useState<StorageItem | null>(null);
+    const [catalogFormData, setCatalogFormData] = useState({
+        name: '',
+        category: 'شوینده و سلولوزی',
+        quantity: 0,
+        unit: 'عدد',
+        minStock: 5,
+        location: 'انبار مرکزی',
+        unitPrice: 0,
+        supplier: '',
+        description: ''
     });
 
     const loadItems = async () => {
@@ -157,6 +172,7 @@ export const StorageCenterPage: React.FC = () => {
                     alert('لطفاً نام کالای جدید را وارد کنید.');
                     return;
                 }
+                // Send all fields to server for creation
                 const fullPayload = {
                     name: exchangeData.newItemName,
                     category: exchangeData.newItemCategory,
@@ -187,6 +203,7 @@ export const StorageCenterPage: React.FC = () => {
                 const delta = exchangeData.type === 'IN' ? Number(exchangeData.quantity) : -Number(exchangeData.quantity);
                 const newQty = Math.max(0, currentQty + delta);
 
+                // Send all fields (name, category, unit, minStock, location, unitPrice, supplier, description, quantity, transaction details) to server for update
                 const fullUpdatePayload = {
                     name: targetItem.name,
                     category: targetItem.category,
@@ -205,9 +222,8 @@ export const StorageCenterPage: React.FC = () => {
                     transactionReceiverOrSource: exchangeData.receiverOrSource
                 };
 
-                // Append-only ledger rule: recorded via POST (createStorageItem)
-                const createdTx = await createStorageItem(fullUpdatePayload);
-                targetItem = createdTx || { ...targetItem, ...fullUpdatePayload };
+                const updated = await updateStorageItem(targetItem.id, fullUpdatePayload);
+                targetItem = updated || { ...targetItem, ...fullUpdatePayload };
             }
 
             if (targetItem) {
@@ -227,7 +243,7 @@ export const StorageCenterPage: React.FC = () => {
                 setTransactions(prev => [tx, ...prev]);
             }
 
-            setSuccessMessage(`تبادل (${exchangeData.type === 'IN' ? 'ورود' : 'خروج'}) با موفقیت به عنوان سند دفتر کل روی سرور ثبت شد.`);
+            setSuccessMessage(`تبادل (${exchangeData.type === 'IN' ? 'ورود' : 'خروج'}) با موفقیت و ارسال کلیه مشخصات روی سرور ثبت شد.`);
             setIsExchangeModalOpen(false);
             loadItems();
             setTimeout(() => setSuccessMessage(null), 4000);
@@ -236,6 +252,52 @@ export const StorageCenterPage: React.FC = () => {
         }
     };
 
+    const handleOpenCatalogEdit = (item: StorageItem) => {
+        setEditingItem(item);
+        setCatalogFormData({
+            name: item.name || '',
+            category: item.category || 'شوینده و سلولوزی',
+            quantity: item.quantity || 0,
+            unit: item.unit || 'عدد',
+            minStock: item.minStock || 5,
+            location: item.location || 'انبار مرکزی',
+            unitPrice: item.unitPrice || 0,
+            supplier: item.supplier || '',
+            description: item.description || ''
+        });
+        setIsCatalogModalOpen(true);
+    };
+
+    const handleSaveCatalog = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingItem) return;
+        try {
+            await updateStorageItem(editingItem.id, {
+                ...catalogFormData,
+                totalValue: catalogFormData.quantity * catalogFormData.unitPrice
+            });
+            setSuccessMessage('اطلاعات کالا در سرور ویرایش شد.');
+            setIsCatalogModalOpen(false);
+            loadItems();
+            setTimeout(() => setSuccessMessage(null), 4000);
+        } catch (err: any) {
+            alert(err.message || 'خطا در ویرایش اطلاعات کالا');
+        }
+    };
+
+    const handleDeleteItem = async (id: string | number) => {
+        if (!window.confirm('آیا از حذف این کالا از روی سرور اطمینان دارید؟')) return;
+        try {
+            await deleteStorageItem(id);
+            setSuccessMessage('کالا با موفقیت از سرور حذف شد.');
+            loadItems();
+            setTimeout(() => setSuccessMessage(null), 4000);
+        } catch (err: any) {
+            alert(err.message || 'خطا در حذف کالا از سرور');
+        }
+    };
+
+    // Filtered items
     const filteredItems = items.filter(item => {
         const matchesSearch = item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                               item.supplier?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -260,7 +322,7 @@ export const StorageCenterPage: React.FC = () => {
                     <div>
                         <h1 className="text-2xl font-black tracking-tight">انبارداری</h1>
                         <p className="text-xs text-indigo-200 mt-1">
-                            سیستم انبارداری و دفتر کل اقلام مصرفی (بدون قابلیت ویرایش یا حذف سند، ثبت فقط از طریق متد پست)
+                            مدیریت مصرفی‌های اداری و آبدارخانه با ارسال کامل کلیه فیلدها و اطلاعات به سرور
                         </p>
                     </div>
                 </div>
@@ -364,8 +426,8 @@ export const StorageCenterPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                             <BookOpen className="w-5 h-5 text-indigo-600" />
                             <div>
-                                <h3 className="font-black text-sm text-slate-800 dark:text-white">سوابق اسناد تبادلات (دفتر کل)</h3>
-                                <p className="text-[11px] text-slate-400">ثبت اسناد انبار صرفاً به صورت افزودن (POST) بوده و غیرقابل ویرایش یا حذف است</p>
+                                <h3 className="font-black text-sm text-slate-800 dark:text-white">سوابق تبادلات آنلاین</h3>
+                                <p className="text-[11px] text-slate-400">سوابق تراکنش‌های انجام‌شده در این نشست زنده سرور</p>
                             </div>
                         </div>
 
@@ -419,8 +481,8 @@ export const StorageCenterPage: React.FC = () => {
                     {transactions.length === 0 ? (
                         <div className="p-16 text-center space-y-3">
                             <BookOpen className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
-                            <p className="text-sm font-bold text-slate-500">هیچ سند تبادلی در این نشست ثبت نشده است.</p>
-                            <p className="text-xs text-slate-400">اطلاعات مستقیماً روی سرور ثبت می‌شوند.</p>
+                            <p className="text-sm font-bold text-slate-500">هیچ تبادلی در این نشست ثبت نشده است.</p>
+                            <p className="text-xs text-slate-400">اطلاعات مستقیماً روی سرور ثبت و پردازش می‌شوند.</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -428,7 +490,7 @@ export const StorageCenterPage: React.FC = () => {
                                 <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 font-bold">
                                     <tr>
                                         <th className="p-3.5">تاریخ و ساعت</th>
-                                        <th className="p-3.5">نوع سند</th>
+                                        <th className="p-3.5">نوع تبادل</th>
                                         <th className="p-3.5">نام کالا</th>
                                         <th className="p-3.5">مقدار</th>
                                         <th className="p-3.5">محل نگهداری</th>
@@ -513,7 +575,7 @@ export const StorageCenterPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Items Table (Immutable / Read-only inventory list per ledger rules) */}
+                    {/* Items Table */}
                     <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                         {isLoading ? (
                             <div className="p-16 flex justify-center items-center">
@@ -537,6 +599,7 @@ export const StorageCenterPage: React.FC = () => {
                                             <th className="p-4">محل نگهداری</th>
                                             <th className="p-4">قیمت واحد (تومان)</th>
                                             <th className="p-4">ارزش کل</th>
+                                            <th className="p-4 text-center">عملیات</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -581,6 +644,24 @@ export const StorageCenterPage: React.FC = () => {
                                                     <td className="p-4 font-mono font-black text-emerald-600 dark:text-emerald-400">
                                                         {((item.quantity || 0) * (item.unitPrice || 0)).toLocaleString('fa-IR')} ت
                                                     </td>
+                                                    <td className="p-4">
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            <button
+                                                                onClick={() => handleOpenCatalogEdit(item)}
+                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+                                                                title="ویرایش مشخصات"
+                                                            >
+                                                                <Edit3 className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteItem(item.id)}
+                                                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                                                                title="حذف کالا"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
@@ -592,14 +673,14 @@ export const StorageCenterPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Modal: افزودن تبادل (Add Exchange - Append Only) */}
+            {/* Modal: افزودن تبادل (Add Exchange) */}
             {isExchangeModalOpen && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 backdrop-blur-sm" onClick={() => setIsExchangeModalOpen(false)}>
                     <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
                         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center shrink-0">
                             <h3 className="font-black text-base text-slate-800 dark:text-white flex items-center gap-2">
                                 <BookOpen className="w-5 h-5 text-indigo-600" />
-                                <span>ثبت سند تبادل انبار (دفتر کل - POST)</span>
+                                <span>ثبت تبادل جدید انبار (سرور آنلاین)</span>
                             </h3>
                             <button onClick={() => setIsExchangeModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
                         </div>
@@ -641,7 +722,7 @@ export const StorageCenterPage: React.FC = () => {
                                     onChange={e => setExchangeData({...exchangeData, itemId: e.target.value})}
                                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500"
                                 >
-                                    <option value="NEW">➕ افزودن کالای جدید (ثبت سند اولیه در سرور)</option>
+                                    <option value="NEW">➕ افزودن کالای جدید (ثبت کالای تازه در سرور)</option>
                                     {items.map(i => (
                                         <option key={i.id} value={i.id}>
                                             {i.name} — موجودی فعلی: {i.quantity} {i.unit} (محل: {i.location})
@@ -653,7 +734,7 @@ export const StorageCenterPage: React.FC = () => {
                             {/* If NEW Item */}
                             {exchangeData.itemId === 'NEW' && (
                                 <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-                                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block">مشخصات کامل کالای جدید جهت ارسال سند به سرور:</span>
+                                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block">مشخصات کامل کالای جدید جهت ارسال به سرور:</span>
                                     <div>
                                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">نام کالا *</label>
                                         <input
@@ -827,7 +908,78 @@ export const StorageCenterPage: React.FC = () => {
                                     type="submit"
                                     className="px-7 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
                                 >
-                                    ثبت سند در دفتر کل (ارسال POST)
+                                    ارسال کلیه اطلاعات به سرور
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Catalog Item Edit Modal */}
+            {isCatalogModalOpen && editingItem && (
+                <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 backdrop-blur-sm" onClick={() => setIsCatalogModalOpen(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3">
+                            <h3 className="font-black text-sm text-slate-800 dark:text-white">ویرایش مشخصات کالای انبار (سرور)</h3>
+                            <button onClick={() => setIsCatalogModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                        </div>
+
+                        <form onSubmit={handleSaveCatalog} className="space-y-4 text-xs">
+                            <div>
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">نام کالا</label>
+                                <input
+                                    type="text"
+                                    value={catalogFormData.name}
+                                    onChange={e => setCatalogFormData({...catalogFormData, name: e.target.value})}
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">محل نگهداری</label>
+                                    <select
+                                        value={catalogFormData.location}
+                                        onChange={e => setCatalogFormData({...catalogFormData, location: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold"
+                                    >
+                                        {LOCATIONS.map(l => (
+                                            <option key={l} value={l}>{l}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">حداقل هشدار</label>
+                                    <input
+                                        type="number"
+                                        value={catalogFormData.minStock}
+                                        onChange={e => setCatalogFormData({...catalogFormData, minStock: Number(e.target.value)})}
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">قیمت واحد (تومان)</label>
+                                <input
+                                    type="number"
+                                    value={catalogFormData.unitPrice}
+                                    onChange={e => setCatalogFormData({...catalogFormData, unitPrice: Number(e.target.value)})}
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold"
+                                />
+                            </div>
+                            <div className="pt-2 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCatalogModalOpen(false)}
+                                    className="px-4 py-2 rounded-xl font-bold text-slate-500 hover:bg-slate-100"
+                                >
+                                    انصراف
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-6 py-2 bg-indigo-600 text-white font-black rounded-xl shadow-md hover:bg-indigo-700"
+                                >
+                                    ذخیره در سرور
                                 </button>
                             </div>
                         </form>

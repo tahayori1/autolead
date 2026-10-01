@@ -3140,6 +3140,32 @@ export const createStorageItem = async (payload: Omit<StorageItem, 'id'>): Promi
     return handleResponse(response);
 };
 
+export const updateStorageItem = async (id: string | number, payload: Partial<StorageItem>): Promise<StorageItem> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id, ...payload })
+    });
+    return handleResponse(response);
+};
+
+export const deleteStorageItem = async (id: string | number): Promise<void> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id })
+    });
+    return handleResponse(response);
+};
+
 // --- Attendance / Timesheet Services ---
 export * from './timesheetService';
 
