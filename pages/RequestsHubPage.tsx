@@ -121,11 +121,11 @@ export const RequestsHubPage: React.FC = () => {
         setLoading(true);
         try {
             const [profile, staffList, leaves, overtimes, salaries] = await Promise.all([
-                getMyProfile(),
+                getMyProfile().catch(() => ({})),
                 getStaffUsers().catch(() => []),
-                leaveRequestsService.getAll(),
-                overtimeService.getAll(),
-                salaryAdvanceService.getAll()
+                leaveRequestsService.getAll().catch(() => []),
+                overtimeService.getAll().catch(() => []),
+                salaryAdvanceService.getAll().catch(() => [])
             ]);
             setCurrentUser(profile || {});
             setStaffUsers(Array.isArray(staffList) ? staffList : []);
@@ -133,7 +133,7 @@ export const RequestsHubPage: React.FC = () => {
             setOvertimeRequests(Array.isArray(overtimes) ? overtimes : []);
             setSalaryAdvanceRequests(Array.isArray(salaries) ? salaries : []);
         } catch (err) {
-            setToast({ message: 'خطا در بارگذاری اطلاعات درخواست‌ها از سرور', type: 'error' });
+            console.error("Error fetching requests data:", err);
         } finally {
             setLoading(false);
         }

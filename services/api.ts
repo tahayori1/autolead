@@ -2125,11 +2125,16 @@ const sanitizePayload = <T>(item: Partial<T>): any => {
 // Generic CRUD helper
 const createCrudService = <T>(url: string) => ({
     getAll: async (): Promise<T[]> => {
-        const response = await fetch(url, { headers: getAuthHeaders() });
-        const data = await handleResponse(response);
-        if (Array.isArray(data)) return data;
-        if (data && typeof data === 'object') return [data] as T[];
-        return [];
+        try {
+            const response = await fetch(url, { headers: getAuthHeaders() });
+            const data = await handleResponse(response);
+            if (Array.isArray(data)) return data;
+            if (data && typeof data === 'object') return [data] as T[];
+            return [];
+        } catch (e) {
+            console.warn(`Failed to fetch from ${url}:`, e);
+            return [];
+        }
     },
     create: async (item: Partial<T>): Promise<T> => {
         ensureOnline();
@@ -3109,55 +3114,25 @@ export const deleteCollabCar = async (id: string | number): Promise<void> => {
     return handleResponse(response);
 };
 
-// --- Storage Center Services (انبار اداری و مصرفی / دفتر کل) ---
+// --- Storage Center Services (انبار اداری و مصرفی) ---
 export const STORAGE_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/storage-center';
 
-export interface StockTransaction {
-    id: string;
-    itemId: string | number;
-    itemName: string;
-    quantity: number;
-    unit: string;
-    date: string;
-    operator: string;
-    reason: string;
-    receiverOrSource: string;
-    location: string;
-}
-
-export const getStorageData = async (): Promise<{ items: StorageItem[], transactions: StockTransaction[] }> => {
+export const getStorageItems = async (): Promise<StorageItem[]> => {
     try {
         const response = await fetch(STORAGE_WEBHOOK_URL, {
             headers: getAuthHeaders()
         });
         const data = await handleResponse(response);
-        
-        let items: StorageItem[] = [];
-        let transactions: StockTransaction[] = [];
-
-        if (Array.isArray(data)) {
-            items = data;
-        } else if (data && typeof data === 'object') {
-            if (Array.isArray(data.items)) items = data.items;
-            else if (Array.isArray(data.data)) items = data.data;
-
-            if (Array.isArray(data.transactions)) transactions = data.transactions;
-            else if (Array.isArray(data.history)) transactions = data.history;
-            else if (Array.isArray(data.logs)) transactions = data.logs;
-        }
-
-        return { items, transactions };
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && Array.isArray(data.items)) return data.items;
+        return [];
     } catch (e) {
-        return { items: [], transactions: [] };
+        return [];
     }
 };
 
-export const getStorageItems = async (): Promise<StorageItem[]> => {
-    const data = await getStorageData();
-    return data.items;
-};
-
-export const createStorageItem = async (payload: any): Promise<any> => {
+export const createStorageItem = async (payload: Omit<StorageItem, 'id'>): Promise<StorageItem> => {
     ensureOnline();
     const response = await fetch(STORAGE_WEBHOOK_URL, {
         method: 'POST',
@@ -3166,6 +3141,32 @@ export const createStorageItem = async (payload: any): Promise<any> => {
             ...getAuthHeaders()
         },
         body: JSON.stringify(payload)
+    });
+    return handleResponse(response);
+};
+
+export const updateStorageItem = async (id: string | number, payload: Partial<StorageItem>): Promise<StorageItem> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id, ...payload })
+    });
+    return handleResponse(response);
+};
+
+export const deleteStorageItem = async (id: string | number): Promise<void> => {
+    ensureOnline();
+    const response = await fetch(STORAGE_WEBHOOK_URL, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        },
+        body: JSON.stringify({ id })
     });
     return handleResponse(response);
 };
