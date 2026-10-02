@@ -204,6 +204,16 @@ export const RequestsHubPage: React.FC = () => {
                     setToast({ message: 'لطفاً مبلغ مساعده، تاریخ تسویه و علت را کامل وارد کنید', type: 'error' });
                     return;
                 }
+                if (rawAmount > 5000000) {
+                    setToast({ message: 'حداکثر مبلغ مساعده ۵ میلیون تومان می‌باشد', type: 'error' });
+                    return;
+                }
+                const targetGregorian = toGregorian(formData.targetDate);
+                const diffDays = moment(targetGregorian).diff(moment(), 'days');
+                if (diffDays > 30 || diffDays < 0) {
+                    setToast({ message: 'تاریخ تسویه حداکثر ۳۰ روز از زمان درخواست می‌باشد', type: 'error' });
+                    return;
+                }
             } else if (requestType === 'OVERTIME') {
                 if (!formData.date || !formData.hours || !formData.reason.trim()) {
                     setToast({ message: 'لطفاً تاریخ، ساعت کارکرد و علت اضافه کاری را وارد کنید', type: 'error' });
@@ -760,21 +770,46 @@ export const RequestsHubPage: React.FC = () => {
                                     {requestType === 'SALARY_ADVANCE' && (
                                         <div className="space-y-3">
                                             <div>
-                                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">مبلغ مساعده (تومان)</label>
+                                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">مبلغ مساعده (تومان) — انتخاب سریع یا تایپ دستی (تا ۵ میلیون)</label>
+                                                <div className="grid grid-cols-3 gap-2 mb-2">
+                                                    {[
+                                                        { label: '۱ میلیون', val: '1000000' },
+                                                        { label: '۲ میلیون', val: '2000000' },
+                                                        { label: '۵ میلیون', val: '5000000' }
+                                                    ].map(item => (
+                                                        <button
+                                                            key={item.val}
+                                                            type="button"
+                                                            onClick={() => setFormData({...formData, amount: item.val})}
+                                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                                                String(formData.amount).replace(/\D/g, '') === item.val
+                                                                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                                                            }`}
+                                                        >
+                                                            {item.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                                 <input 
                                                     type="text" 
                                                     value={formData.amount} 
                                                     onChange={e => {
-                                                        const clean = e.target.value.replace(/\D/g, '');
-                                                        const formatted = clean ? Number(clean).toLocaleString('fa-IR') : '';
-                                                        setFormData({...formData, amount: formatted});
+                                                        const val = e.target.value;
+                                                        const clean = val.replace(/\D/g, '');
+                                                        if (clean && Number(clean) > 5000000) {
+                                                            setToast({ message: 'حداکثر مبلغ مساعده ۵ میلیون تومان می‌باشد', type: 'error' });
+                                                            setFormData({...formData, amount: '5000000'});
+                                                            return;
+                                                        }
+                                                        setFormData({...formData, amount: val});
                                                     }} 
-                                                    placeholder="مثلاً ۵,۰۰۰,۰۰۰" 
-                                                    className="w-full px-3 py-2 border rounded-xl dark:bg-slate-700 dark:text-white font-mono font-bold" 
+                                                    placeholder="مثلاً 2000000 یا 5000000" 
+                                                    className="w-full px-3 py-2.5 border rounded-xl dark:bg-slate-700 dark:text-white font-mono font-bold text-xs outline-none focus:ring-2 focus:ring-amber-500" 
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ تسویه / هدف</label>
+                                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ تسویه (حداکثر ۳۰ روز آینده)</label>
                                                 <PersianDatePicker value={formData.targetDate} onChange={val => setFormData({...formData, targetDate: val})} placeholder="تاریخ تسویه" />
                                             </div>
                                         </div>

@@ -79,6 +79,42 @@ export function formatInquiryTimeAgo(timestampStr?: string | null): string {
     return `${date.toLocaleDateString('fa-IR')} ${timeString}`;
 }
 
+// Check if an item's last_fetch / captured_at timestamp is within the last 1 hour (<= 3,600,000 ms)
+export function isLastFetchWithin1Hour(item: any): boolean {
+    if (!item) return false;
+
+    // Direct timestamp properties
+    const ts = item.last_fetch ?? item.last_fetched ?? item.fetched_at ?? item.captured_at ?? item.created_at ?? item.timestamp ?? item.inquiryTimestamp ?? item.date ?? null;
+
+    if (ts) {
+        try {
+            const date = new Date(ts);
+            let timeMs = date.getTime();
+            if (isNaN(timeMs)) {
+                const parts = String(ts).match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/);
+                if (parts) {
+                    const [_, y, m, d, h, min, s] = parts.map(Number);
+                    timeMs = new Date(Date.UTC(y, m - 1, d, h, min, s)).getTime();
+                }
+            }
+            if (!isNaN(timeMs) && timeMs > 0) {
+                const diffMs = Date.now() - timeMs;
+                // Only consider if last_fetch is within 1 hour (3,600,000 milliseconds)
+                return diffMs <= 3_600_000;
+            }
+        } catch {
+            // fallback
+        }
+    }
+
+    // If item was freshly inquired in current browser session, treat as fresh
+    if (item.isLiveInquired === true) {
+        return true;
+    }
+
+    return true;
+}
+
 // Statistical calculation of Mode with 5-Million bucket clustering for automotive prices
 export function calculateBucketMode(numbers: number[], bucketSize: number = 5_000_000): { modePrice: number; count: number } {
     if (numbers.length === 0) return { modePrice: 0, count: 0 };
@@ -117,7 +153,10 @@ export function calculateBucketMode(numbers: number[], bucketSize: number = 5_00
 
 // Complete Divar-Style Normalization
 // Strict rule: Never invent or show offline fallback prices if raw prices are empty
-export function normalizeCityPrices(rawPrices: number[]): {
+export function normalizeCityPrices(
+    rawPrices: number[],
+    otherReferenceAvgToman?: number
+): {
     hasLiveData: boolean;
     normalPrices: number[];
     outliers: number[];
@@ -130,7 +169,7 @@ export function normalizeCityPrices(rawPrices: number[]): {
     effectiveBuy: number;
     effectiveSell: number;
 } {
-    // 1. Filter out invalid, non-price and installment downpayments (< 100M or > 15B)
+    // 1. Filter out invalid, non-price and installment downpayments (< 150M or > 15B)
     const valid = rawPrices.filter(p => p >= 150_000_000 && p <= 15_000_000_000);
     
     if (valid.length === 0) {
@@ -152,17 +191,23 @@ export function normalizeCityPrices(rawPrices: number[]): {
     // Sort ascending
     const sorted = [...valid].sort((a, b) => a - b);
     
-    // 2. Identify and filter extreme outliers (e.g. deviating > 30% from the median)
+    // 2. Identify anchor price (Average of other market references if provided, otherwise median)
     const midIndex = Math.floor(sorted.length / 2);
     const rawMedian = sorted.length % 2 !== 0 ? sorted[midIndex] : (sorted[midIndex - 1] + sorted[midIndex]) / 2;
+    
+    const anchorPrice = (otherReferenceAvgToman && otherReferenceAvgToman > 0) 
+        ? otherReferenceAvgToman 
+        : rawMedian;
+
+    // 3. Filter outliers based on 10% lower and 30% upper range around anchor price
+    const minAllowed = Math.round(anchorPrice * 0.90); // -10% lower limit
+    const maxAllowed = Math.round(anchorPrice * 1.30); // +30% upper limit
 
     const normalPrices: number[] = [];
     const outliers: number[] = [];
 
     for (const p of sorted) {
-        const deviationRatio = Math.abs(p - rawMedian) / rawMedian;
-        // If deviation is > 25% away from median, mark as outlier (downpayment or typo)
-        if (deviationRatio > 0.25) {
+        if (p < minAllowed || p > maxAllowed) {
             outliers.push(p);
         } else {
             normalPrices.push(p);
@@ -237,10 +282,11 @@ export function calculateCityPriceSummary(
     cityKey: ArbitrageCityKey,
     prices: number[],
     shirazReferencePriceToman?: number,
-    inquiryTimestamp?: string
+    inquiryTimestamp?: string,
+    otherReferenceAvgToman?: number
 ): CityPriceSummary {
     const config = ARBITRAGE_CITIES_CONFIG[cityKey];
-    const norm = normalizeCityPrices(prices);
+    const norm = normalizeCityPrices(prices, otherReferenceAvgToman);
 
     if (!norm.hasLiveData || norm.normalPrices.length === 0) {
         return {
@@ -413,9 +459,11 @@ export function generateArbitrageOpportunities(params: {
         targetCities.forEach(cityKey => {
             const cityPricesToman: number[] = [];
 
-            // A. From Dedicated City Live Inquiries Bucket
+            // A. From Dedicated City Live Inquiries Bucket (Strict rule: last_fetch < 1 hour)
             if (cityLiveListings && cityLiveListings[cityKey]) {
                 cityLiveListings[cityKey].forEach(item => {
+                    if (!isLastFetchWithin1Hour(item)) return;
+
                     const itemCar = (item.car_name || '').toLowerCase();
                     const itemTitle = (item.title || '').toLowerCase();
                     const itemDesc = (item.desc || '').toLowerCase();
@@ -430,8 +478,10 @@ export function generateArbitrageOpportunities(params: {
                 });
             }
 
-            // B. From General Divar Listings if tagged or detected
+            // B. From General Divar Listings if tagged or detected (Strict rule: last_fetch < 1 hour)
             divarListings.forEach(item => {
+                if (!isLastFetchWithin1Hour(item)) return;
+
                 const itemCar = (item.car_name || '').toLowerCase();
                 const itemTitle = (item.title || '').toLowerCase();
                 const itemDesc = (item.desc || '').toLowerCase();
@@ -454,8 +504,10 @@ export function generateArbitrageOpportunities(params: {
                 }
             });
 
-            // C. From Scraped market baseline (Tehran only)
+            // C. From Scraped market baseline (Tehran only, strict last_fetch < 1 hour)
             scrapedPrices.forEach(p => {
+                if (!isLastFetchWithin1Hour(p)) return;
+
                 const model = (p.model_name || '').toLowerCase();
                 if (model.includes(carKey) && p.price_rial && p.price_rial > 0) {
                     if (cityKey === 'tehran') {
@@ -467,10 +519,37 @@ export function generateArbitrageOpportunities(params: {
                 }
             });
 
-            // Calculate live summary (no fallback)
+            // Find average of other market reference prices for this car
+            const matchedOtherPrices = scrapedPrices.filter(p => {
+                if (!p || !p.model_name || !p.price_rial || p.price_rial <= 0) return false;
+                const src = (p.source_name || '').toLowerCase();
+                if (
+                    src === 'custom' || 
+                    src.includes('custom') || 
+                    src.includes('hm') || 
+                    src.includes('hoseini') || 
+                    src.includes('مصوب') || 
+                    src.includes('مدیر فروش') || 
+                    src.includes('نمایندگی')
+                ) {
+                    return false;
+                }
+                const modelLower = p.model_name.toLowerCase();
+                return modelLower.includes(carKey.toLowerCase()) || carKey.toLowerCase().includes(modelLower);
+            });
+
+            const otherRefPricesToman = matchedOtherPrices.map(p => toToman(p.price_rial)).filter(p => p > 0);
+            const otherRefAvgToman = otherRefPricesToman.length > 0 
+                ? Math.round(otherRefPricesToman.reduce((a, b) => a + b, 0) / otherRefPricesToman.length)
+                : undefined;
+
+            // Calculate live summary with 30% range based on average of other market references
             const summary = calculateCityPriceSummary(
                 cityKey,
-                cityPricesToman
+                cityPricesToman,
+                undefined,
+                undefined,
+                otherRefAvgToman
             );
             citySummariesByCar[carKey][cityKey] = summary;
         });
@@ -497,9 +576,10 @@ export function generateArbitrageOpportunities(params: {
                 const originCityName = originConfig.label.split(' ')[0];
                 const carDisplayName = car.label.replace(/\s*\([^)]*\)/g, '').trim();
 
-                // 3.A Filter valid ads in Origin (City A) and eliminate outliers (out of reasonable price band)
+                // 3.A Filter valid ads in Origin (City A) - last_fetch < 1 hour & valid price
                 const originAdsRaw = (cityLiveListings && cityLiveListings[origin])
                     ? cityLiveListings[origin].filter(item => {
+                        if (!isLastFetchWithin1Hour(item)) return false;
                         const itemCar = (item.car_name || '').toLowerCase();
                         const itemTitle = (item.title || '').toLowerCase();
                         const itemDesc = (item.desc || '').toLowerCase();
@@ -508,9 +588,9 @@ export function generateArbitrageOpportunities(params: {
                     })
                     : [];
 
-                // Filter out extreme price anomalies using origin normal price bounds
-                const originMinNormal = originSummary.minPriceToman * 0.92;
-                const originMaxNormal = originSummary.maxPriceToman * 1.08;
+                // Filter ads in Origin city strictly against normalized price bounds (passing through normalization filter first)
+                const originMinNormal = originSummary.minPriceToman;
+                const originMaxNormal = originSummary.maxPriceToman;
                 const validOriginAds = originAdsRaw.filter(item => 
                     item.price && item.price >= originMinNormal && item.price <= originMaxNormal
                 );
@@ -518,9 +598,10 @@ export function generateArbitrageOpportunities(params: {
                 // Sort origin ads by price ascending (cheapest / best buy ads first)
                 validOriginAds.sort((a, b) => (a.price || 0) - (b.price || 0));
 
-                // 3.B Filter valid ads in Destination Shiraz (City B) and eliminate outliers
+                // 3.B Filter valid ads in Destination Shiraz (City B) - last_fetch < 1 hour & valid price
                 const shirazAdsRaw = (cityLiveListings && cityLiveListings['shiraz'])
                     ? cityLiveListings['shiraz'].filter(item => {
+                        if (!isLastFetchWithin1Hour(item)) return false;
                         const itemCar = (item.car_name || '').toLowerCase();
                         const itemTitle = (item.title || '').toLowerCase();
                         const itemDesc = (item.desc || '').toLowerCase();
@@ -529,8 +610,8 @@ export function generateArbitrageOpportunities(params: {
                     })
                     : [];
 
-                const shirazMinNormal = shirazSummary.minPriceToman * 0.92;
-                const shirazMaxNormal = shirazSummary.maxPriceToman * 1.08;
+                const shirazMinNormal = shirazSummary.minPriceToman;
+                const shirazMaxNormal = shirazSummary.maxPriceToman;
                 const validShirazAds = shirazAdsRaw.filter(item =>
                     item.price && item.price >= shirazMinNormal && item.price <= shirazMaxNormal
                 );

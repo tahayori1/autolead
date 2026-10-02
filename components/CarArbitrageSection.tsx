@@ -652,14 +652,20 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
                                 </span>
                             </div>
                         ) : (
-                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                                <span>{filteredOpportunities.length} فرصت فعال</span>
-                                {summaryMetrics.maxProfit > 0 && (
-                                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono border-r border-emerald-200 dark:border-emerald-800 pr-2 mr-1">
-                                        حداکثر سود: {formatToman(summaryMetrics.maxProfit)}
-                                    </span>
-                                )}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                                    <span>{filteredOpportunities.length} فرصت فعال</span>
+                                    {summaryMetrics.maxProfit > 0 && (
+                                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono border-r border-emerald-200 dark:border-emerald-800 pr-2 mr-1">
+                                            حداکثر سود: {formatToman(summaryMetrics.maxProfit)}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold px-2.5 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    <span>فیلتر زمان: فقط آگهی‌های کمتر از ۱ ساعت (last_fetch)</span>
+                                </span>
                             </div>
                         )}
 

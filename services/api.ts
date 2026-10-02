@@ -40,8 +40,12 @@ import type {
     DivarAdvDetail,
     CollaborationShowroom,
     CollaborationCar,
-    OrderPartner
+    OrderPartner,
+    StorageItem,
+    StockTransaction
 } from '../types';
+
+export type { StorageItem, StockTransaction };
 
 const API_BASE_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1';
 
@@ -2127,9 +2131,24 @@ const createCrudService = <T>(url: string) => ({
     getAll: async (): Promise<T[]> => {
         try {
             const response = await fetch(url, { headers: getAuthHeaders() });
-            const data = await handleResponse(response);
+            if (!response.ok) {
+                console.warn(`API returned status ${response.status} for ${url}`);
+                return [];
+            }
+            const text = await response.text();
+            if (!text || text.trim() === '') return [];
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch {
+                return [];
+            }
             if (Array.isArray(data)) return data;
-            if (data && typeof data === 'object') return [data] as T[];
+            if (data && typeof data === 'object') {
+                if (Array.isArray((data as any).data)) return (data as any).data;
+                if (Array.isArray((data as any).items)) return (data as any).items;
+                return [data] as T[];
+            }
             return [];
         } catch (e) {
             console.warn(`Failed to fetch from ${url}:`, e);
@@ -3117,19 +3136,38 @@ export const deleteCollabCar = async (id: string | number): Promise<void> => {
 // --- Storage Center Services (انبار اداری و مصرفی) ---
 export const STORAGE_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/storage-center';
 
-export const getStorageItems = async (): Promise<StorageItem[]> => {
+export const getStorageData = async (): Promise<{ items: StorageItem[]; transactions: StockTransaction[] }> => {
     try {
         const response = await fetch(STORAGE_WEBHOOK_URL, {
             headers: getAuthHeaders()
         });
         const data = await handleResponse(response);
-        if (Array.isArray(data)) return data;
-        if (data && Array.isArray(data.data)) return data.data;
-        if (data && Array.isArray(data.items)) return data.items;
-        return [];
+        let rawItems: StorageItem[] = [];
+        let rawTransactions: StockTransaction[] = [];
+
+        if (Array.isArray(data)) {
+            rawItems = data;
+        } else if (data && typeof data === 'object') {
+            if (Array.isArray(data.items)) rawItems = data.items;
+            else if (Array.isArray(data.data)) rawItems = data.data;
+
+            if (Array.isArray(data.transactions)) rawTransactions = data.transactions;
+            else if (Array.isArray(data.logs)) rawTransactions = data.logs;
+            else if (Array.isArray(data.history)) rawTransactions = data.history;
+        }
+
+        return {
+            items: rawItems,
+            transactions: rawTransactions
+        };
     } catch (e) {
-        return [];
+        return { items: [], transactions: [] };
     }
+};
+
+export const getStorageItems = async (): Promise<StorageItem[]> => {
+    const data = await getStorageData();
+    return data.items;
 };
 
 export const createStorageItem = async (payload: Omit<StorageItem, 'id'>): Promise<StorageItem> => {

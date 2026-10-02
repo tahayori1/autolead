@@ -1119,6 +1119,41 @@ export interface TimesheetSummary {
     totalPunches: number;
 }
 
+export interface StorageItem {
+    id: string | number;
+    name?: string;
+    title?: string;
+    category?: string;
+    quantity: number;
+    unit?: string;
+    location?: string;
+    minQuantity?: number;
+    minStock?: number;
+    unitPrice?: number;
+    totalValue?: number;
+    supplier?: string;
+    status?: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+    description?: string;
+    updatedAt?: string;
+}
+
+export interface StockTransaction {
+    id: string | number;
+    date?: string;
+    createdAt?: string;
+    type?: 'IN' | 'OUT';
+    name?: string;
+    itemName?: string;
+    quantity?: number;
+    transactionQuantity?: number;
+    unit?: string;
+    reason?: string;
+    receiverOrSource?: string;
+    operator?: string;
+    location?: string;
+    category?: string;
+}
+
 export interface EmployeeTimesheet {
     id: string;
     organization: string;
