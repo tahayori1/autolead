@@ -181,7 +181,7 @@ const LeaveRequestsPage: React.FC = () => {
                 endTime: currentRequest.type === 'HOURLY' ? currentRequest.endTime : undefined,
                 hourlyCategory: currentRequest.type === 'HOURLY' ? currentRequest.hourlyCategory : undefined,
                 status: 'PENDING',
-                createdAt: new Date().toLocaleDateString('fa-IR'),
+                createdAt: moment().format('YYYY-MM-DD'),
             };
 
             await leaveRequestsService.create(apiPayload);

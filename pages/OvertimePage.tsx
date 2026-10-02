@@ -93,7 +93,7 @@ const OvertimePage: React.FC = () => {
                 ...currentRequest,
                 date: toGregorian(currentRequest.date),
                 status: 'PENDING',
-                createdAt: new Date().toLocaleDateString('fa-IR'),
+                createdAt: moment().format('YYYY-MM-DD'),
             };
             await overtimeService.create(apiPayload as any);
             setToast({ message: 'درخواست اضافه کاری با موفقیت ثبت شد', type: 'success' });

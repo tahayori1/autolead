@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { StorageItem } from '../types';
-import { getStorageItems, createStorageItem, updateStorageItem, deleteStorageItem } from '../services/api';
+import { getStorageData, createStorageItem, StockTransaction } from '../services/api';
 import Spinner from '../components/Spinner';
-import { Boxes, Plus, Search, Edit3, Trash2, AlertTriangle, ArrowUpRight, ArrowDownLeft, Package, CheckCircle2, RefreshCw, Layers, History, BookOpen, Tag } from 'lucide-react';
+import { Boxes, Plus, Search, AlertTriangle, ArrowUpRight, ArrowDownLeft, Package, CheckCircle2, RefreshCw, Layers, BookOpen } from 'lucide-react';
 
 const CATEGORIES = [
     'همه دسته‌ها',
@@ -56,20 +56,6 @@ const OUT_RECEIVERS = [
     'عمومی پرسنل'
 ];
 
-interface StockTransaction {
-    id: string;
-    itemId: string | number;
-    itemName: string;
-    type: 'IN' | 'OUT';
-    quantity: number;
-    unit: string;
-    date: string;
-    operator: string;
-    reason: string;
-    receiverOrSource: string;
-    location: string;
-}
-
 export const StorageCenterPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'ledger' | 'inventory'>('ledger');
     const [items, setItems] = useState<StorageItem[]>([]);
@@ -82,7 +68,7 @@ export const StorageCenterPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    // Modal state for "افزودن تبادل"
+    // Modal state for "افزودن تبادل" (Append-only Ledger entry)
     const [isExchangeModalOpen, setIsExchangeModalOpen] = useState<boolean>(false);
     const [exchangeData, setExchangeData] = useState({
         itemId: 'NEW',
@@ -100,37 +86,24 @@ export const StorageCenterPage: React.FC = () => {
         newItemDescription: ''
     });
 
-    // Modal for editing catalog item
-    const [isCatalogModalOpen, setIsCatalogModalOpen] = useState<boolean>(false);
-    const [editingItem, setEditingItem] = useState<StorageItem | null>(null);
-    const [catalogFormData, setCatalogFormData] = useState({
-        name: '',
-        category: 'شوینده و سلولوزی',
-        quantity: 0,
-        unit: 'عدد',
-        minStock: 5,
-        location: 'انبار مرکزی',
-        unitPrice: 0,
-        supplier: '',
-        description: ''
-    });
-
-    const loadItems = async () => {
+    const loadData = async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await getStorageItems();
-            setItems(Array.isArray(data) ? data : []);
+            const data = await getStorageData();
+            setItems(Array.isArray(data.items) ? data.items : []);
+            setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
         } catch (err: any) {
             setError(err.message || 'خطا در بارگذاری اطلاعات از سرور');
             setItems([]);
+            setTransactions([]);
         } finally {
             setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        loadItems();
+        loadData();
     }, []);
 
     const handleOpenExchangeModal = () => {
@@ -165,46 +138,42 @@ export const StorageCenterPage: React.FC = () => {
     const handleSaveExchange = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            let targetItem: StorageItem | undefined;
+            const signedQty = exchangeData.type === 'IN' ? Number(exchangeData.quantity) : -Number(exchangeData.quantity);
+            let payload: any;
 
             if (exchangeData.itemId === 'NEW') {
                 if (!exchangeData.newItemName.trim()) {
                     alert('لطفاً نام کالای جدید را وارد کنید.');
                     return;
                 }
-                // Send all fields to server for creation
-                const fullPayload = {
+                payload = {
                     name: exchangeData.newItemName,
                     category: exchangeData.newItemCategory,
-                    quantity: exchangeData.type === 'IN' ? exchangeData.quantity : 0,
+                    quantity: signedQty,
                     unit: exchangeData.newItemUnit,
                     minStock: exchangeData.newItemMinStock,
                     location: exchangeData.location,
                     unitPrice: exchangeData.newItemPrice,
-                    totalValue: (exchangeData.type === 'IN' ? exchangeData.quantity : 0) * exchangeData.newItemPrice,
+                    totalValue: signedQty * exchangeData.newItemPrice,
                     supplier: exchangeData.newItemSupplier,
-                    description: exchangeData.newItemDescription || 'ثبت از طریق تبادل انبار',
-                    lastRestockDate: new Date().toLocaleDateString('fa-IR'),
-                    transactionType: exchangeData.type,
-                    transactionReason: exchangeData.reason,
-                    transactionReceiverOrSource: exchangeData.receiverOrSource
+                    description: exchangeData.newItemDescription || 'ثبت سند تبادل انبار',
+                    date: new Date().toLocaleString('fa-IR'),
+                    operator: localStorage.getItem('currentUsername') || 'مدیر سیستم',
+                    reason: exchangeData.reason,
+                    receiverOrSource: exchangeData.receiverOrSource
                 };
-
-                const created = await createStorageItem(fullPayload);
-                targetItem = created || fullPayload;
             } else {
-                targetItem = items.find(i => String(i.id) === String(exchangeData.itemId));
+                const targetItem = items.find(i => String(i.id) === String(exchangeData.itemId));
                 if (!targetItem) {
                     alert('کالای مورد نظر یافت نشد.');
                     return;
                 }
 
                 const currentQty = targetItem.quantity || 0;
-                const delta = exchangeData.type === 'IN' ? Number(exchangeData.quantity) : -Number(exchangeData.quantity);
-                const newQty = Math.max(0, currentQty + delta);
+                const newQty = currentQty + signedQty;
 
-                // Send all fields (name, category, unit, minStock, location, unitPrice, supplier, description, quantity, transaction details) to server for update
-                const fullUpdatePayload = {
+                payload = {
+                    id: targetItem.id,
                     name: targetItem.name,
                     category: targetItem.category,
                     unit: targetItem.unit,
@@ -215,89 +184,26 @@ export const StorageCenterPage: React.FC = () => {
                     quantity: newQty,
                     totalValue: newQty * (targetItem.unitPrice || 0),
                     location: exchangeData.location,
-                    lastRestockDate: exchangeData.type === 'IN' ? new Date().toLocaleDateString('fa-IR') : targetItem.lastRestockDate,
-                    transactionType: exchangeData.type,
-                    transactionQuantity: exchangeData.quantity,
-                    transactionReason: exchangeData.reason,
-                    transactionReceiverOrSource: exchangeData.receiverOrSource
-                };
-
-                const updated = await updateStorageItem(targetItem.id, fullUpdatePayload);
-                targetItem = updated || { ...targetItem, ...fullUpdatePayload };
-            }
-
-            if (targetItem) {
-                const tx: StockTransaction = {
-                    id: 'tx_' + Date.now(),
-                    itemId: targetItem.id,
-                    itemName: targetItem.name || exchangeData.newItemName,
-                    type: exchangeData.type,
-                    quantity: Number(exchangeData.quantity),
-                    unit: targetItem.unit || exchangeData.newItemUnit,
                     date: new Date().toLocaleString('fa-IR'),
                     operator: localStorage.getItem('currentUsername') || 'مدیر سیستم',
+                    transactionQuantity: signedQty,
                     reason: exchangeData.reason,
-                    receiverOrSource: exchangeData.receiverOrSource,
-                    location: exchangeData.location
+                    receiverOrSource: exchangeData.receiverOrSource
                 };
-                setTransactions(prev => [tx, ...prev]);
             }
 
-            setSuccessMessage(`تبادل (${exchangeData.type === 'IN' ? 'ورود' : 'خروج'}) با موفقیت و ارسال کلیه مشخصات روی سرور ثبت شد.`);
+            // Append-only ledger submission to server via POST
+            await createStorageItem(payload);
+
+            setSuccessMessage(`سند تبادل با موفقیت در سرور ثبت شد.`);
             setIsExchangeModalOpen(false);
-            loadItems();
+            loadData(); // Reload both items and transactions from server via GET
             setTimeout(() => setSuccessMessage(null), 4000);
         } catch (err: any) {
             alert(err.message || 'خطا در ارتباط با سرور جهت ثبت تبادل');
         }
     };
 
-    const handleOpenCatalogEdit = (item: StorageItem) => {
-        setEditingItem(item);
-        setCatalogFormData({
-            name: item.name || '',
-            category: item.category || 'شوینده و سلولوزی',
-            quantity: item.quantity || 0,
-            unit: item.unit || 'عدد',
-            minStock: item.minStock || 5,
-            location: item.location || 'انبار مرکزی',
-            unitPrice: item.unitPrice || 0,
-            supplier: item.supplier || '',
-            description: item.description || ''
-        });
-        setIsCatalogModalOpen(true);
-    };
-
-    const handleSaveCatalog = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editingItem) return;
-        try {
-            await updateStorageItem(editingItem.id, {
-                ...catalogFormData,
-                totalValue: catalogFormData.quantity * catalogFormData.unitPrice
-            });
-            setSuccessMessage('اطلاعات کالا در سرور ویرایش شد.');
-            setIsCatalogModalOpen(false);
-            loadItems();
-            setTimeout(() => setSuccessMessage(null), 4000);
-        } catch (err: any) {
-            alert(err.message || 'خطا در ویرایش اطلاعات کالا');
-        }
-    };
-
-    const handleDeleteItem = async (id: string | number) => {
-        if (!window.confirm('آیا از حذف این کالا از روی سرور اطمینان دارید؟')) return;
-        try {
-            await deleteStorageItem(id);
-            setSuccessMessage('کالا با موفقیت از سرور حذف شد.');
-            loadItems();
-            setTimeout(() => setSuccessMessage(null), 4000);
-        } catch (err: any) {
-            alert(err.message || 'خطا در حذف کالا از سرور');
-        }
-    };
-
-    // Filtered items
     const filteredItems = items.filter(item => {
         const matchesSearch = item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                               item.supplier?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -322,26 +228,26 @@ export const StorageCenterPage: React.FC = () => {
                     <div>
                         <h1 className="text-2xl font-black tracking-tight">انبارداری</h1>
                         <p className="text-xs text-indigo-200 mt-1">
-                            مدیریت مصرفی‌های اداری و آبدارخانه با ارسال کامل کلیه فیلدها و اطلاعات به سرور
+                            سیستم دفتر کل انبار (ثبت با پست و پیگیری و بازیابی سوابق از سرور با متد Get)
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={loadItems}
+                        onClick={loadData}
                         className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2"
-                        title="بارگذاری مجدد از سرور"
+                        title="بارگذاری مجدد سوابق و موجودی از سرور"
                     >
                         <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        <span>بروزرسانی از سرور</span>
+                        <span>بروزرسانی از سرور (GET)</span>
                     </button>
                     <button
                         onClick={handleOpenExchangeModal}
                         className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer"
                     >
                         <Plus className="w-4 h-4" />
-                        <span>افزودن تبادل (ورود/خروج)</span>
+                        <span>افزودن تبادل (ثبت سند POST)</span>
                     </button>
                 </div>
             </div>
@@ -404,7 +310,7 @@ export const StorageCenterPage: React.FC = () => {
                     }`}
                 >
                     <BookOpen className="w-4 h-4" />
-                    <span>سوابق تبادلات نشست فعلی ({transactions.length})</span>
+                    <span>سوابق اسناد سرور (Get Ledger) ({transactions.length})</span>
                 </button>
                 <button
                     onClick={() => setActiveTab('inventory')}
@@ -426,27 +332,26 @@ export const StorageCenterPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                             <BookOpen className="w-5 h-5 text-indigo-600" />
                             <div>
-                                <h3 className="font-black text-sm text-slate-800 dark:text-white">سوابق تبادلات آنلاین</h3>
-                                <p className="text-[11px] text-slate-400">سوابق تراکنش‌های انجام‌شده در این نشست زنده سرور</p>
+                                <h3 className="font-black text-sm text-slate-800 dark:text-white">سوابق دریافتی از سرور (GET)</h3>
+                                <p className="text-[11px] text-slate-400">بازیابی خودکار تراکنش‌ها و اسناد انبار از سرور با قابلیت پیگیری کامل</p>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <button
+                                onClick={loadData}
+                                className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-1.5"
+                            >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>دریافت مجدد از سرور</span>
+                            </button>
+                            <button
                                 onClick={handleOpenExchangeModal}
                                 className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md flex items-center gap-1.5 cursor-pointer"
                             >
                                 <Plus className="w-4 h-4" />
-                                <span>افزودن تبادل جدید</span>
+                                <span>ثبت سند جدید (POST)</span>
                             </button>
-                            {transactions.length > 0 && (
-                                <button
-                                    onClick={() => setTransactions([])}
-                                    className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                                >
-                                    پاک‌سازی لیست نشست
-                                </button>
-                            )}
                         </div>
                     </div>
 
@@ -481,8 +386,8 @@ export const StorageCenterPage: React.FC = () => {
                     {transactions.length === 0 ? (
                         <div className="p-16 text-center space-y-3">
                             <BookOpen className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
-                            <p className="text-sm font-bold text-slate-500">هیچ تبادلی در این نشست ثبت نشده است.</p>
-                            <p className="text-xs text-slate-400">اطلاعات مستقیماً روی سرور ثبت و پردازش می‌شوند.</p>
+                            <p className="text-sm font-bold text-slate-500">هیچ سابقه تراکنشی از سرور دریافت نشد.</p>
+                            <p className="text-xs text-slate-400">با استفاده از دکمه «ثبت سند جدید»، اسناد خود را به سرور ارسال کنید.</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -490,21 +395,22 @@ export const StorageCenterPage: React.FC = () => {
                                 <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 font-bold">
                                     <tr>
                                         <th className="p-3.5">تاریخ و ساعت</th>
-                                        <th className="p-3.5">نوع تبادل</th>
+                                        <th className="p-3.5">نوع سند</th>
                                         <th className="p-3.5">نام کالا</th>
-                                        <th className="p-3.5">مقدار</th>
+                                        <th className="p-3.5">مقدار (مثبت/منفی)</th>
                                         <th className="p-3.5">محل نگهداری</th>
-                                        <th className="p-3.5">علت تبادل</th>
+                                        <th className="p-3.5">شرح / علت</th>
                                         <th className="p-3.5">منبع / تحویل‌گیرنده</th>
                                         <th className="p-3.5">ثبت‌کننده</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                     {transactions.map(tx => {
-                                        const isIn = tx.type === 'IN';
+                                        const qty = Number(tx.quantity || 0);
+                                        const isIn = qty >= 0;
                                         return (
-                                            <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
-                                                <td className="p-3.5 font-mono text-slate-500">{tx.date}</td>
+                                            <tr key={tx.id || Math.random()} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                                                <td className="p-3.5 font-mono text-slate-500">{tx.date || '---'}</td>
                                                 <td className="p-3.5">
                                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-black text-[11px] ${
                                                         isIn
@@ -515,18 +421,21 @@ export const StorageCenterPage: React.FC = () => {
                                                         <span>{isIn ? 'ورود به انبار' : 'خروج از انبار'}</span>
                                                     </span>
                                                 </td>
-                                                <td className="p-3.5 font-black text-slate-800 dark:text-white text-sm">{tx.itemName}</td>
-                                                <td className="p-3.5 font-mono font-black text-sm text-slate-800 dark:text-white">
-                                                    {isIn ? '+' : '-'}{tx.quantity.toLocaleString('fa-IR')} <span className="text-xs font-sans font-normal text-slate-400">{tx.unit}</span>
+                                                <td className="p-3.5 font-black text-slate-800 dark:text-white text-sm">{tx.itemName || tx.name || '---'}</td>
+                                                <td className="p-3.5 font-mono font-black text-sm">
+                                                    <span className={qty >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                                                        {qty > 0 ? `+${qty.toLocaleString('fa-IR')}` : qty.toLocaleString('fa-IR')}
+                                                    </span>{' '}
+                                                    <span className="text-xs font-sans font-normal text-slate-400">{tx.unit || 'عدد'}</span>
                                                 </td>
                                                 <td className="p-3.5 text-slate-600 dark:text-slate-300">
                                                     <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[11px] font-bold">
                                                         {tx.location || 'انبار مرکزی'}
                                                     </span>
                                                 </td>
-                                                <td className="p-3.5 font-bold text-slate-700 dark:text-slate-200">{tx.reason || '---'}</td>
-                                                <td className="p-3.5 text-indigo-600 dark:text-indigo-400 font-bold">{tx.receiverOrSource || '---'}</td>
-                                                <td className="p-3.5 text-slate-500 font-medium">@{tx.operator}</td>
+                                                <td className="p-3.5 font-bold text-slate-700 dark:text-slate-200">{tx.reason || tx.description || '---'}</td>
+                                                <td className="p-3.5 text-indigo-600 dark:text-indigo-400 font-bold">{tx.receiverOrSource || tx.supplier || '---'}</td>
+                                                <td className="p-3.5 text-slate-500 font-medium">@{tx.operator || 'سیستم'}</td>
                                             </tr>
                                         );
                                     })}
@@ -599,7 +508,6 @@ export const StorageCenterPage: React.FC = () => {
                                             <th className="p-4">محل نگهداری</th>
                                             <th className="p-4">قیمت واحد (تومان)</th>
                                             <th className="p-4">ارزش کل</th>
-                                            <th className="p-4 text-center">عملیات</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -644,24 +552,6 @@ export const StorageCenterPage: React.FC = () => {
                                                     <td className="p-4 font-mono font-black text-emerald-600 dark:text-emerald-400">
                                                         {((item.quantity || 0) * (item.unitPrice || 0)).toLocaleString('fa-IR')} ت
                                                     </td>
-                                                    <td className="p-4">
-                                                        <div className="flex items-center justify-center gap-1.5">
-                                                            <button
-                                                                onClick={() => handleOpenCatalogEdit(item)}
-                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
-                                                                title="ویرایش مشخصات"
-                                                            >
-                                                                <Edit3 className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteItem(item.id)}
-                                                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                                                                title="حذف کالا"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
                                                 </tr>
                                             );
                                         })}
@@ -673,14 +563,14 @@ export const StorageCenterPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Modal: افزودن تبادل (Add Exchange) */}
+            {/* Modal: افزودن تبادل (Add Exchange - Append Only) */}
             {isExchangeModalOpen && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 backdrop-blur-sm" onClick={() => setIsExchangeModalOpen(false)}>
                     <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
                         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center shrink-0">
                             <h3 className="font-black text-base text-slate-800 dark:text-white flex items-center gap-2">
                                 <BookOpen className="w-5 h-5 text-indigo-600" />
-                                <span>ثبت تبادل جدید انبار (سرور آنلاین)</span>
+                                <span>ثبت سند تبادل انبار (دفتر کل - POST)</span>
                             </h3>
                             <button onClick={() => setIsExchangeModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
                         </div>
@@ -698,7 +588,7 @@ export const StorageCenterPage: React.FC = () => {
                                     }`}
                                 >
                                     <ArrowDownLeft className="w-4 h-4" />
-                                    <span>📥 ورود به انبار (خرید / شارژ)</span>
+                                    <span>📥 ورود به انبار (مقدار مثبت)</span>
                                 </button>
                                 <button
                                     type="button"
@@ -710,7 +600,7 @@ export const StorageCenterPage: React.FC = () => {
                                     }`}
                                 >
                                     <ArrowUpRight className="w-4 h-4" />
-                                    <span>📤 خروج از انبار (مصرف اداری)</span>
+                                    <span>📤 خروج از انبار (مقدار منفی)</span>
                                 </button>
                             </div>
 
@@ -722,7 +612,7 @@ export const StorageCenterPage: React.FC = () => {
                                     onChange={e => setExchangeData({...exchangeData, itemId: e.target.value})}
                                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500"
                                 >
-                                    <option value="NEW">➕ افزودن کالای جدید (ثبت کالای تازه در سرور)</option>
+                                    <option value="NEW">➕ افزودن کالای جدید (ثبت سند اولیه در سرور)</option>
                                     {items.map(i => (
                                         <option key={i.id} value={i.id}>
                                             {i.name} — موجودی فعلی: {i.quantity} {i.unit} (محل: {i.location})
@@ -734,7 +624,7 @@ export const StorageCenterPage: React.FC = () => {
                             {/* If NEW Item */}
                             {exchangeData.itemId === 'NEW' && (
                                 <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-                                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block">مشخصات کامل کالای جدید جهت ارسال به سرور:</span>
+                                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block">مشخصات کامل کالای جدید جهت ارسال سند به سرور:</span>
                                     <div>
                                         <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">نام کالا *</label>
                                         <input
@@ -817,7 +707,7 @@ export const StorageCenterPage: React.FC = () => {
                             {/* Quantity & Location */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">مقدار تبادل *</label>
+                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">مقدار تبادل * (ورود مثبت / خروج منفی)</label>
                                     <input
                                         type="number"
                                         min={1}
@@ -908,78 +798,7 @@ export const StorageCenterPage: React.FC = () => {
                                     type="submit"
                                     className="px-7 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
                                 >
-                                    ارسال کلیه اطلاعات به سرور
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Catalog Item Edit Modal */}
-            {isCatalogModalOpen && editingItem && (
-                <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4 backdrop-blur-sm" onClick={() => setIsCatalogModalOpen(false)}>
-                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in p-6 space-y-4" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3">
-                            <h3 className="font-black text-sm text-slate-800 dark:text-white">ویرایش مشخصات کالای انبار (سرور)</h3>
-                            <button onClick={() => setIsCatalogModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
-                        </div>
-
-                        <form onSubmit={handleSaveCatalog} className="space-y-4 text-xs">
-                            <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">نام کالا</label>
-                                <input
-                                    type="text"
-                                    value={catalogFormData.name}
-                                    onChange={e => setCatalogFormData({...catalogFormData, name: e.target.value})}
-                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">محل نگهداری</label>
-                                    <select
-                                        value={catalogFormData.location}
-                                        onChange={e => setCatalogFormData({...catalogFormData, location: e.target.value})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold"
-                                    >
-                                        {LOCATIONS.map(l => (
-                                            <option key={l} value={l}>{l}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">حداقل هشدار</label>
-                                    <input
-                                        type="number"
-                                        value={catalogFormData.minStock}
-                                        onChange={e => setCatalogFormData({...catalogFormData, minStock: Number(e.target.value)})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">قیمت واحد (تومان)</label>
-                                <input
-                                    type="number"
-                                    value={catalogFormData.unitPrice}
-                                    onChange={e => setCatalogFormData({...catalogFormData, unitPrice: Number(e.target.value)})}
-                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold"
-                                />
-                            </div>
-                            <div className="pt-2 flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsCatalogModalOpen(false)}
-                                    className="px-4 py-2 rounded-xl font-bold text-slate-500 hover:bg-slate-100"
-                                >
-                                    انصراف
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-6 py-2 bg-indigo-600 text-white font-black rounded-xl shadow-md hover:bg-indigo-700"
-                                >
-                                    ذخیره در سرور
+                                    ثبت سند در دفتر کل (ارسال با مقدار مثبت/منفی POST)
                                 </button>
                             </div>
                         </form>

@@ -253,7 +253,7 @@ const SalaryAdvancePage: React.FC = () => {
             targetDate: toGregorian(formData.targetDate.trim()),
             reason: formData.reason.trim(),
             status: 'PENDING',
-            createdAt: currentDateStr
+            createdAt: moment().format('YYYY-MM-DD')
         };
 
         try {

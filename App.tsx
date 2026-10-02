@@ -33,6 +33,7 @@ import AboutPage from './pages/AboutPage';
 import AttendancePage from './pages/AttendancePage';
 import BankLetterPage from './pages/BankLetterPage';
 import StorageCenterPage from './pages/StorageCenterPage';
+import RequestsHubPage from './pages/RequestsHubPage';
 import Spinner from './components/Spinner';
 import { LogoutIcon } from './components/icons/LogoutIcon';
 import { SettingsIcon } from './components/icons/SettingsIcon';
@@ -62,7 +63,7 @@ import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './serv
 import type { MyProfile } from './types';
 import AutoRefreshWidget from './components/AutoRefreshWidget';
 
-export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
+export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
 
 interface MenuItemProps {
     label: string;
@@ -305,9 +306,9 @@ const App: React.FC = () => {
         { view: 'reports' as ActiveView, label: 'آمار و گزارشات', icon: <ChartBarIcon className="w-5 h-5" /> },
         { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
         { view: 'meeting-minutes' as ActiveView, label: 'صورت‌جلسات اداری', icon: <CalendarIcon className="w-5 h-5" /> },
-        { view: 'attendance' as ActiveView, label: 'حضور و غیاب، مرخصی و اضافه کار', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
+        { view: 'attendance' as ActiveView, label: 'حضور و غیاب', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
+        { view: 'requests' as ActiveView, label: 'درخواست‌ها', icon: <FileText className="w-5 h-5 text-amber-500" /> },
         { view: 'anonymous-feedback' as ActiveView, label: 'صندوق انتقادات', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
-        { view: 'salary-advance' as ActiveView, label: 'امور مساعده کارمندان', icon: <Wallet className="w-5 h-5" /> },
         { view: 'my-profile' as ActiveView, label: 'پروفایل کاربری من', icon: <UserIcon className="w-5 h-5" /> },
         { view: 'access-control' as ActiveView, label: 'مدیریت کاربران', icon: <SecurityIcon className="w-5 h-5" /> },
         { view: 'settings' as ActiveView, label: 'تنظیمات عمومی سیستم', icon: <SettingsIcon className="w-5 h-5" /> },
@@ -350,11 +351,11 @@ const App: React.FC = () => {
             isCollapsible: true,
             icon: <CalendarIcon className="w-5 h-5" />,
             items: [
+                { view: 'requests' as ActiveView, label: 'درخواست‌ها', icon: <FileText className="w-5 h-5 text-amber-500" /> },
+                { view: 'attendance' as ActiveView, label: 'حضور و غیاب', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
                 { view: 'storage-center' as ActiveView, label: 'انبارداری', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
                 { view: 'corrective-actions' as ActiveView, label: 'اقدامات اصلاحی', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
                 { view: 'meeting-minutes' as ActiveView, label: 'صورت‌جلسات اداری', icon: <CalendarIcon className="w-5 h-5" /> },
-                { view: 'attendance' as ActiveView, label: 'حضور و غیاب، مرخصی و اضافه کار', icon: <Clock className="w-5 h-5 text-emerald-500 font-bold" /> },
-                { view: 'salary-advance' as ActiveView, label: 'درخواست‌های مساعده', icon: <Wallet className="w-5 h-5 text-sky-500" /> },
                 { view: 'anonymous-feedback' as ActiveView, label: 'صندوق انتقادات', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
             ]
         },
@@ -641,10 +642,10 @@ const App: React.FC = () => {
                 {activeView === 'commission' && <CommissionPage />}
                 {activeView === 'corrective-actions' && <CorrectiveActionsPage />}
                 {activeView === 'meeting-minutes' && <MeetingMinutesPage />}
-                {(activeView === 'attendance' || activeView === 'leave-requests' || activeView === 'overtime') && (
+                {activeView === 'attendance' && (
                     <AttendancePage isAdmin={currentUser?.isAdmin === 1} loggedInUser={currentUser} />
                 )}
-                {activeView === 'salary-advance' && <SalaryAdvancePage />}
+                {activeView === 'requests' && <RequestsHubPage />}
                 {activeView === 'anonymous-feedback' && <AnonymousFeedbackPage />}
                 {activeView === 'zero-car-delivery' && <ZeroCarDeliveryPage />}
                 {activeView === 'my-profile' && <MyProfilePage />}
