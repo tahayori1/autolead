@@ -238,9 +238,11 @@ export const StorageCenterPage: React.FC = () => {
             return;
         }
 
+        const targetItem = items.find(i => String(i.id) === String(inboundForm.itemId));
         try {
             const result = await recordStockMovement({
                 itemId: inboundForm.itemId,
+                currentItem: targetItem,
                 type: 'IN',
                 quantity: Number(inboundForm.quantity),
                 date: inboundForm.date ? `${inboundForm.date} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
@@ -304,6 +306,7 @@ export const StorageCenterPage: React.FC = () => {
         try {
             const result = await recordStockMovement({
                 itemId: outboundForm.itemId,
+                currentItem: targetItem,
                 type: 'OUT',
                 quantity: outQty,
                 date: outboundForm.date ? `${outboundForm.date} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
@@ -351,6 +354,7 @@ export const StorageCenterPage: React.FC = () => {
         try {
             const result = await recordStockMovement({
                 itemId: adjustingItem.id,
+                currentItem: adjustingItem,
                 type: 'ADJUSTMENT',
                 quantity: Math.abs(diff),
                 targetStock: targetQty,
@@ -447,6 +451,7 @@ export const StorageCenterPage: React.FC = () => {
                 if (created.quantity > 0) {
                     await recordStockMovement({
                         itemId: created.id,
+                        currentItem: created,
                         type: 'IN',
                         quantity: created.quantity,
                         date: getNowGregorianDateTime(),
@@ -521,7 +526,7 @@ export const StorageCenterPage: React.FC = () => {
         );
 
         try {
-            await deleteStockMovement(tx.id, shouldRevert);
+            await deleteStockMovement(tx.id, shouldRevert, tx);
             setTransactions(prev => prev.filter(t => String(t.id) !== String(tx.id)));
             if (shouldRevert) {
                 // reload to get accurate reverted item stocks
@@ -617,10 +622,13 @@ export const StorageCenterPage: React.FC = () => {
                         <Boxes className="w-7 h-7" />
                     </div>
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <h1 className="text-2xl font-black tracking-tight">سامانه مدیریت انبار و موجودی کالا</h1>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                                 🗓️ تقویم میلادی
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-mono">
+                                ⚡ وب‌سرویس مستقیم API
                             </span>
                         </div>
                         <p className="text-xs text-indigo-200 mt-1">
