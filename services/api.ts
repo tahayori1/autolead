@@ -3133,36 +3133,293 @@ export const deleteCollabCar = async (id: string | number): Promise<void> => {
     return handleResponse(response);
 };
 
-// --- Storage Center Services (انبار اداری و مصرفی) ---
+// --- Storage Center Services (سامانه استاندارد مدیریت انبار و گردش کالا) ---
 export const STORAGE_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/storage-center';
 
+const STORAGE_ITEMS_CACHE_KEY = 'hk_storage_center_items_v2';
+const STORAGE_TRANSACTIONS_CACHE_KEY = 'hk_storage_center_transactions_v2';
+
+// Helper to get current Gregorian datetime (e.g. "2026-10-13 14:30")
+export const getNowGregorianDateTime = (): string => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+};
+
+export const getTodayGregorianDate = (): string => {
+    return new Date().toISOString().split('T')[0];
+};
+
+// Initial standard warehouse items with Gregorian dates
+const DEFAULT_INITIAL_ITEMS: StorageItem[] = [
+    {
+        id: 'ITM-101',
+        name: 'چای سیاه شکسته اعلا (جعبه ۵۰۰ گرمی)',
+        category: 'چای، قهوه و آبدارخانه',
+        quantity: 24,
+        unit: 'جعبه',
+        minStock: 5,
+        location: 'آبدارخانه طبقه همکف',
+        unitPrice: 195000,
+        supplier: 'چای دوغزال / توزیع بازار',
+        lastRestockDate: '2026-10-10',
+        description: 'مصرف هفتگی آبدارخانه و پذیرایی از پرسنل و مراجعین'
+    },
+    {
+        id: 'ITM-102',
+        name: 'قهوه اسپرسو بن مانو (بسته ۲۵۰ گرمی)',
+        category: 'چای، قهوه و آبدارخانه',
+        quantity: 12,
+        unit: 'بسته',
+        minStock: 3,
+        location: 'آبدارخانه',
+        unitPrice: 240000,
+        supplier: 'شرکت بن مانو',
+        lastRestockDate: '2026-10-11',
+        description: 'مخصوص دستگاه اسپرسوساز اتاق مدیریت و لابی'
+    },
+    {
+        id: 'ITM-103',
+        name: 'قند حبه ۵ کیلویی شکسته',
+        category: 'چای، قهوه و آبدارخانه',
+        quantity: 8,
+        unit: 'کیسه',
+        minStock: 2,
+        location: 'انبار مرکزی',
+        unitPrice: 290000,
+        supplier: 'فروشگاه تدارکات',
+        lastRestockDate: '2026-10-09',
+        description: 'قند تصفیه شده بسته‌بندی'
+    },
+    {
+        id: 'ITM-104',
+        name: 'لیوان کاغذی دوجداره ۲۰۰ سی‌سی',
+        category: 'ظروف یکبار مصرف',
+        quantity: 1200,
+        unit: 'عدد',
+        minStock: 300,
+        location: 'قفسه A1 انبار',
+        unitPrice: 1200,
+        supplier: 'صنایع سلولوزی پاپیروس',
+        lastRestockDate: '2026-10-12',
+        description: 'کارتن‌های ۱۰۰۰ عددی بهداشتی'
+    },
+    {
+        id: 'ITM-105',
+        name: 'کاغذ A4 دابل آ ۸۰ گرمی (بسته ۵۰۰ برگی)',
+        category: 'لوازم تحریر و اداری',
+        quantity: 35,
+        unit: 'بسته',
+        minStock: 10,
+        location: 'قفسه C1 ملزومات اداری',
+        unitPrice: 210000,
+        supplier: 'توزیع‌کننده Double A',
+        lastRestockDate: '2026-10-08',
+        description: 'پرینترهای واحد قراردادها و حسابداری'
+    },
+    {
+        id: 'ITM-106',
+        name: 'مایع دستشویی ۴ لیتری لطیف',
+        category: 'شوینده و سلولوزی',
+        quantity: 6,
+        unit: 'گالن',
+        minStock: 2,
+        location: 'قفسه شوینده B1',
+        unitPrice: 185000,
+        supplier: 'پخش شوینده البرز',
+        lastRestockDate: '2026-10-07',
+        description: 'رایحه سیب / پر کردن مخازن سرویس‌ها'
+    },
+    {
+        id: 'ITM-107',
+        name: 'دستمال کاغذی جعبه‌ای ۲۰۰ برگ',
+        category: 'شوینده و سلولوزی',
+        quantity: 45,
+        unit: 'جعبه',
+        minStock: 15,
+        location: 'انبار مرکزی',
+        unitPrice: 380000,
+        supplier: 'پاپیا',
+        lastRestockDate: '2026-10-11',
+        description: 'میز کارشناسان و اتاق مدیریت'
+    },
+    {
+        id: 'ITM-108',
+        name: 'خودکار آبی کنکو فینال ۰.۷',
+        category: 'لوازم تحریر و اداری',
+        quantity: 120,
+        unit: 'عدد',
+        minStock: 30,
+        location: 'کمد ملزومات اداری',
+        unitPrice: 12000,
+        supplier: 'تحریر مرکزی',
+        lastRestockDate: '2026-10-09',
+        description: 'امضای اسناد و تکمیل فرم‌های مشتریان'
+    }
+];
+
+const DEFAULT_INITIAL_MOVEMENTS: StockTransaction[] = [
+    {
+        id: 'TX-1001',
+        itemId: 'ITM-101',
+        itemName: 'چای سیاه شکسته اعلا (جعبه ۵۰۰ گرمی)',
+        type: 'IN',
+        quantity: 30,
+        unit: 'جعبه',
+        previousStock: 0,
+        newStock: 30,
+        date: '2026-10-10 09:15',
+        referenceNumber: 'INV-4401',
+        sourceOrDestination: 'چای دوغزال / توزیع بازار',
+        reason: 'خرید جدید و شارژ انبار ماهانه',
+        unitPrice: 195000,
+        operator: 'مدیر تدارکات',
+        location: 'آبدارخانه طبقه همکف'
+    },
+    {
+        id: 'ITM-TX-1002',
+        itemId: 'ITM-101',
+        itemName: 'چای سیاه شکسته اعلا (جعبه ۵۰۰ گرمی)',
+        type: 'OUT',
+        quantity: 6,
+        unit: 'جعبه',
+        previousStock: 30,
+        newStock: 24,
+        date: '2026-10-12 11:30',
+        referenceNumber: 'REQ-108',
+        sourceOrDestination: 'آبدارخانه طبقه همکف و مهمان‌داری',
+        reason: 'تحویل جهت مصرف هفتگی پذیرایی',
+        operator: 'انباردار',
+        location: 'آبدارخانه طبقه همکف'
+    },
+    {
+        id: 'ITM-TX-1003',
+        itemId: 'ITM-105',
+        itemName: 'کاغذ A4 دابل آ ۸۰ گرمی (بسته ۵۰۰ برگی)',
+        type: 'IN',
+        quantity: 40,
+        unit: 'بسته',
+        previousStock: 0,
+        newStock: 40,
+        date: '2026-10-08 14:00',
+        referenceNumber: 'INV-9022',
+        sourceOrDestination: 'توزیع‌کننده Double A',
+        reason: 'شارژ ملزومات اداری و قراردادها',
+        unitPrice: 210000,
+        operator: 'مسئول خرید',
+        location: 'قفسه C1 ملزومات اداری'
+    },
+    {
+        id: 'ITM-TX-1004',
+        itemId: 'ITM-105',
+        itemName: 'کاغذ A4 دابل آ ۸۰ گرمی (بسته ۵۰۰ برگی)',
+        type: 'OUT',
+        quantity: 5,
+        unit: 'بسته',
+        previousStock: 40,
+        newStock: 35,
+        date: '2026-10-11 10:45',
+        referenceNumber: 'REQ-109',
+        sourceOrDestination: 'واحد فروش و صدور قرارداد',
+        reason: 'تحویل به متصدی چاپ قراردادها',
+        operator: 'انباردار',
+        location: 'قفسه C1 ملزومات اداری'
+    }
+];
+
+// Helper to get local cached items
+export const getLocalCachedStorageItems = (): StorageItem[] => {
+    try {
+        const raw = localStorage.getItem(STORAGE_ITEMS_CACHE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (e) {
+        console.warn('Failed to parse cached storage items:', e);
+    }
+    return DEFAULT_INITIAL_ITEMS;
+};
+
+export const setLocalCachedStorageItems = (items: StorageItem[]): void => {
+    try {
+        localStorage.setItem(STORAGE_ITEMS_CACHE_KEY, JSON.stringify(items));
+    } catch (e) {
+        console.warn('Failed to save storage items cache:', e);
+    }
+};
+
+export const getLocalCachedStockTransactions = (): StockTransaction[] => {
+    try {
+        const raw = localStorage.getItem(STORAGE_TRANSACTIONS_CACHE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+        }
+    } catch (e) {
+        console.warn('Failed to parse cached transactions:', e);
+    }
+    return DEFAULT_INITIAL_MOVEMENTS;
+};
+
+export const setLocalCachedStockTransactions = (txs: StockTransaction[]): void => {
+    try {
+        localStorage.setItem(STORAGE_TRANSACTIONS_CACHE_KEY, JSON.stringify(txs));
+    } catch (e) {
+        console.warn('Failed to save stock transactions cache:', e);
+    }
+};
+
 export const getStorageData = async (): Promise<{ items: StorageItem[]; transactions: StockTransaction[] }> => {
+    let localItems = getLocalCachedStorageItems();
+    let localTxs = getLocalCachedStockTransactions();
+
     try {
         const response = await fetch(STORAGE_WEBHOOK_URL, {
             headers: getAuthHeaders()
         });
-        const data = await handleResponse(response);
-        let rawItems: StorageItem[] = [];
-        let rawTransactions: StockTransaction[] = [];
+        if (response.ok) {
+            const data = await response.json();
+            let remoteItems: StorageItem[] = [];
+            let remoteTransactions: StockTransaction[] = [];
 
-        if (Array.isArray(data)) {
-            rawItems = data;
-        } else if (data && typeof data === 'object') {
-            if (Array.isArray(data.items)) rawItems = data.items;
-            else if (Array.isArray(data.data)) rawItems = data.data;
+            if (Array.isArray(data)) {
+                remoteItems = data;
+            } else if (data && typeof data === 'object') {
+                if (Array.isArray(data.items)) remoteItems = data.items;
+                else if (Array.isArray(data.data)) remoteItems = data.data;
 
-            if (Array.isArray(data.transactions)) rawTransactions = data.transactions;
-            else if (Array.isArray(data.logs)) rawTransactions = data.logs;
-            else if (Array.isArray(data.history)) rawTransactions = data.history;
+                if (Array.isArray(data.transactions)) remoteTransactions = data.transactions;
+                else if (Array.isArray(data.logs)) remoteTransactions = data.logs;
+                else if (Array.isArray(data.history)) remoteTransactions = data.history;
+            }
+
+            if (remoteItems.length > 0) {
+                // Ensure gregorian dates
+                remoteItems = remoteItems.map(it => ({
+                    ...it,
+                    lastRestockDate: it.lastRestockDate ? String(it.lastRestockDate).replace(/\//g, '-') : undefined
+                }));
+                setLocalCachedStorageItems(remoteItems);
+                localItems = remoteItems;
+            }
+            if (remoteTransactions.length > 0) {
+                setLocalCachedStockTransactions(remoteTransactions);
+                localTxs = remoteTransactions;
+            }
         }
-
-        return {
-            items: rawItems,
-            transactions: rawTransactions
-        };
     } catch (e) {
-        return { items: [], transactions: [] };
+        console.warn('Webhook storage get error (using local cache):', e);
     }
+
+    return {
+        items: localItems,
+        transactions: localTxs
+    };
 };
 
 export const getStorageItems = async (): Promise<StorageItem[]> => {
@@ -3170,43 +3427,232 @@ export const getStorageItems = async (): Promise<StorageItem[]> => {
     return data.items;
 };
 
-export const createStorageItem = async (payload: Omit<StorageItem, 'id'>): Promise<StorageItem> => {
-    ensureOnline();
-    const response = await fetch(STORAGE_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-        },
-        body: JSON.stringify(payload)
-    });
-    return handleResponse(response);
+export const createStorageItem = async (payload: Omit<StorageItem, 'id'> & { id?: string | number }): Promise<StorageItem> => {
+    const localItems = getLocalCachedStorageItems();
+    const newItem: StorageItem = {
+        ...payload,
+        id: payload.id || `ITM-${Date.now().toString().slice(-5)}`,
+        quantity: Number(payload.quantity) || 0,
+        minStock: Number(payload.minStock) || 0,
+        unitPrice: Number(payload.unitPrice) || 0,
+        lastRestockDate: payload.lastRestockDate || getTodayGregorianDate(),
+        createdAt: getNowGregorianDateTime()
+    };
+    const updated = [newItem, ...localItems];
+    setLocalCachedStorageItems(updated);
+
+    try {
+        await fetch(STORAGE_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify(newItem)
+        });
+    } catch (e) {
+        console.warn('Remote sync failed for createStorageItem, saved locally');
+    }
+
+    return newItem;
 };
 
 export const updateStorageItem = async (id: string | number, payload: Partial<StorageItem>): Promise<StorageItem> => {
-    ensureOnline();
-    const response = await fetch(STORAGE_WEBHOOK_URL, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-        },
-        body: JSON.stringify({ id, ...payload })
-    });
-    return handleResponse(response);
+    const localItems = getLocalCachedStorageItems();
+    const index = localItems.findIndex(i => String(i.id) === String(id));
+    if (index === -1) {
+        throw new Error('کالای مورد نظر یافت نشد');
+    }
+
+    const updatedItem: StorageItem = {
+        ...localItems[index],
+        ...payload,
+        id: localItems[index].id,
+        quantity: payload.quantity !== undefined ? Number(payload.quantity) : localItems[index].quantity,
+        minStock: payload.minStock !== undefined ? Number(payload.minStock) : localItems[index].minStock,
+        unitPrice: payload.unitPrice !== undefined ? Number(payload.unitPrice) : localItems[index].unitPrice,
+        updatedAt: getNowGregorianDateTime()
+    };
+
+    localItems[index] = updatedItem;
+    setLocalCachedStorageItems(localItems);
+
+    try {
+        await fetch(STORAGE_WEBHOOK_URL, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({ id, ...payload })
+        });
+    } catch (e) {
+        console.warn('Remote sync failed for updateStorageItem, updated locally');
+    }
+
+    return updatedItem;
 };
 
 export const deleteStorageItem = async (id: string | number): Promise<void> => {
-    ensureOnline();
-    const response = await fetch(STORAGE_WEBHOOK_URL, {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-        },
-        body: JSON.stringify({ id })
-    });
-    return handleResponse(response);
+    const localItems = getLocalCachedStorageItems();
+    const filtered = localItems.filter(i => String(i.id) !== String(id));
+    setLocalCachedStorageItems(filtered);
+
+    try {
+        await fetch(STORAGE_WEBHOOK_URL, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({ id })
+        });
+    } catch (e) {
+        console.warn('Remote delete failed, removed locally');
+    }
+};
+
+/**
+ * Record a standard Warehouse Stock Movement (Inbound, Outbound, or Adjustment)
+ * Automatically adjusts the item's current stock and keeps movements log in sync.
+ */
+export const recordStockMovement = async (params: {
+    itemId: string | number;
+    type: 'IN' | 'OUT' | 'ADJUSTMENT';
+    quantity: number;
+    targetStock?: number; // For direct adjustment
+    date?: string; // Gregorian date YYYY-MM-DD or YYYY-MM-DD HH:mm
+    referenceNumber?: string;
+    sourceOrDestination?: string;
+    reason: string;
+    unitPrice?: number;
+    operator?: string;
+    notes?: string;
+}): Promise<{ item: StorageItem; transaction: StockTransaction }> => {
+    const localItems = getLocalCachedStorageItems();
+    const itemIndex = localItems.findIndex(i => String(i.id) === String(params.itemId));
+    if (itemIndex === -1) {
+        throw new Error('کالای مورد نظر برای ثبت گردش انبار یافت نشد.');
+    }
+
+    const item = localItems[itemIndex];
+    const prevStock = Number(item.quantity) || 0;
+    let newStock = prevStock;
+    const qty = Math.abs(Number(params.quantity) || 0);
+
+    if (params.type === 'IN') {
+        newStock = prevStock + qty;
+    } else if (params.type === 'OUT') {
+        if (prevStock < qty) {
+            throw new Error(`موجودی فعلی کالا (${prevStock} ${item.unit}) کمتر از مقدار درخواستی برای خروج (${qty} ${item.unit}) است.`);
+        }
+        newStock = prevStock - qty;
+    } else if (params.type === 'ADJUSTMENT') {
+        newStock = params.targetStock !== undefined ? Number(params.targetStock) : qty;
+    }
+
+    // Update item stock
+    const updatedItem: StorageItem = {
+        ...item,
+        quantity: Math.max(0, newStock),
+        lastRestockDate: params.type === 'IN' ? (params.date?.split(' ')[0] || getTodayGregorianDate()) : item.lastRestockDate,
+        updatedAt: getNowGregorianDateTime()
+    };
+    localItems[itemIndex] = updatedItem;
+    setLocalCachedStorageItems(localItems);
+
+    // Create movement record
+    const movement: StockTransaction = {
+        id: `MOV-${Date.now().toString().slice(-6)}`,
+        itemId: item.id,
+        itemName: item.name || '',
+        category: item.category,
+        unit: item.unit || 'عدد',
+        location: item.location || 'انبار مرکزی',
+        type: params.type,
+        quantity: qty,
+        transactionQuantity: params.type === 'OUT' ? -qty : qty,
+        previousStock: prevStock,
+        newStock: newStock,
+        date: params.date || getNowGregorianDateTime(),
+        referenceNumber: params.referenceNumber || '',
+        sourceOrDestination: params.sourceOrDestination || '',
+        receiverOrSource: params.sourceOrDestination || '',
+        reason: params.reason || '',
+        unitPrice: params.unitPrice !== undefined ? params.unitPrice : item.unitPrice,
+        totalPrice: (params.unitPrice !== undefined ? params.unitPrice : (item.unitPrice || 0)) * qty,
+        operator: params.operator || localStorage.getItem('currentUsername') || 'مسئول انبار',
+        notes: params.notes || ''
+    };
+
+    const localTxs = getLocalCachedStockTransactions();
+    setLocalCachedStockTransactions([movement, ...localTxs]);
+
+    // Send payload to webhook
+    try {
+        await fetch(STORAGE_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+                ...updatedItem,
+                transaction: movement,
+                action: 'STOCK_MOVEMENT'
+            })
+        });
+    } catch (e) {
+        console.warn('Webhook movement sync failed, stored locally');
+    }
+
+    return { item: updatedItem, transaction: movement };
+};
+
+export const updateStockMovement = async (id: string | number, payload: Partial<StockTransaction>): Promise<StockTransaction> => {
+    const localTxs = getLocalCachedStockTransactions();
+    const index = localTxs.findIndex(t => String(t.id) === String(id));
+    if (index === -1) {
+        throw new Error('سند گردش انبار مورد نظر یافت نشد.');
+    }
+
+    const updatedTx: StockTransaction = {
+        ...localTxs[index],
+        ...payload,
+        id: localTxs[index].id
+    };
+    localTxs[index] = updatedTx;
+    setLocalCachedStockTransactions(localTxs);
+
+    return updatedTx;
+};
+
+export const deleteStockMovement = async (id: string | number, revertStock: boolean = false): Promise<void> => {
+    const localTxs = getLocalCachedStockTransactions();
+    const tx = localTxs.find(t => String(t.id) === String(id));
+    if (!tx) return;
+
+    if (revertStock && tx.itemId) {
+        const localItems = getLocalCachedStorageItems();
+        const itemIdx = localItems.findIndex(i => String(i.id) === String(tx.itemId));
+        if (itemIdx !== -1) {
+            const it = localItems[itemIdx];
+            const qty = Number(tx.quantity) || 0;
+            let revertedQty = it.quantity;
+            if (tx.type === 'IN') {
+                revertedQty = Math.max(0, it.quantity - qty);
+            } else if (tx.type === 'OUT') {
+                revertedQty = it.quantity + qty;
+            } else if (tx.type === 'ADJUSTMENT' && tx.previousStock !== undefined) {
+                revertedQty = tx.previousStock;
+            }
+            localItems[itemIdx] = { ...it, quantity: revertedQty, updatedAt: getNowGregorianDateTime() };
+            setLocalCachedStorageItems(localItems);
+        }
+    }
+
+    const filtered = localTxs.filter(t => String(t.id) !== String(id));
+    setLocalCachedStockTransactions(filtered);
 };
 
 // --- Attendance / Timesheet Services ---

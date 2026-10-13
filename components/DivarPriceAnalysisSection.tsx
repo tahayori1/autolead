@@ -21,41 +21,196 @@ interface DivarPriceAnalysisSectionProps {
 }
 
 export const DIVAR_SUPPORTED_MODELS = [
-    { key: 'kmc eagle', label: 'کی‌ام‌سی ایگل (KMC Eagle)' },
-    { key: 'jac j4', label: 'جک جی۴ (JAC J4)' },
-    { key: 'bac x3-pro', label: 'بک ایکس۳ پرو (BAC X3 Pro)' },
-    { key: 'kmc t8', label: 'کی‌ام‌سی تی۸ (KMC T8)' },
-    { key: 'kmc x5', label: 'کی‌ام‌سی ایکس۵ (KMC X5)' },
+    // KMC / Kerman Motor
     { key: 'kmc j7', label: 'کی‌ام‌سی جی۷ (KMC J7)' },
+    { key: 'kmc x5', label: 'کی‌ام‌سی ایکس۵ (KMC X5)' },
+    { key: 'kmc eagle', label: 'کی‌ام‌سی ایگل (KMC Eagle)' },
+    { key: 'kmc t8', label: 'کی‌ام‌سی تی۸ (KMC T8)' },
+    { key: 'kmc t9-pick-up', label: 'کی‌ام‌سی تی۹ پیکاپ (KMC T9)' },
     { key: 'kmc sr3', label: 'کی‌ام‌سی اس‌آر۳ (KMC SR3)' },
+    { key: 'kmc k7', label: 'کی‌ام‌سی کی۷ (KMC K7)' },
+    { key: 'kmc a5', label: 'کی‌ام‌سی ای۵ (KMC A5)' },
     { key: 'kmc sr6-1.5l-turbo', label: 'کی‌ام‌سی اس‌آر۶ توربو (KMC SR6)' },
     { key: 'kmc ej7', label: 'کی‌ام‌سی برقی ای‌جی۷ (KMC EJ7)' },
-    { key: 'kmc t9-pick-up', label: 'کی‌ام‌سی تی۹ پیکاپ (KMC T9)' }
+    { key: 'kmc ej7-plus', label: 'کی‌ام‌سی ای‌جی۷ پلاس (KMC EJ7 Plus)' },
+
+    // JAC
+    { key: 'jac s5', label: 'جک اس۵ (JAC S5)' },
+    { key: 'jac j4', label: 'جک جی۴ (JAC J4)' },
+    { key: 'jac s3', label: 'جک اس۳ (JAC S3)' },
+    { key: 'jac j5', label: 'جک جی۵ (JAC J5)' },
+    { key: 'jac s5-new-face', label: 'جک اس۵ نیوفیس (JAC S5 New Face)' },
+    { key: 'jac j3-hatchback', label: 'جک جی۳ هاچ‌بک (JAC J3)' },
+
+    // BAC
+    { key: 'bac x3-pro', label: 'بک ایکس۳ پرو (BAC X3 Pro)' },
+
+    // Dena, Samand, Peugeot
+    { key: 'dena plus', label: 'دنا پلاس (Dena Plus)' },
+    { key: 'dena basic', label: 'دنا معمولی (Dena Basic)' },
+    { key: 'samand lx', label: 'سمند LX' },
+    { key: 'samand soren', label: 'سمند سورن' },
+    { key: 'samand x7', label: 'سمند X7' },
+    { key: 'samand el', label: 'سمند EL' },
+    { key: 'samand se', label: 'سمند SE' },
+    { key: 'peugeot 206', label: 'پژو ۲۰۶' },
+    { key: 'peugeot 207i', label: 'پژو ۲۰۷i' },
+    { key: 'peugeot 206-sd', label: 'پژو ۲۰۶ صندوقدار' },
+    { key: 'peugeot 405', label: 'پژو ۴۰۵' },
+    { key: 'peugeot pars', label: 'پژو پارس' },
+
+    // Saipa / Atlas, Sahand, Quick
+    { key: 'saipa atlas-g', label: 'سایپا اطلس G' },
+    { key: 'saipa sahand', label: 'سهند' },
+    { key: 'saipa atlas-gl', label: 'سایپا اطلس GL' },
+    { key: 'saipa atlas-s', label: 'سایپا اطلس S' },
+    { key: 'saipa karvan', label: 'سایپا کاروان' },
+    { key: 'quick manual', label: 'کوییک دنده‌ای' },
+    { key: 'quick gxr', label: 'کوییک GXR' },
+    { key: 'quick gx', label: 'کوییک GX' },
+    { key: 'quick rs', label: 'کوییک RS' },
+    { key: 'quick automatic', label: 'کوییک اتوماتیک' },
+
+    // Hyundai
+    { key: 'hyundai santafe-ix45', label: 'هیوندای سانتافه IX45' },
+    { key: 'hyundai azera-grandeur', label: 'هیوندای آزرا گرنجور' },
+    { key: 'hyundai elantra', label: 'هیوندای النترا' },
+    { key: 'hyundai tucson-ix35', label: 'هیوندای توسان IX35' },
+    { key: 'hyundai genesis', label: 'هیوندای جنسیس' },
+    { key: 'hyundai verna', label: 'هیوندای ورنا' },
+    { key: 'hyundai sonata-yf', label: 'هیوندای سوناتا YF' },
+    { key: 'hyundai sonata-nf', label: 'هیوندای سوناتا NF' },
+    { key: 'hyundai sonata-1.5l-turbo', label: 'هیوندای سوناتا ۱.۵ توربو' },
+    { key: 'hyundai veracruz-ix55', label: 'هیوندای وراکروز IX55' },
+    { key: 'hyundai i20', label: 'هیوندای i20' },
+    { key: 'hyundai sonata-lf', label: 'هیوندای سوناتا LF' },
+
+    // BYD
+    { key: 'byd song-plus', label: 'بی‌وای‌دی سانگ پلاس' },
+    { key: 'byd sealion-06-dmi', label: 'بی‌وای‌دی سی‌لاین ۰۶' },
+    { key: 'byd qin-plus', label: 'بی‌وای‌دی کین پلاس' },
+    { key: 'byd qin-l', label: 'بی‌وای‌دی کین ال' },
+    { key: 'byd s6', label: 'بی‌وای‌دی S6' },
+    { key: 'byd destroyer-05-dmi', label: 'بی‌وای‌دی دسترویر ۰۵' },
+
+    // Toyota
+    { key: 'toyota corolla', label: 'تویوتا کرولا' },
+    { key: 'toyota hilux-double-cabin', label: 'تویوتا هایلوکس دوکابین' },
+    { key: 'toyota landcruiser-4door', label: 'تویوتا لندکروزر ۴در' },
+    { key: 'toyota rav4', label: 'تویوتا راوفور' },
+    { key: 'toyota camry', label: 'تویوتا کمری' },
+    { key: 'toyota prado-4door', label: 'تویوتا پرادو ۴در' },
+    { key: 'toyota frontlander-hybrid', label: 'تویوتا فرانت‌لندر هیبرید' },
+    { key: 'toyota hilux-single-cabin', label: 'تویوتا هایلوکس تک‌کابین' },
+    { key: 'toyota levin-hybrid-1800cc', label: 'تویوتا لوین هیبرید ۱۸۰۰' },
+    { key: 'toyota wildlander-luxury-plus', label: 'تویوتا وایلدلندر لاکچری پلاس' },
+    { key: 'toyota prado-2door', label: 'تویوتا پرادو ۲در' },
+    { key: 'toyota corolla-1200', label: 'تویوتا کرولا ۱۲۰۰ توربو' },
+
+    // Nissan
+    { key: 'nissan maxima-ir', label: 'نیسان ماکسیما' },
+    { key: 'nissan patrol-2-door', label: 'نیسان پاترول ۲در' },
+    { key: 'nissan patrol-4-door', label: 'نیسان پاترول ۴در' },
+    { key: 'nissan qashqai', label: 'نیسان قشقایی' },
+    { key: 'nissan sylphy-e-power', label: 'نیسان سیلفی e-Power' },
+    { key: 'nissan pickup', label: 'نیسان پیکاپ' },
+    { key: 'nissan juke', label: 'نیسان جوک' },
+    { key: 'nissan altima', label: 'نیسان تیانا/التیما' },
+    { key: 'nissan roniz', label: 'نیسان رونیز' },
+    { key: 'nissan terra-exclusive', label: 'نیسان ترا اکسکلوزیو' },
+    { key: 'nissan murano', label: 'نیسان مورانو' },
+    { key: 'nissan x-trail', label: 'نیسان ایکس‌تریل' },
+    { key: 'nissan teana-ir', label: 'نیسان تیانا' },
+    { key: 'nissan maxima-im', label: 'نیسان ماکسیما وارداتی' },
+
+    // Tigard
+    { key: 'tigard tissan-s05-1.5l-turbo', label: 'تیگارد تیسان S05 توربو' },
+    { key: 'tigard x35', label: 'تیگارد X35' },
+    { key: 'tigard x35-prime', label: 'تیگارد X35 پرایم' },
+
+    // Lucano
+    { key: 'lucano l7', label: 'لوکانو L7' },
+    { key: 'lucano l8', label: 'لوکانو L8' },
+
+    // Fownix
+    { key: 'fownix tiggo-8-pro-max-ie', label: 'فونیکس تیگو ۸ پرو مکس IE' },
+    { key: 'fownix fx', label: 'فونیکس اف‌ایکس' },
+    { key: 'fownix arizo-6-gt', label: 'فونیکس آریزو ۶ جی‌تی' },
+    { key: 'fownix arizo-8', label: 'فونیکس آریزو ۸' },
+    { key: 'fownix arrizo-6-pro', label: 'فونیکس آریزو ۶ پرو' },
+    { key: 'fownix tiggo-7-pro-premium', label: 'فونیکس تیگو ۷ پرو پریمیوم' },
+    { key: 'fownix tiggo-7-pro-max-1.6l-turbo-awd', label: 'فونیکس تیگو ۷ پرو مکس AWD' },
+    { key: 'fownix fx-ev', label: 'فونیکس اف‌ایکس برقی' },
+    { key: 'fownix tiggo-7-pro-e-plus-plugin-hybrid', label: 'فونیکس تیگو ۷ پرو هیبرید (e+)' },
+    { key: 'fownix tiggo-8-promax', label: 'فونیکس تیگو ۸ پرو مکس' },
+    { key: 'fownix tiggo-7-pro', label: 'فونیکس تیگو ۷ پرو' },
+    { key: 'fownix tiggo-8-pro', label: 'فونیکس تیگو ۸ پرو' },
+    { key: 'fownix tiggo-8-pro-max-e-plus-plugin-hybrid', label: 'فونیکس تیگو ۸ پرو مکس e+' },
+    { key: 'fownix tiggo-7-pro-max', label: 'فونیکس تیگو ۷ پرو مکس' },
+
+    // MVM
+    { key: 'mvm x33-cross-automatic', label: 'ام‌وی‌ام X33 کراس اتوماتیک' },
+    { key: 'mvm x55', label: 'ام‌وی‌ام X55 / X55 پرو' },
+    { key: 'mvm x22', label: 'ام‌وی‌ام X22' },
+    { key: 'mvm x22pro', label: 'ام‌وی‌ام X22 پرو' },
+    { key: 'mvm 110', label: 'ام‌وی‌ام ۱۱۰' },
+    { key: 'mvm 315-hatchback', label: 'ام‌وی‌ام ۳۱۵ هاچ‌بک' },
+    { key: 'mvm x22-pro', label: 'ام‌وی‌ام X22 پرو' },
+    { key: 'mvm x33', label: 'ام‌وی‌ام X33' },
+    { key: 'mvm x33s', label: 'ام‌وی‌ام X33s' },
+    { key: 'mvm 530', label: 'ام‌وی‌ام ۵۳۰' },
+    { key: 'mvm x77', label: 'ام‌وی‌ام X77' },
+    { key: 'mvm arizo-5-sport-fl', label: 'ام‌وی‌ام آریزو ۵ اسپرت FL' },
+];
+
+export const PRIORITY_KERMAN_CARS = [
+    { key: 'kmc eagle', label: 'KMC Eagle (ایگل)', badge: '🚙 کراس‌اوور' },
+    { key: 'kmc j7', label: 'KMC J7 (جی۷)', badge: '🏎️ سدان اسپرت' },
+    { key: 'kmc x5', label: 'KMC X5 (ایکس۵)', badge: '🚙 شاسی‌بلند' },
+    { key: 'kmc t8', label: 'KMC T8 (تی۸)', badge: '🚜 پیکاپ' },
+    { key: 'kmc t9-pick-up', label: 'KMC T9 (تی۹)', badge: '🚜 پیکاپ اتومات' },
+    { key: 'bac x3-pro', label: 'BAC X3 Pro (بک ایکس۳)', badge: '🚙 هاچ‌بک کراس' },
+    { key: 'jac j4', label: 'JAC J4 (جک جی۴)', badge: '🚗 سدان اقتصادی' },
+    { key: 'jac s5', label: 'JAC S5 (جک اس۵)', badge: '🚙 شاسی‌بلند' },
+    { key: 'jac s3', label: 'JAC S3 (جک اس۳)', badge: '🚙 کراس‌اوور' },
+    { key: 'jac j5', label: 'JAC J5 (جک جی۵)', badge: '🚗 سدان' },
+    { key: 'jac s5-new-face', label: 'JAC S5 نیوفیس', badge: '🚙 نیوفیس' },
+    { key: 'jac j3-hatchback', label: 'JAC J3 هاچ‌بک', badge: '🚗 هاچ‌بک' },
+    { key: 'kmc k7', label: 'KMC K7 (کی۷)', badge: '🚙 شاسی لوکس' },
+    { key: 'kmc a5', label: 'KMC A5 (ای۵)', badge: '🚙 کراس‌اوور' },
+    { key: 'kmc sr3', label: 'KMC SR3', badge: '🚙 کراس‌اوور' },
+    { key: 'kmc sr6-1.5l-turbo', label: 'KMC SR6 توربو', badge: '🚙 توربو' },
+    { key: 'kmc ej7', label: 'KMC EJ7 (برقی)', badge: '⚡ برقی' },
+    { key: 'kmc ej7-plus', label: 'KMC EJ7 Plus', badge: '⚡ برقی پلاس' }
+];
+
+export const CAR_BRAND_GROUPS = [
+    { id: 'all', label: 'همه برندها (۱۱۱ خودرو)' },
+    { id: 'kerman_jac_bac', label: '⭐ کرمان موتور / جک / بک' },
+    { id: 'ikco', label: '🚗 ایران خودرو' },
+    { id: 'saipa', label: '🏎️ سایپا' },
+    { id: 'imported', label: '🌐 هیوندای / تویوتا / نیسان / BYD' },
+    { id: 'mvm_fownix', label: '🚙 مدیران خودرو (فونیکس / MVM)' }
 ];
 
 export const DIVAR_SUPPORTED_CITIES = [
     { key: 'shiraz', label: 'شیراز 📍', shortLabel: 'شیراز' },
     { key: 'tehran', label: 'تهران 📍', shortLabel: 'تهران' },
+    { key: 'karaj', label: 'کرج 📍', shortLabel: 'کرج' },
     { key: 'isfahan', label: 'اصفهان 📍', shortLabel: 'اصفهان' },
     { key: 'iran', label: 'کل ایران (سراسر کشور) 🇮🇷', shortLabel: 'کل ایران' }
 ];
 
-const CAR_DISPLAY_NAMES: Record<string, string> = {
-    'kmc eagle': 'کی‌ام‌سی ایگل (KMC Eagle)',
-    'jac j4': 'جک جی۴ (JAC J4)',
-    'bac x3-pro': 'بک ایکس۳ پرو (BAC X3 Pro)',
-    'kmc t8': 'کی‌ام‌سی تی۸ (KMC T8)',
-    'kmc x5': 'کی‌ام‌سی ایکس۵ (KMC X5)',
-    'kmc j7': 'کی‌ام‌سی جی۷ (KMC J7)',
-    'kmc sr3': 'کی‌ام‌سی اس‌آر۳ (KMC SR3)',
-    'kmc sr6-1.5l-turbo': 'کی‌ام‌سی اس‌آر۶ توربو (KMC SR6)',
-    'kmc ej7': 'کی‌ام‌سی برقی ای‌جی۷ (KMC EJ7)',
-    'kmc t9-pick-up': 'کی‌ام‌سی تی۹ پیکاپ (KMC T9)'
-};
+const CAR_DISPLAY_NAMES: Record<string, string> = DIVAR_SUPPORTED_MODELS.reduce((acc, m) => {
+    acc[m.key] = m.label;
+    return acc;
+}, {} as Record<string, string>);
 
 const getDisplayName = (carName: string): string => {
     const lower = (carName || '').trim().toLowerCase();
-    return CAR_DISPLAY_NAMES[lower] || carName;
+    if (CAR_DISPLAY_NAMES[lower]) return CAR_DISPLAY_NAMES[lower];
+    const found = DIVAR_SUPPORTED_MODELS.find(m => m.key.toLowerCase() === lower || lower.includes(m.key.toLowerCase()));
+    return found ? found.label : carName;
 };
 
 // Calculate Mode (most frequent price)
@@ -439,6 +594,38 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     });
 
     const [selectedCar, setSelectedCar] = useState<string>('kmc eagle');
+    const [selectedBrandCategory, setSelectedBrandCategory] = useState<string>('all');
+    const [carSearchFilter, setCarSearchFilter] = useState<string>('');
+
+    // Filtered models list based on brand category and search text
+    const filteredSupportedModels = useMemo(() => {
+        return DIVAR_SUPPORTED_MODELS.filter(m => {
+            if (selectedBrandCategory === 'kerman_jac_bac') {
+                const isKerman = m.key.startsWith('kmc') || m.key.startsWith('jac') || m.key.startsWith('bac');
+                if (!isKerman) return false;
+            } else if (selectedBrandCategory === 'ikco') {
+                const isIKCO = m.key.includes('dena') || m.key.includes('samand') || m.key.includes('peugeot');
+                if (!isIKCO) return false;
+            } else if (selectedBrandCategory === 'saipa') {
+                const isSaipa = m.key.includes('saipa') || m.key.includes('quick') || m.key.includes('sahand');
+                if (!isSaipa) return false;
+            } else if (selectedBrandCategory === 'imported') {
+                const isImp = m.key.includes('hyundai') || m.key.includes('byd') || m.key.includes('toyota') || m.key.includes('nissan');
+                if (!isImp) return false;
+            } else if (selectedBrandCategory === 'mvm_fownix') {
+                const isMVM = m.key.includes('mvm') || m.key.includes('fownix');
+                if (!isMVM) return false;
+            }
+
+            if (carSearchFilter.trim()) {
+                const q = carSearchFilter.trim().toLowerCase();
+                const matchesKey = m.key.toLowerCase().includes(q);
+                const matchesLabel = m.label.toLowerCase().includes(q);
+                if (!matchesKey && !matchesLabel) return false;
+            }
+            return true;
+        });
+    }, [selectedBrandCategory, carSearchFilter]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
     const [fetchError, setFetchError] = useState<string | null>(null);
@@ -450,6 +637,7 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
     const [showOtherSourcesOnChart, setShowOtherSourcesOnChart] = useState<boolean>(false);
     const [showOtherSourceLines, setShowOtherSourceLines] = useState<boolean>(false);
     const [showOutliersModal, setShowOutliersModal] = useState<boolean>(false);
+    const [showCarSelectorModal, setShowCarSelectorModal] = useState<boolean>(false);
 
     const [advDetailUrl, setAdvDetailUrl] = useState<string>('');
     const [advDetailLoading, setAdvDetailLoading] = useState<boolean>(false);
@@ -1109,112 +1297,138 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                     </div>
                 </div>
 
-                {/* Primary Query Selectors: Model & City */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    {/* Model Selector */}
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shrink-0">
-                            <Car className="w-4 h-4 text-rose-600" />
-                            <span>خودرو:</span>
-                        </label>
-                        <select
-                            value={selectedCar}
-                            disabled={isLoading}
-                            onChange={(e) => handleCarChange(e.target.value)}
-                            className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-rose-500 focus:outline-hidden cursor-pointer disabled:opacity-60"
-                        >
-                            {DIVAR_SUPPORTED_MODELS.map(m => (
-                                <option key={m.key} value={m.key}>
-                                    {m.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* City Tabs / Selector */}
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shrink-0">
-                            <MapPin className="w-4 h-4 text-rose-600" />
-                            <span>شهر:</span>
-                        </label>
-                        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto w-full">
-                            {DIVAR_SUPPORTED_CITIES.map(city => {
-                                const isActive = activeCity === city.key;
+                {/* Primary Query Selectors: Brand Category, Model Search & City */}
+                <div className="space-y-3 pt-2">
+                    {/* Brand Category Filter Tabs + Visual Car Selector Button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 overflow-x-auto pb-1 scrollbar-none">
+                        <div className="flex items-center gap-1.5 overflow-x-auto">
+                            <span className="text-[11px] font-bold text-slate-400 shrink-0 ml-1">فیلتر برند:</span>
+                            {CAR_BRAND_GROUPS.map(grp => {
+                                const isActive = selectedBrandCategory === grp.id;
                                 return (
                                     <button
-                                        key={city.key}
+                                        key={grp.id}
                                         type="button"
-                                        disabled={isLoading}
-                                        onClick={() => handleCityChange(city.key)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer disabled:opacity-60 flex-1 ${
+                                        onClick={() => setSelectedBrandCategory(grp.id)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                                             isActive
-                                                ? 'bg-rose-600 text-white shadow-xs'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                                         }`}
                                     >
-                                        {city.label}
+                                        {grp.label}
                                     </button>
                                 );
                             })}
                         </div>
+
+                        {/* Visual Car Picker Modal Trigger Button */}
+                        <button
+                            type="button"
+                            onClick={() => setShowCarSelectorModal(true)}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                        >
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>⚡ شبکه انتخاب تصویری (۱۱۱ مدل)</span>
+                        </button>
                     </div>
 
-                    {/* Manual Refresh / Indicator Button */}
-                    <div className="flex items-center">
-                        {isLoading ? (
-                            <div className="flex items-center gap-2 w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                        {/* Instant Car Search & Dropdown */}
+                        <div className="md:col-span-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            {/* Search Box */}
+                            <div className="relative flex-1">
+                                <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                <input
+                                    type="text"
+                                    placeholder="جستجوی سریع خودرو (مثلا X5, 207, ایگل)..."
+                                    value={carSearchFilter}
+                                    onChange={(e) => setCarSearchFilter(e.target.value)}
+                                    className="w-full pr-8 pl-7 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
+                                />
+                                {carSearchFilter && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setCarSearchFilter('')}
+                                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Select Dropdown */}
+                            <div className="flex-1 flex items-center gap-1.5">
+                                <label className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1 shrink-0">
+                                    <Car className="w-4 h-4 text-rose-600" />
+                                    <span>انتخاب:</span>
+                                </label>
+                                <select
+                                    value={selectedCar}
+                                    disabled={isLoading}
+                                    onChange={(e) => handleCarChange(e.target.value)}
+                                    className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-rose-500 focus:outline-hidden cursor-pointer disabled:opacity-60"
+                                >
+                                    {filteredSupportedModels.map(m => (
+                                        <option key={m.key} value={m.key}>
+                                            {m.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* City Tabs / Selector */}
+                        <div className="md:col-span-4 flex items-center gap-1.5">
+                            <label className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1 shrink-0">
+                                <MapPin className="w-4 h-4 text-rose-600" />
+                                <span>شهر:</span>
+                            </label>
+                            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto w-full">
+                                {DIVAR_SUPPORTED_CITIES.map(city => {
+                                    const isActive = activeCity === city.key;
+                                    return (
+                                        <button
+                                            key={city.key}
+                                            type="button"
+                                            disabled={isLoading}
+                                            onClick={() => handleCityChange(city.key)}
+                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer disabled:opacity-60 flex-1 ${
+                                                isActive
+                                                    ? 'bg-rose-600 text-white shadow-xs'
+                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            {city.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Manual Refresh Button */}
+                        <div className="md:col-span-2 flex items-center">
+                            {isLoading ? (
                                 <button
                                     type="button"
                                     disabled
-                                    className="flex-1 px-5 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm opacity-95 cursor-wait"
+                                    className="w-full py-2 rounded-xl bg-rose-600 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm opacity-95 cursor-wait"
                                 >
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span>در حال استخراج ({elapsedSeconds} ثانیه)...</span>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>در حال استخراج ({elapsedSeconds}s)</span>
                                 </button>
+                            ) : (
                                 <button
                                     type="button"
-                                    onClick={handleCancelFetch}
-                                    className="px-3 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-300 cursor-pointer flex items-center gap-1 shrink-0"
-                                    title="لغو استعلام"
+                                    onClick={() => handleQueryDivar(selectedCar, activeCity)}
+                                    className="w-full py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-200 dark:shadow-none cursor-pointer"
                                 >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>لغو</span>
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    <span>استعلام مجدد</span>
                                 </button>
-                            </div>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() => handleQueryDivar(selectedCar, activeCity)}
-                                className="w-full px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md shadow-rose-200 dark:shadow-none cursor-pointer"
-                            >
-                                <RefreshCw className="w-4 h-4" />
-                                <span>استعلام مجدد برخط</span>
-                            </button>
-                        )}
+                            )}
+                        </div>
                     </div>
-                </div>
-
-                {/* Quick Model Chips */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1">
-                    <span className="text-[11px] font-bold text-slate-400 shrink-0 ml-1">انتخاب سریع:</span>
-                    {DIVAR_SUPPORTED_MODELS.map(m => {
-                        const isSelected = selectedCar === m.key;
-                        return (
-                            <button
-                                key={m.key}
-                                type="button"
-                                disabled={isLoading}
-                                onClick={() => handleCarChange(m.key)}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 ${
-                                    isSelected
-                                        ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-600'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                }`}
-                            >
-                                <span>{m.label.split('(')[0].trim()}</span>
-                            </button>
-                        );
-                    })}
                 </div>
             </div>
 
@@ -2289,6 +2503,176 @@ export const DivarPriceAnalysisSection: React.FC<DivarPriceAnalysisSectionProps>
                                 className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl cursor-pointer"
                             >
                                 بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Interactive Visual Car Selector Modal (۱ کلیک بدون اسکرول) */}
+            {showCarSelectorModal && (
+                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-850 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-900/50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black shadow-md shadow-amber-200 dark:shadow-none">
+                                    <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                        <span>شبکه انتخاب هوشمند و سریع خودروها</span>
+                                        <span className="bg-amber-100 text-amber-900 dark:bg-amber-900/80 dark:text-amber-200 text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                                            {DIVAR_SUPPORTED_MODELS.length} مدل
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        جهت کاهش کلیک و تصمیم‌گیری سریع‌تر — اولویت با محصولات کرمان موتور، جک و بک می‌باشد.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowCarSelectorModal(false)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Search & Category Filter Controls */}
+                        <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3 bg-white dark:bg-slate-850">
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        placeholder="جستجوی نام یا مدل خودرو (مثلاً: J7, ایگل, T8, 207, X5)..."
+                                        value={carSearchFilter}
+                                        onChange={(e) => setCarSearchFilter(e.target.value)}
+                                        className="w-full pr-9 pl-8 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                                    />
+                                    {carSearchFilter && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setCarSearchFilter('')}
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Brand Tabs */}
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                                {CAR_BRAND_GROUPS.map(grp => {
+                                    const isActive = selectedBrandCategory === grp.id;
+                                    return (
+                                        <button
+                                            key={grp.id}
+                                            type="button"
+                                            onClick={() => setSelectedBrandCategory(grp.id)}
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                                                isActive
+                                                    ? 'bg-amber-500 text-white shadow-sm font-black'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                            }`}
+                                        >
+                                            {grp.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Cars Grid */}
+                        <div className="p-5 overflow-y-auto flex-1 space-y-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                                {filteredSupportedModels.map(item => {
+                                    const isSelected = selectedCar === item.key;
+                                    const isKerman = item.key.startsWith('kmc') || item.key.startsWith('jac') || item.key.startsWith('bac');
+
+                                    return (
+                                        <button
+                                            key={item.key}
+                                            type="button"
+                                            onClick={() => {
+                                                handleCarChange(item.key);
+                                                setShowCarSelectorModal(false);
+                                            }}
+                                            className={`p-3 rounded-2xl border text-right transition-all flex flex-col justify-between gap-2 cursor-pointer group relative overflow-hidden ${
+                                                isSelected
+                                                    ? 'bg-amber-500 text-white border-amber-500 ring-2 ring-amber-400/80 shadow-md font-black'
+                                                    : isKerman
+                                                    ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/50 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-slate-800 dark:text-slate-200'
+                                                    : 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/70 dark:border-slate-700/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-1">
+                                                <span className={`text-xs font-black leading-tight ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                                                    {item.label}
+                                                </span>
+                                                {isSelected && (
+                                                    <Check className="w-4 h-4 text-white shrink-0" />
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-[10px]">
+                                                {isKerman ? (
+                                                    <span className={`font-bold px-1.5 py-0.5 rounded-md ${
+                                                        isSelected ? 'bg-amber-600 text-white' : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'
+                                                    }`}>
+                                                        ⭐ کرمان موتور / جک / بک
+                                                    </span>
+                                                ) : (
+                                                    <span className={`px-1.5 py-0.5 rounded-md ${
+                                                        isSelected ? 'bg-amber-600/60 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                                    }`}>
+                                                        {item.key}
+                                                    </span>
+                                                )}
+                                                <span className={`font-bold opacity-0 group-hover:opacity-100 transition-opacity ${isSelected ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`}>
+                                                    انتخاب ⬅️
+                                                </span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {filteredSupportedModels.length === 0 && (
+                                <div className="py-12 text-center space-y-2">
+                                    <Car className="w-10 h-10 text-slate-300 mx-auto" />
+                                    <p className="text-xs text-slate-500 font-bold">
+                                        خودرویی با عبارت "{carSearchFilter}" یافت نشد.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCarSearchFilter('');
+                                            setSelectedBrandCategory('all');
+                                        }}
+                                        className="text-xs text-amber-600 font-bold underline cursor-pointer"
+                                    >
+                                        پاکسازی فیلترها
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-between items-center text-xs">
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">
+                                خودروی فعلی: <strong className="text-amber-600 dark:text-amber-400 font-bold">{getDisplayName(selectedCar)}</strong>
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setShowCarSelectorModal(false)}
+                                className="px-5 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-bold rounded-xl cursor-pointer"
+                            >
+                                انصراف
                             </button>
                         </div>
                     </div>

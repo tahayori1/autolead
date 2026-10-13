@@ -10,16 +10,146 @@ import {
 import type { DivarPriceItem, ScrapedCarPrice, CarPriceStats } from '../types';
 
 export const KNOWN_ARBITRAGE_CARS = [
-    { key: 'kmc eagle', label: 'کی‌ام‌سی ایگل (KMC Eagle)', brand: 'کرمان موتور' },
-    { key: 'jac j4', label: 'جک جی۴ (JAC J4)', brand: 'کرمان موتور' },
-    { key: 'bac x3-pro', label: 'بک ایکس۳ پرو (BAC X3 Pro)', brand: 'خودروسازان بم' },
-    { key: 'kmc t8', label: 'کی‌ام‌سی تی۸ (KMC T8)', brand: 'کرمان موتور' },
-    { key: 'kmc x5', label: 'کی‌ام‌سی ایکس۵ (KMC X5)', brand: 'کرمان موتور' },
+    // KMC / Kerman Motor
     { key: 'kmc j7', label: 'کی‌ام‌سی جی۷ (KMC J7)', brand: 'کرمان موتور' },
+    { key: 'kmc x5', label: 'کی‌ام‌سی ایکس۵ (KMC X5)', brand: 'کرمان موتور' },
+    { key: 'kmc eagle', label: 'کی‌ام‌سی ایگل (KMC Eagle)', brand: 'کرمان موتور' },
+    { key: 'kmc t8', label: 'کی‌ام‌سی تی۸ (KMC T8)', brand: 'کرمان موتور' },
     { key: 'kmc t9-pick-up', label: 'کی‌ام‌سی تی۹ پیکاپ (KMC T9)', brand: 'کرمان موتور' },
     { key: 'kmc sr3', label: 'کی‌ام‌سی اس‌آر۳ (KMC SR3)', brand: 'کرمان موتور' },
+    { key: 'kmc k7', label: 'کی‌ام‌سی کی۷ (KMC K7)', brand: 'کرمان موتور' },
+    { key: 'kmc a5', label: 'کی‌ام‌سی ای۵ (KMC A5)', brand: 'کرمان موتور' },
     { key: 'kmc sr6-1.5l-turbo', label: 'کی‌ام‌سی اس‌آر۶ توربو (KMC SR6)', brand: 'کرمان موتور' },
-    { key: 'kmc ej7', label: 'کی‌ام‌سی برقی ای‌جی۷ (KMC EJ7)', brand: 'کرمان موتور' }
+    { key: 'kmc ej7', label: 'کی‌ام‌سی برقی ای‌جی۷ (KMC EJ7)', brand: 'کرمان موتور' },
+    { key: 'kmc ej7-plus', label: 'کی‌ام‌سی ای‌جی۷ پلاس (KMC EJ7 Plus)', brand: 'کرمان موتور' },
+
+    // JAC
+    { key: 'jac s5', label: 'جک اس۵ (JAC S5)', brand: 'کرمان موتور' },
+    { key: 'jac j4', label: 'جک جی۴ (JAC J4)', brand: 'کرمان موتور' },
+    { key: 'jac s3', label: 'جک اس۳ (JAC S3)', brand: 'کرمان موتور' },
+    { key: 'jac j5', label: 'جک جی۵ (JAC J5)', brand: 'کرمان موتور' },
+    { key: 'jac s5-new-face', label: 'جک اس۵ نیوفیس (JAC S5 New Face)', brand: 'کرمان موتور' },
+    { key: 'jac j3-hatchback', label: 'جک جی۳ هاچ‌بک (JAC J3)', brand: 'کرمان موتور' },
+
+    // BAC
+    { key: 'bac x3-pro', label: 'بک ایکس۳ پرو (BAC X3 Pro)', brand: 'خودروسازان بم' },
+
+    // Iran Khodro / Dena & Samand & Peugeot
+    { key: 'dena plus', label: 'دنا پلاس (Dena Plus)', brand: 'ایران خودرو' },
+    { key: 'dena basic', label: 'دنا معمولی (Dena Basic)', brand: 'ایران خودرو' },
+    { key: 'samand lx', label: 'سمند LX (Samand LX)', brand: 'ایران خودرو' },
+    { key: 'samand soren', label: 'سمند سورن (Samand Soren)', brand: 'ایران خودرو' },
+    { key: 'samand x7', label: 'سمند X7 (Samand X7)', brand: 'ایران خودرو' },
+    { key: 'samand el', label: 'سمند EL (Samand EL)', brand: 'ایران خودرو' },
+    { key: 'samand se', label: 'سمند SE (Samand SE)', brand: 'ایران خودرو' },
+    { key: 'peugeot 206', label: 'پژو ۲۰۶ (Peugeot 206)', brand: 'ایران خودرو' },
+    { key: 'peugeot 207i', label: 'پژو ۲۰۷i (Peugeot 207i)', brand: 'ایران خودرو' },
+    { key: 'peugeot 206-sd', label: 'پژو ۲۰۶ صندوقدار (206 SD)', brand: 'ایران خودرو' },
+    { key: 'peugeot 405', label: 'پژو ۴۰۵ (Peugeot 405)', brand: 'ایران خودرو' },
+    { key: 'peugeot pars', label: 'پژو پارس (Peugeot Pars)', brand: 'ایران خودرو' },
+
+    // Saipa / Atlas, Sahand, Quick
+    { key: 'saipa atlas-g', label: 'سایپا اطلس G (Atlas G)', brand: 'سایپا' },
+    { key: 'saipa sahand', label: 'سهند (Sahand)', brand: 'سایپا' },
+    { key: 'saipa atlas-gl', label: 'سایپا اطلس GL (Atlas GL)', brand: 'سایپا' },
+    { key: 'saipa atlas-s', label: 'سایپا اطلس S (Atlas S)', brand: 'سایپا' },
+    { key: 'saipa karvan', label: 'سایپا کاروان (Karvan)', brand: 'سایپا' },
+    { key: 'quick manual', label: 'کوییک دنده‌ای (Quick Manual)', brand: 'سایپا' },
+    { key: 'quick gxr', label: 'کوییک GXR (Quick GXR)', brand: 'سایپا' },
+    { key: 'quick gx', label: 'کوییک GX (Quick GX)', brand: 'سایپا' },
+    { key: 'quick rs', label: 'کوییک RS (Quick RS)', brand: 'سایپا' },
+    { key: 'quick automatic', label: 'کوییک اتوماتیک (Quick Automatic)', brand: 'سایپا' },
+
+    // Hyundai
+    { key: 'hyundai santafe-ix45', label: 'هیوندای سانتافه IX45', brand: 'هیوندای' },
+    { key: 'hyundai azera-grandeur', label: 'هیوندای آزرا گرنجور', brand: 'هیوندای' },
+    { key: 'hyundai elantra', label: 'هیوندای النترا (Elantra)', brand: 'هیوندای' },
+    { key: 'hyundai tucson-ix35', label: 'هیوندای توسان IX35', brand: 'هیوندای' },
+    { key: 'hyundai genesis', label: 'هیوندای جنسیس (Genesis)', brand: 'هیوندای' },
+    { key: 'hyundai verna', label: 'هیوندای ورنا (Verna)', brand: 'هیوندای' },
+    { key: 'hyundai sonata-yf', label: 'هیوندای سوناتا YF', brand: 'هیوندای' },
+    { key: 'hyundai sonata-nf', label: 'هیوندای سوناتا NF', brand: 'هیوندای' },
+    { key: 'hyundai sonata-1.5l-turbo', label: 'هیوندای سوناتا ۱.۵ توربو', brand: 'هیوندای' },
+    { key: 'hyundai veracruz-ix55', label: 'هیوندای وراکروز IX55', brand: 'هیوندای' },
+    { key: 'hyundai i20', label: 'هیوندای i20', brand: 'هیوندای' },
+    { key: 'hyundai sonata-lf', label: 'هیوندای سوناتا LF', brand: 'هیوندای' },
+
+    // BYD
+    { key: 'byd song-plus', label: 'بی‌وای‌دی سانگ پلاس (Song Plus)', brand: 'BYD' },
+    { key: 'byd sealion-06-dmi', label: 'بی‌وای‌دی سی‌لاین ۰۶ (Sealion 06)', brand: 'BYD' },
+    { key: 'byd qin-plus', label: 'بی‌وای‌دی کین پلاس (Qin Plus)', brand: 'BYD' },
+    { key: 'byd qin-l', label: 'بی‌وای‌دی کین ال (Qin L)', brand: 'BYD' },
+    { key: 'byd s6', label: 'بی‌وای‌دی S6', brand: 'BYD' },
+    { key: 'byd destroyer-05-dmi', label: 'بی‌وای‌دی دسترویر ۰۵ (Destroyer 05)', brand: 'BYD' },
+
+    // Toyota
+    { key: 'toyota corolla', label: 'تویوتا کرولا (Corolla)', brand: 'تویوتا' },
+    { key: 'toyota hilux-double-cabin', label: 'تویوتا هایلوکس دوکابین', brand: 'تویوتا' },
+    { key: 'toyota landcruiser-4door', label: 'تویوتا لندکروزر ۴در', brand: 'تویوتا' },
+    { key: 'toyota rav4', label: 'تویوتا راوفور (RAV4)', brand: 'تویوتا' },
+    { key: 'toyota camry', label: 'تویوتا کمری (Camry)', brand: 'تویوتا' },
+    { key: 'toyota prado-4door', label: 'تویوتا پرادو ۴در', brand: 'تویوتا' },
+    { key: 'toyota frontlander-hybrid', label: 'تویوتا فرانت‌لندر هیبرید', brand: 'تویوتا' },
+    { key: 'toyota hilux-single-cabin', label: 'تویوتا هایلوکس تک‌کابین', brand: 'تویوتا' },
+    { key: 'toyota levin-hybrid-1800cc', label: 'تویوتا لوین هیبرید ۱۸۰۰', brand: 'تویوتا' },
+    { key: 'toyota wildlander-luxury-plus', label: 'تویوتا وایلدلندر لاکچری پلاس', brand: 'تویوتا' },
+    { key: 'toyota prado-2door', label: 'تویوتا پرادو ۲در', brand: 'تویوتا' },
+    { key: 'toyota corolla-1200', label: 'تویوتا کرولا ۱۲۰۰ توربو', brand: 'تویوتا' },
+
+    // Nissan
+    { key: 'nissan maxima-ir', label: 'نیسان ماکسیما مونتاژ/وارداتی', brand: 'نیسان' },
+    { key: 'nissan patrol-2-door', label: 'نیسان پاترول ۲در', brand: 'نیسان' },
+    { key: 'nissan patrol-4-door', label: 'نیسان پاترول ۴در', brand: 'نیسان' },
+    { key: 'nissan qashqai', label: 'نیسان قشقایی (Qashqai)', brand: 'نیسان' },
+    { key: 'nissan sylphy-e-power', label: 'نیسان سیلفی e-Power', brand: 'نیسان' },
+    { key: 'nissan pickup', label: 'نیسان پیکاپ (Pickup)', brand: 'نیسان' },
+    { key: 'nissan juke', label: 'نیسان جوک (Juke)', brand: 'نیسان' },
+    { key: 'nissan altima', label: 'نیسان تیانا/التیما (Altima)', brand: 'نیسان' },
+    { key: 'nissan roniz', label: 'نیسان رونیز (Roniz)', brand: 'نیسان' },
+    { key: 'nissan terra-exclusive', label: 'نیسان ترا اکسکلوزیو (Terra)', brand: 'نیسان' },
+    { key: 'nissan murano', label: 'نیسان مورانو (Murano)', brand: 'نیسان' },
+    { key: 'nissan x-trail', label: 'نیسان ایکس‌تریل (X-Trail)', brand: 'نیسان' },
+    { key: 'nissan teana-ir', label: 'نیسان تیانا (Teana)', brand: 'نیسان' },
+    { key: 'nissan maxima-im', label: 'نیسان ماکسیما وارداتی', brand: 'نیسان' },
+
+    // Tigard
+    { key: 'tigard tissan-s05-1.5l-turbo', label: 'تیگارد تیسان S05 توربو', brand: 'تیگارد' },
+    { key: 'tigard x35', label: 'تیگارد X35', brand: 'تیگارد' },
+    { key: 'tigard x35-prime', label: 'تیگارد X35 پرایم', brand: 'تیگارد' },
+
+    // Lucano
+    { key: 'lucano l7', label: 'لوکانو L7', brand: 'لوکانو' },
+    { key: 'lucano l8', label: 'لوکانو L8', brand: 'لوکانو' },
+
+    // Fownix
+    { key: 'fownix tiggo-8-pro-max-ie', label: 'فونیکس تیگو ۸ پرو مکس IE', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix fx', label: 'فونیکس اف‌ایکس (FX)', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix arizo-6-gt', label: 'فونیکس آریزو ۶ جی‌تی (Arrizo 6 GT)', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix arizo-8', label: 'فونیکس آریزو ۸ (Arrizo 8)', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix arrizo-6-pro', label: 'فونیکس آریزو ۶ پرو (Arrizo 6 Pro)', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-7-pro-premium', label: 'فونیکس تیگو ۷ پرو پریمیوم', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-7-pro-max-1.6l-turbo-awd', label: 'فونیکس تیگو ۷ پرو مکس AWD', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix fx-ev', label: 'فونیکس اف‌ایکس برقی (FX EV)', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-7-pro-e-plus-plugin-hybrid', label: 'فونیکس تیگو ۷ پرو هیبرید (e+)', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-8-promax', label: 'فونیکس تیگو ۸ پرو مکس', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-7-pro', label: 'فونیکس تیگو ۷ پرو', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-8-pro', label: 'فونیکس تیگو ۸ پرو', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-8-pro-max-e-plus-plugin-hybrid', label: 'فونیکس تیگو ۸ پرو مکس e+ هیبرید', brand: 'مدیران خودرو (فونیکس)' },
+    { key: 'fownix tiggo-7-pro-max', label: 'فونیکس تیگو ۷ پرو مکس', brand: 'مدیران خودرو (فونیکس)' },
+
+    // MVM
+    { key: 'mvm x33-cross-automatic', label: 'ام‌وی‌ام X33 کراس اتوماتیک', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x55', label: 'ام‌وی‌ام X55 / X55 پرو', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x22', label: 'ام‌وی‌ام X22', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x22pro', label: 'ام‌وی‌ام X22 پرو', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm 110', label: 'ام‌وی‌ام ۱۱۰', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm 315-hatchback', label: 'ام‌وی‌ام ۳۱۵ هاچ‌بک', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x22-pro', label: 'ام‌وی‌ام X22 پرو دنده‌ای/اتومات', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x33', label: 'ام‌وی‌ام X33', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x33s', label: 'ام‌وی‌ام X33s', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm 530', label: 'ام‌وی‌ام ۵۳۰', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm x77', label: 'ام‌وی‌ام X77', brand: 'مدیران خودرو (MVM)' },
+    { key: 'mvm arizo-5-sport-fl', label: 'ام‌وی‌ام آریزو ۵ اسپرت FL', brand: 'مدیران خودرو (MVM)' },
 ];
 
 export function getCarLabelByKey(key: string): string {
@@ -453,7 +583,7 @@ export function generateArbitrageOpportunities(params: {
         const carKey = car.key;
         citySummariesByCar[carKey] = {} as Record<ArbitrageCityKey, CityPriceSummary>;
 
-        const targetCities: ArbitrageCityKey[] = ['shiraz', 'tehran', 'isfahan', 'bushehr'];
+        const targetCities: ArbitrageCityKey[] = ['shiraz', 'tehran', 'isfahan', 'bushehr', 'karaj'];
         
         // 1. Collect real live price points for each city
         targetCities.forEach(cityKey => {
@@ -494,6 +624,7 @@ export function generateArbitrageOpportunities(params: {
                     if (cityKey === 'tehran' && (text.includes('تهران') || text.includes('پایتخت'))) matchesCity = true;
                     if (cityKey === 'isfahan' && text.includes('اصفهان')) matchesCity = true;
                     if (cityKey === 'bushehr' && (text.includes('بوشهر') || text.includes('گناوه') || text.includes('دشتستان'))) matchesCity = true;
+                    if (cityKey === 'karaj' && (text.includes('کرج') || text.includes('البرز') || text.includes('مهرشهر') || text.includes('گوهردشت'))) matchesCity = true;
 
                     if (matchesCity) {
                         const valToman = toToman(item.price);
@@ -561,7 +692,7 @@ export function generateArbitrageOpportunities(params: {
 
         // 3. Build Real Arbitrage Opportunities (ONLY IF LIVE DATA EXISTS FOR BOTH ORIGIN AND SHIRAZ)
         if (hasShirazLiveData && sellPriceShirazToman > 0) {
-            const originCities: ArbitrageCityKey[] = ['tehran', 'isfahan', 'shiraz'];
+            const originCities: ArbitrageCityKey[] = ['tehran', 'isfahan', 'bushehr', 'karaj', 'shiraz'];
 
             originCities.forEach(origin => {
                 const originConfig = ARBITRAGE_CITIES_CONFIG[origin];

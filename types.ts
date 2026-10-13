@@ -419,16 +419,19 @@ export interface CollaborationCar {
 // --- Storage Center (انبار اداری و مصرفی) Types ---
 export interface StorageItem {
     id: string | number;
-    name: string;                // نام کالا (مثلاً چای سیاه دبش، لیوان کاغذی، خودکار آبی، مایع دستشویی و...)
-    category: string;            // دسته بندی: لوازم تحریر | شوینده و سلولوزی | ظروف یکبار مصرف | قهوه، چای و دمنوش | مواد غذایی | سایر مصرفی اداری
+    name?: string;               // نام کالا (مثلاً چای سیاه دبش، لیوان کاغذی، خودکار آبی، مایع دستشویی و...)
+    title?: string;
+    category?: string;           // دسته بندی: لوازم تحریر | شوینده و سلولوزی | ظروف یکبار مصرف | قهوه، چای و دمنوش | مواد غذایی | سایر مصرفی اداری
     quantity: number;            // موجودی فعلی
-    unit: string;                // واحد: بسته، کارتن، عدد، کیلوگرم، قوطی، لیتر، پاکت
-    minStock: number;            // حداقل موجودی هشدار
-    location: string;            // محل نگهداری: قفسه انبار اداری | آبدارخانه | اتاق مدیران | بایگانی
+    unit?: string;               // واحد: بسته، کارتن، عدد، کیلوگرم، قوطی، لیتر، پاکت
+    minStock?: number;           // حداقل موجودی هشدار
+    minQuantity?: number;
+    location?: string;           // محل نگهداری: قفسه انبار اداری | آبدارخانه | اتاق مدیران | بایگانی
     unitPrice?: number;          // قیمت واحد (تومان)
     totalValue?: number;         // ارزش کل
     supplier?: string;           // تامین کننده / برند
     lastRestockDate?: string;    // آخرین تاریخ ورود به انبار
+    status?: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK';
     description?: string;        // توضیحات و مشخصات
     createdAt?: string;
     updatedAt?: string;
@@ -1119,39 +1122,32 @@ export interface TimesheetSummary {
     totalPunches: number;
 }
 
-export interface StorageItem {
-    id: string | number;
-    name?: string;
-    title?: string;
-    category?: string;
-    quantity: number;
-    unit?: string;
-    location?: string;
-    minQuantity?: number;
-    minStock?: number;
-    unitPrice?: number;
-    totalValue?: number;
-    supplier?: string;
-    status?: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK';
-    description?: string;
-    updatedAt?: string;
-}
-
 export interface StockTransaction {
     id: string | number;
-    date?: string;
-    createdAt?: string;
-    type?: 'IN' | 'OUT';
+    itemId?: string | number;
+    date?: string;               // Gregorian date / datetime (e.g. 2026-10-13 14:30)
+    createdAt?: string;          // Gregorian creation date
+    type?: 'IN' | 'OUT' | 'ADJUSTMENT';
     name?: string;
     itemName?: string;
+    itemCode?: string;
     quantity?: number;
     transactionQuantity?: number;
+    previousStock?: number;
+    newStock?: number;
     unit?: string;
     reason?: string;
+    referenceNumber?: string;
     receiverOrSource?: string;
+    sourceOrDestination?: string;
+    supplier?: string;
     operator?: string;
     location?: string;
     category?: string;
+    unitPrice?: number;
+    totalPrice?: number;
+    notes?: string;
+    [key: string]: any;
 }
 
 export interface EmployeeTimesheet {

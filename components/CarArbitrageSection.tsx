@@ -77,7 +77,8 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
         shiraz: [],
         tehran: [],
         isfahan: [],
-        bushehr: []
+        bushehr: [],
+        karaj: []
     });
 
     // Inquiry Metadata per City (Timestamps, counts, status)
@@ -85,7 +86,8 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
         shiraz: { cityKey: 'shiraz', cityLabel: 'شیراز (دفتر مرکزی)', lastInquiredAt: null, timeAgoText: 'استعلام نشده', rawAdsCount: 0, validAdsCount: 0, outlierAdsCount: 0, status: 'idle' },
         tehran: { cityKey: 'tehran', cityLabel: 'تهران', lastInquiredAt: null, timeAgoText: 'استعلام نشده', rawAdsCount: 0, validAdsCount: 0, outlierAdsCount: 0, status: 'idle' },
         isfahan: { cityKey: 'isfahan', cityLabel: 'اصفهان', lastInquiredAt: null, timeAgoText: 'استعلام نشده', rawAdsCount: 0, validAdsCount: 0, outlierAdsCount: 0, status: 'idle' },
-        bushehr: { cityKey: 'bushehr', cityLabel: 'بوشهر', lastInquiredAt: null, timeAgoText: 'استعلام نشده', rawAdsCount: 0, validAdsCount: 0, outlierAdsCount: 0, status: 'idle' }
+        bushehr: { cityKey: 'bushehr', cityLabel: 'بوشهر', lastInquiredAt: null, timeAgoText: 'استعلام نشده', rawAdsCount: 0, validAdsCount: 0, outlierAdsCount: 0, status: 'idle' },
+        karaj: { cityKey: 'karaj', cityLabel: 'کرج (البرز)', lastInquiredAt: null, timeAgoText: 'استعلام نشده', rawAdsCount: 0, validAdsCount: 0, outlierAdsCount: 0, status: 'idle' }
     });
 
     // Inquiry status and timers
@@ -277,7 +279,7 @@ export const CarArbitrageSection: React.FC<CarArbitrageSectionProps> = ({
         setIsSequentialRunning(true);
 
         const carQuery = targetCarKey && targetCarKey !== 'all' ? targetCarKey : (selectedCarFilter !== 'all' ? selectedCarFilter : 'kmc eagle');
-        const cities: ArbitrageCityKey[] = ['shiraz', 'tehran', 'isfahan'];
+        const cities: ArbitrageCityKey[] = ['shiraz', 'tehran', 'karaj', 'isfahan', 'bushehr'];
 
         for (let i = 0; i < cities.length; i++) {
             if (stopSequenceFlagRef.current) break;

@@ -1,4 +1,4 @@
-export type ArbitrageCityKey = 'shiraz' | 'tehran' | 'isfahan' | 'bushehr';
+export type ArbitrageCityKey = 'shiraz' | 'tehran' | 'isfahan' | 'bushehr' | 'karaj';
 
 export interface ArbitrageCityConfig {
     key: ArbitrageCityKey;
@@ -55,6 +55,17 @@ export const ARBITRAGE_CITIES_CONFIG: Record<ArbitrageCityKey, ArbitrageCityConf
         defaultCarrierCostToman: 6_500_000,
         defaultInspectionCostToman: 3_000_000,
         baseLogisticsRisk: 'LOW',
+        isMainHub: false
+    },
+    karaj: {
+        key: 'karaj',
+        label: 'کرج (البرز)',
+        province: 'البرز',
+        distanceToShirazKm: 940,
+        estimatedTransportDays: 2.5,
+        defaultCarrierCostToman: 15_500_000,
+        defaultInspectionCostToman: 4_000_000,
+        baseLogisticsRisk: 'MEDIUM',
         isMainHub: false
     }
 };
