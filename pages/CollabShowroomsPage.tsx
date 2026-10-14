@@ -3,8 +3,8 @@ import {
     Store, Plus, Search, MapPin, Phone, User, Trash2, Edit2, X, Check, 
     Filter, Layers, Briefcase, CheckCircle2, AlertCircle, RefreshCw, Loader2, Building2, Clock
 } from 'lucide-react';
-import type { CollaborationShowroom, StaffUser } from '../types';
-import { getCollaborations, createCollaboration, updateCollaboration, deleteCollaboration, getStaffUsers } from '../services/api';
+import type { CollaborationShowroom, StaffUser, MyProfile } from '../types';
+import { getCollaborations, createCollaboration, updateCollaboration, deleteCollaboration, getStaffUsers, getMyProfile } from '../services/api';
 import Toast from '../components/Toast';
 
 export const PRODUCT_BASKETS = [
@@ -23,7 +23,12 @@ export const COLLAB_STATUSES = [
     { key: 'توقف همکاری', label: 'توقف همکاری', color: 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-200' }
 ];
 
-export const CollabShowroomsPage: React.FC = () => {
+interface CollabShowroomsPageProps {
+    loggedInUser?: MyProfile | null;
+}
+
+export const CollabShowroomsPage: React.FC<CollabShowroomsPageProps> = ({ loggedInUser }) => {
+    const [currentUser, setCurrentUser] = useState<MyProfile | null>(loggedInUser || null);
     const [showrooms, setShowrooms] = useState<CollaborationShowroom[]>([]);
     const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -55,15 +60,51 @@ export const CollabShowroomsPage: React.FC = () => {
         setTimeout(() => setToast(null), 3000);
     };
 
+    // Helper to determine if current user has admin privileges
+    const isAdmin = useMemo(() => {
+        if (!currentUser) return false;
+        if (currentUser.isAdmin === 1) return true;
+        if ((currentUser as any).role === 'ADMIN') return true;
+        if (currentUser.permission_level && currentUser.permission_level >= 9) return true;
+        if (currentUser.username && currentUser.username.toLowerCase() === 'admin') return true;
+        return false;
+    }, [currentUser]);
+
+    // Helper to check if current logged-in user is the showroom's introducer (معرف)
+    const isIntroducer = (introducerName?: string | null): boolean => {
+        if (!currentUser || !introducerName) return false;
+        const cleanIntro = introducerName.trim().toLowerCase();
+        const cleanUsername = (currentUser.username || '').trim().toLowerCase();
+        const cleanFullName = (currentUser.full_name || '').trim().toLowerCase();
+
+        if (cleanUsername && (cleanIntro === cleanUsername || cleanIntro.includes(cleanUsername))) {
+            return true;
+        }
+        if (cleanFullName && (cleanIntro === cleanFullName || cleanIntro.includes(cleanFullName) || cleanFullName.includes(cleanIntro))) {
+            return true;
+        }
+        return false;
+    };
+
+    // In edit mode: contact_phone is ONLY visible to admin and the showroom's introducer
+    const canViewContactPhoneInEdit = useMemo(() => {
+        if (!editingShowroom) return true; // Allowed when adding a new showroom
+        return isAdmin || isIntroducer(editingShowroom.introducer);
+    }, [isAdmin, editingShowroom, currentUser]);
+
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [collabData, staffData] = await Promise.all([
+            const [collabData, staffData, profileData] = await Promise.all([
                 getCollaborations(),
-                getStaffUsers().catch(() => [])
+                getStaffUsers().catch(() => []),
+                !currentUser ? getMyProfile().catch(() => null) : Promise.resolve(null)
             ]);
             setShowrooms(Array.isArray(collabData) ? collabData : []);
             setStaffUsers(Array.isArray(staffData) ? staffData : []);
+            if (profileData && 'id' in profileData) {
+                setCurrentUser(profileData as MyProfile);
+            }
         } catch (err) {
             showToast('خطا در دریافت اطلاعات نمایشگاه‌های همکار', 'error');
         } finally {
@@ -74,6 +115,12 @@ export const CollabShowroomsPage: React.FC = () => {
     useEffect(() => {
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (loggedInUser) {
+            setCurrentUser(loggedInUser);
+        }
+    }, [loggedInUser]);
 
     const handleOpenAddModal = () => {
         setEditingShowroom(null);
@@ -100,12 +147,14 @@ export const CollabShowroomsPage: React.FC = () => {
             baskets = item.product_basket.split(',').map(s => s.trim()).filter(Boolean);
         }
 
+        const canSeePhone = isAdmin || isIntroducer(item.introducer);
+
         setFormData({
             name: item.name || '',
             address: item.address || '',
             phone: item.phone || '',
             contact_name: item.contact_name || '',
-            contact_phone: item.contact_phone || '',
+            contact_phone: canSeePhone ? (item.contact_phone || '') : '',
             introducer: item.introducer || '',
             product_basket: baskets.length > 0 ? baskets : ['وارداتی'],
             status: item.status || 'در حال مذاکره',
@@ -134,6 +183,10 @@ export const CollabShowroomsPage: React.FC = () => {
 
         const payload = {
             ...formData,
+            // If editing and user cannot view/edit contact_phone, preserve the original contact_phone
+            contact_phone: (editingShowroom && !canViewContactPhoneInEdit)
+                ? (editingShowroom.contact_phone || '')
+                : formData.contact_phone,
             product_basket: formData.product_basket.join(', ')
         };
 
@@ -189,12 +242,14 @@ export const CollabShowroomsPage: React.FC = () => {
                 const matchName = (item.name || '').toLowerCase().includes(q);
                 const matchContact = (item.contact_name || '').toLowerCase().includes(q);
                 const matchPhone = (item.phone || '').toLowerCase().includes(q);
+                // Contact phone is searchable ONLY by admin to avoid leaking hidden numbers
+                const matchContactPhone = isAdmin ? (item.contact_phone || '').toLowerCase().includes(q) : false;
                 const matchIntroducer = (item.introducer || '').toLowerCase().includes(q);
-                if (!matchName && !matchContact && !matchPhone && !matchIntroducer) return false;
+                if (!matchName && !matchContact && !matchPhone && !matchContactPhone && !matchIntroducer) return false;
             }
             return true;
         });
-    }, [showrooms, statusFilter, basketFilter, searchQuery]);
+    }, [showrooms, statusFilter, basketFilter, searchQuery, isAdmin]);
 
     const stats = useMemo(() => {
         const total = showrooms.length;
@@ -295,7 +350,7 @@ export const CollabShowroomsPage: React.FC = () => {
                     <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="جستجو نام نمایشگاه، رابط، تلفن یا معرف..."
+                        placeholder={isAdmin ? "جستجو نام نمایشگاه، رابط، تلفن یا معرف..." : "جستجو نام نمایشگاه، رابط یا معرف..."}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
@@ -397,11 +452,16 @@ export const CollabShowroomsPage: React.FC = () => {
                                                 <span className="line-clamp-2">{item.address}</span>
                                             </div>
                                         )}
-                                        {item.contact_name && (
+                                        {(item.contact_name || (isAdmin && item.contact_phone)) && (
                                             <div className="flex items-center justify-between pt-1 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl">
                                                 <span className="text-slate-400">رابط:</span>
-                                                <span className="font-bold text-slate-700 dark:text-slate-200">
-                                                    {item.contact_name} {item.contact_phone ? `(${item.contact_phone})` : ''}
+                                                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                                    <span>{item.contact_name || (isAdmin ? item.contact_phone : '')}</span>
+                                                    {isAdmin && item.contact_name && item.contact_phone && (
+                                                        <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px] font-normal">
+                                                            ({item.contact_phone})
+                                                        </span>
+                                                    )}
                                                 </span>
                                             </div>
                                         )}
@@ -554,16 +614,38 @@ export const CollabShowroomsPage: React.FC = () => {
                                         className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
                                     />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-black text-slate-700 dark:text-slate-300">شماره رابط</label>
-                                    <input
-                                        type="text"
-                                        placeholder="مثال: 09123456789"
-                                        value={formData.contact_phone}
-                                        onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-hidden font-mono"
-                                    />
-                                </div>
+                                {canViewContactPhoneInEdit ? (
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs font-black text-slate-700 dark:text-slate-300">شماره رابط</label>
+                                            {editingShowroom && (
+                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/50">
+                                                    {isAdmin ? 'دسترسی ادمین' : 'دسترسی معرف'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="مثال: 09123456789"
+                                            value={formData.contact_phone}
+                                            onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                                            className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-hidden font-mono"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs font-black text-slate-500 dark:text-slate-400">شماره رابط</label>
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200/50">
+                                                🔒 فقط ادمین و معرف
+                                            </span>
+                                        </div>
+                                        <div className="w-full p-2.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-400 dark:text-slate-500 font-mono flex items-center justify-between h-[38px]">
+                                            <span>•••••••••••</span>
+                                            <span className="text-[10px] text-slate-400 font-sans">تلفن رابط برای شما مخفی است</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-1">

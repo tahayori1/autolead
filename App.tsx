@@ -660,7 +660,7 @@ const App: React.FC = () => {
                 {activeView === 'advertising-contact' && <AdvertisingPage loggedInUser={currentUser} initialTab="contact" />}
                 {activeView === 'car-orders' && <CarOrderPage isAdmin={currentUser?.isAdmin === 1} />}
                 {activeView === 'bank-letter' && <BankLetterPage isAdmin={currentUser?.isAdmin === 1} loggedInUser={currentUser} />}
-                {activeView === 'collaboration' && <CollabShowroomsPage />}
+                {activeView === 'collaboration' && <CollabShowroomsPage loggedInUser={currentUser} />}
                 {activeView === 'collaboration-cars' && <CollabCarsPage />}
                 {activeView === 'storage-center' && <StorageCenterPage />}
                 {activeView === 'about' && <AboutPage />}
