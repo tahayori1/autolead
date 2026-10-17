@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LeadStatus } from '../types';
 import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfile, CrmCallLog, CrmMeeting } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
@@ -43,8 +43,7 @@ import {
     Share2,
     Copy,
     CheckCheck,
-    PlusCircle,
-    FileText
+    PlusCircle
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -133,7 +132,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         if (!isOpen || !lead || !loggedInUser) return;
 
         const username = loggedInUser.username || 'ناشناس';
-        const fullName = loggedInUser.FullName || loggedInUser.full_name || 'کاربر سیستم';
+        const fullName = (loggedInUser as any).FullName || loggedInUser.full_name || 'کاربر سیستم';
         const leadId = Number(lead.id);
 
         const sendHeartbeatAndFetch = async () => {
@@ -245,7 +244,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             'KMC T8', 'KMC T9', 'KMC J7', 'KMC X5', 'KMC A5', 'KMC EAGLE', 'KMC SR3', 'KMC SR6', 'KMC SHADOW',
             'JAC J4', 'JAC S3', 'JAC S5', 'JAC J5', 'BAC X3PRO', 'BAC X3 Pro'
         ];
-        const carList = (cars || []).map(c => c.name || c.model).filter(Boolean);
+        const carList = (cars || []).map((c: any) => c.name || c.model).filter(Boolean);
         const set = new Set<string>([...defaultModels, ...carList]);
         if (editCarModel && editCarModel.trim()) {
             set.add(editCarModel.trim());
@@ -883,8 +882,8 @@ ${changes.join('\n')}`,
             });
 
             // Automatically set lead status to MEETING (جلسه حضوری)
-            if (lead && lead.leadStatus !== 'جلسه حضوری' && onStatusChange) {
-                await onStatusChange(userId, 'جلسه حضوری');
+            if (lead && lead.leadStatus !== LeadStatus.MEETING && onStatusChange) {
+                await onStatusChange(userId, LeadStatus.MEETING);
             }
 
             // Reset form
@@ -1207,7 +1206,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                         location,
                         result,
                         author: j.author || 'کاربر سیستم',
-                        originalJournalId: j.id
+                        originalJournalId: Number(j.id)
                     }
                 });
                 return;
