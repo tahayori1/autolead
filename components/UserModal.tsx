@@ -38,14 +38,14 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
     const [formState, setFormState] = useState(initialFormState);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const currentUserName = loggedInUser?.full_name || loggedInUser?.FullName || loggedInUser?.username || 'کاربر سیستم';
+    const currentUserName = loggedInUser?.full_name || (loggedInUser as any)?.FullName || loggedInUser?.username || 'کاربر سیستم';
 
     // Send heartbeat when editing a lead
     useEffect(() => {
         if (!isOpen || !user || !loggedInUser) return;
 
         const username = loggedInUser.username || 'ناشناس';
-        const fullName = loggedInUser.FullName || loggedInUser.full_name || 'کاربر سیستم';
+        const fullName = loggedInUser.full_name || (loggedInUser as any)?.FullName || 'کاربر سیستم';
         const leadId = Number(user.id);
 
         const sendHeartbeat = async () => {

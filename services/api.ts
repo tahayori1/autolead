@@ -1051,10 +1051,38 @@ export interface Reference {
 }
 
 export const getUserByNumber = async (number: string): Promise<User | null> => {
-    const response = await fetch(`${API_BASE_URL}/user?number=${number}`, { headers: getAuthHeaders() });
-    const data = await handleResponse(response);
-    // API returns an array, we want the first item as per the provided response format
-    return (Array.isArray(data) && data.length > 0) ? data[0] : null;
+    const cleanNum = (number || '').replace(/\D/g, '').replace(/^0+/, '');
+    try {
+        const response = await fetch(`${API_BASE_URL}/user?number=${cleanNum || number}`, { headers: getAuthHeaders() });
+        const data = await handleResponse(response);
+        if (Array.isArray(data) && data.length > 0) {
+            const first = data[0];
+            // Check if it's a real user record and not webhook echo metadata
+            if (first && (first.id || first.Number || first.FullName) && !first.webhookUrl && !first.headers) {
+                return first;
+            }
+        }
+    } catch (e) {
+        console.warn("Direct user-by-number fetch failed:", e);
+    }
+
+    // Reliable fallback: search via /users?search=...
+    try {
+        const searchTarget = cleanNum || number;
+        if (searchTarget) {
+            const users = await getUsers({ search: searchTarget, items: 10 });
+            if (Array.isArray(users) && users.length > 0) {
+                const match = users.find(u => {
+                    const uClean = (u.Number || '').replace(/\D/g, '').replace(/^0+/, '');
+                    return uClean === searchTarget || (u.Number && u.Number.includes(searchTarget));
+                });
+                return match || users[0];
+            }
+        }
+    } catch (e) {
+        console.warn("Fallback search user by number failed:", e);
+    }
+    return null;
 };
 
 export const getLeadHistory = async (number: string): Promise<LeadMessage[]> => {
@@ -1152,7 +1180,7 @@ export const updateUser = async (id: number, updatedUser: User): Promise<User> =
         body: JSON.stringify(updatedUser),
     });
     const resultUser = await handleResponse(response);
-    return resultUser ? resultUser : updatedUser;
+    return (resultUser && (resultUser.id || resultUser.FullName)) ? { ...updatedUser, ...resultUser } : updatedUser;
 };
 
 export const deleteUser = async (id: number): Promise<void> => {

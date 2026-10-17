@@ -158,12 +158,12 @@ const UserTable: React.FC<UserTableProps> = ({
         }
     };
 
-    const SortableHeader: React.FC<{ title: string; sortKey: keyof User; }> = ({ title, sortKey }) => {
+    const SortableHeader: React.FC<{ title: string; sortKey: keyof User; className?: string }> = ({ title, sortKey, className = '' }) => {
         const isSorted = sortConfig?.key === sortKey;
         const direction = isSorted ? sortConfig.direction : 'none';
 
         return (
-            <th scope="col" className="px-6 py-4 whitespace-nowrap">
+            <th scope="col" className={`px-6 py-4 whitespace-nowrap ${className}`}>
                 <button
                     className="flex items-center gap-1 uppercase font-bold text-xs text-slate-700 dark:text-slate-300 group hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
                     onClick={() => onSort(sortKey)}
@@ -201,7 +201,7 @@ const UserTable: React.FC<UserTableProps> = ({
                             <SortableHeader title="تماس" sortKey="Number" />
                             <SortableHeader title="خودرو" sortKey="CarModel" />
                             <SortableHeader title="وضعیت سرنخ" sortKey="leadStatus" />
-                            <SortableHeader title="موقعیت" sortKey="Province" />
+                            <SortableHeader title="موقعیت" sortKey="Province" className="max-w-[200px]" />
                             <SortableHeader title="آخرین بروزرسانی" sortKey="updatedAt" />
                             <th scope="col" className="px-6 py-3 whitespace-nowrap"></th>
                         </tr>
@@ -275,7 +275,23 @@ const UserTable: React.FC<UserTableProps> = ({
                                 <td className="px-6 py-4">
                                     {getStatusBadge(user.leadStatus)}
                                 </td>
-                                <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{user.City || user.Province || '-'}</td>
+                                <td 
+                                    className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-[200px] overflow-hidden" 
+                                    style={{ maxWidth: '200px', overflow: 'hidden' }}
+                                >
+                                    <div 
+                                        className="max-w-[200px] truncate overflow-hidden whitespace-nowrap block"
+                                        style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                        title={(() => {
+                                            const parts = [user.Province, user.City].filter(Boolean);
+                                            return parts.length > 0 ? parts.join(' - ') : (user.City || user.Province || '-');
+                                        })()}
+                                    >
+                                        {user.Province && user.City && user.Province !== user.City 
+                                            ? `${user.Province} - ${user.City}` 
+                                            : (user.City || user.Province || '-')}
+                                    </div>
+                                </td>
                                 <td className="px-6 py-4 whitespace-nowrap" title={formatDateForTooltip(user.updatedAt)}>
                                     {(() => {
                                         const dt = formatDateTimeParts(user.updatedAt);

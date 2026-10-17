@@ -43,7 +43,8 @@ import {
     Share2,
     Copy,
     CheckCheck,
-    PlusCircle
+    PlusCircle,
+    FileText
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -207,10 +208,62 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         }
     };
 
-    const targetUser = fullUserDetails || lead;
+    const [localUserOverride, setLocalUserOverride] = useState<User | null>(null);
+
+    const targetUser: User = useMemo(() => {
+        if (localUserOverride) return localUserOverride;
+
+        const isWebhookEcho = (u: any) => Boolean(
+            u && (u.webhookUrl || u.headers || (!u.id && !u.Number && !u.FullName))
+        );
+        
+        const validFull = fullUserDetails && !isWebhookEcho(fullUserDetails) ? fullUserDetails : null;
+        const validLead = lead && !isWebhookEcho(lead) ? lead : null;
+
+        if (validLead && validFull) {
+            return {
+                ...validLead,
+                ...validFull,
+                CarModel: validFull.CarModel || validLead.CarModel || (validFull as any).carModel || (validLead as any).carModel || '',
+                Province: (validFull.Province !== undefined && validFull.Province !== null && validFull.Province !== '') 
+                    ? validFull.Province 
+                    : (validLead.Province ?? null),
+                City: validFull.City || validLead.City || '',
+                reference: validFull.reference || validLead.reference || (validFull as any).Reference || (validLead as any).Reference || '',
+                RegisterTime: validFull.RegisterTime || validLead.RegisterTime || (validFull as any).createdAt || (validLead as any).createdAt || (validFull as any).crmDate || (validLead as any).crmDate || '',
+                LastAction: validFull.LastAction || validLead.LastAction || validFull.updatedAt || validLead.updatedAt || null,
+                Decription: validFull.Decription || validLead.Decription || (validFull as any).Description || (validLead as any).Description || (validFull as any).description || (validLead as any).description || '',
+            };
+        }
+        if (validFull) return validFull;
+        if (validLead) return validLead;
+        return ({} as User);
+    }, [fullUserDetails, lead, localUserOverride]);
+
+    const availableCarModels = useMemo(() => {
+        const defaultModels = [
+            'KMC T8', 'KMC T9', 'KMC J7', 'KMC X5', 'KMC A5', 'KMC EAGLE', 'KMC SR3', 'KMC SR6', 'KMC SHADOW',
+            'JAC J4', 'JAC S3', 'JAC S5', 'JAC J5', 'BAC X3PRO', 'BAC X3 Pro'
+        ];
+        const carList = (cars || []).map(c => c.name || c.model).filter(Boolean);
+        const set = new Set<string>([...defaultModels, ...carList]);
+        if (editCarModel && editCarModel.trim()) {
+            set.add(editCarModel.trim());
+        }
+        if (targetUser?.CarModel && targetUser.CarModel.trim()) {
+            set.add(targetUser.CarModel.trim());
+        }
+        return Array.from(set);
+    }, [cars, editCarModel, targetUser?.CarModel]);
 
     useEffect(() => {
-        if (isOpen && targetUser) {
+        if (!isOpen) {
+            setLocalUserOverride(null);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (isOpen && targetUser && (targetUser.id || targetUser.Number || targetUser.FullName)) {
             setActiveTab(initialTab || 'COMBINED_HISTORY');
             setSurveySubTab('REGISTRATION');
             getMyProfile().then(p => setCurrentUser(p)).catch(() => {});
@@ -229,11 +282,11 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             // Initialize Edit Lead Form States
             setEditFullName(targetUser.FullName || '');
             setEditNumber(targetUser.Number || '');
-            setEditCarModel(targetUser.CarModel || 'JAC J4');
-            setEditProvince(targetUser.Province || '');
-            setEditCity(targetUser.City || '');
-            setEditDescription(targetUser.Decription || '');
-            setEditReference(targetUser.reference || '');
+            setEditCarModel(targetUser.CarModel || (targetUser as any).carModel || '');
+            setEditProvince(targetUser.Province || (targetUser as any).province || '');
+            setEditCity(targetUser.City || (targetUser as any).city || '');
+            setEditDescription(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description || '');
+            setEditReference(targetUser.reference || (targetUser as any).Reference || '');
             setEditLeadStatus(targetUser.leadStatus || LeadStatus.NEW);
             
             const existingReason = targetUser.failReason || '';
@@ -428,8 +481,9 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
         // Validation
         const newErrors: Record<string, string> = {};
         if (!editFullName.trim()) newErrors.FullName = 'نام کامل الزامی است.';
-        if (!editNumber.trim()) newErrors.Number = 'شماره تماس الزامی است.';
-        if (!/^\d{10,11}$/.test(editNumber)) newErrors.Number = 'شماره تماس معتبر نیست.';
+        const cleanNumber = editNumber.replace(/\D/g, '');
+        if (!cleanNumber) newErrors.Number = 'شماره تماس الزامی است.';
+        else if (!/^\d{10,11}$/.test(cleanNumber)) newErrors.Number = 'شماره تماس باید ۱۰ یا ۱۱ رقمی باشد.';
         
         const finalFailReason = editLeadStatus === LeadStatus.LOST
             ? (editFailReason === 'سایر دلایل' ? customFailReason.trim() : editFailReason.trim())
@@ -454,9 +508,9 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             const updatedUser: User = {
                 ...targetUser,
                 FullName: editFullName.trim(),
-                Number: editNumber.trim(),
-                CarModel: editCarModel,
-                Province: editProvince.trim(),
+                Number: cleanNumber,
+                CarModel: editCarModel.trim(),
+                Province: editProvince.trim() || null,
                 City: editCity.trim(),
                 Decription: editDescription.trim(),
                 reference: editReference.trim(),
@@ -464,12 +518,18 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
                 failReason: editLeadStatus === LeadStatus.LOST ? finalFailReason : undefined,
                 failExplanation: editLeadStatus === LeadStatus.LOST ? editFailExplanation.trim() : undefined,
                 lastEditedBy: authorName,
-                phoneRegisteredBy: (targetUser.Number !== editNumber.trim()) ? authorName : targetUser.phoneRegisteredBy,
+                phoneRegisteredBy: (targetUser.Number !== cleanNumber) ? authorName : targetUser.phoneRegisteredBy,
                 LastAction: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
+            (updatedUser as any).Description = editDescription.trim();
 
             const result = await updateUser(Number(userId), updatedUser);
+            const finalSavedUser: User = {
+                ...updatedUser,
+                ...(result && (result.id || result.FullName) ? result : {})
+            };
+            setLocalUserOverride(finalSavedUser);
 
             // Create customer journal log entry for history timeline
             const nowFa = new Date().toLocaleString('fa-IR');
@@ -545,7 +605,7 @@ ${changes.join('\n')}`,
             }
 
             if (onUserUpdate) {
-                onUserUpdate(result);
+                onUserUpdate(finalSavedUser);
             }
 
             // Fetch journals to immediately show on history timeline
@@ -1612,36 +1672,81 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                         })()}
 
                         {/* Customer Header Info */}
-                        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-850 shadow-sm">
-                            {fullUserDetails ? (
+                        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-850 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse" />
+                                    <span className="text-xs font-black text-slate-800 dark:text-white">مشخصات و اطلاعات سرنخ مشتری</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab('EDIT_LEAD')}
+                                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1.5 rounded-xl border border-indigo-200/80 dark:border-indigo-850 transition hover:bg-indigo-100 dark:hover:bg-indigo-900"
+                                    title="ویرایش مشخصات، خودرو، شهر، استان، مرجع و توضیحات"
+                                >
+                                    <Edit className="w-3.5 h-3.5" />
+                                    <span>ویرایش مشخصات و توضیحات</span>
+                                </button>
+                            </div>
+
+                            {targetUser && (targetUser.FullName || targetUser.Number || targetUser.id) ? (
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
-                                    <DetailItem label="خودروی درخواستی" value={fullUserDetails.CarModel} />
-                                    <DetailItem label="استان" value={fullUserDetails.Province} />
-                                    <DetailItem label="شهر" value={fullUserDetails.City} />
-                                    <DetailItem label="مرجع" value={fullUserDetails.reference} />
-                                    <DetailItem label="زمان ثبت" value={formatDate(fullUserDetails.RegisterTime)} />
-                                    <DetailItem label="آخرین فعالیت" value={formatDate(fullUserDetails.LastAction)} />
-                                    {fullUserDetails.failReason && (
+                                    <DetailItem label="خودروی درخواستی" value={targetUser.CarModel || (targetUser as any).carModel || '-'} />
+                                    <DetailItem label="استان" value={targetUser.Province || (targetUser as any).province || '-'} />
+                                    <DetailItem label="شهر" value={targetUser.City || (targetUser as any).city || '-'} />
+                                    <DetailItem label="مرجع" value={targetUser.reference || (targetUser as any).Reference || '-'} />
+                                    <DetailItem label="زمان ثبت" value={formatDate(targetUser.RegisterTime || targetUser.createdAt || (targetUser as any).crmDate)} />
+                                    <DetailItem label="آخرین فعالیت" value={formatDate(targetUser.LastAction || targetUser.updatedAt)} />
+                                    {targetUser.failReason && (
                                         <DetailItem label="علت شکست معامله" value={
                                             <span className="font-extrabold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded border border-red-100 dark:border-red-900/30">
-                                                {fullUserDetails.failReason}
+                                                {targetUser.failReason}
                                             </span>
                                         } />
                                     )}
-                                    {fullUserDetails.failExplanation && (
+                                    {targetUser.failExplanation && (
                                         <div className="col-span-full border-t border-slate-100 dark:border-slate-850 pt-2 mt-1">
                                             <DetailItem label="توضیحات تکمیلی شکست معامله" value={
                                                 <span className="whitespace-pre-wrap text-red-600 dark:text-red-400 font-medium">
-                                                    {fullUserDetails.failExplanation}
+                                                    {targetUser.failExplanation}
                                                 </span>
                                             } />
                                         </div>
                                     )}
-                                    {fullUserDetails.Decription && (
-                                        <div className="col-span-full border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                                            <DetailItem label="توضیحات" value={<span className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{fullUserDetails.Decription}</span>} />
+
+                                    {/* Descriptions Section */}
+                                    <div className="col-span-full border-t border-slate-100 dark:border-slate-800 pt-3 mt-1">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                                <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span>توضیحات و یادداشت‌های مشتری:</span>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab('EDIT_LEAD')}
+                                                className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50/70 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800 hover:bg-indigo-100 transition"
+                                            >
+                                                <Edit className="w-3 h-3" />
+                                                <span>{(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description) ? 'ویرایش توضیحات' : 'ثبت توضیحات'}</span>
+                                            </button>
                                         </div>
-                                    )}
+                                        {(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description) ? (
+                                            <div className="bg-slate-50/90 dark:bg-slate-850/90 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+                                                {targetUser.Decription || (targetUser as any).Description || (targetUser as any).description}
+                                            </div>
+                                        ) : (
+                                            <div 
+                                                onClick={() => setActiveTab('EDIT_LEAD')}
+                                                className="p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50 text-slate-400 dark:text-slate-500 text-xs flex items-center justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50/20 transition-all"
+                                            >
+                                                <span>هنوز توضیحی برای این مشتری ثبت نشده است.</span>
+                                                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[11px] flex items-center gap-1">
+                                                    <PlusCircle className="w-3.5 h-3.5" />
+                                                    افزودن توضیحات
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             ) : (
                                 <p className="text-slate-500 text-xs">جزئیات کامل کاربر یافت نشد.</p>
@@ -2355,7 +2460,8 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                 onChange={(e) => setEditCarModel(e.target.value)}
                                                 className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white"
                                             >
-                                                {['JAC J4', 'JAC S3', 'JAC S5', 'BAC X3PRO', 'KMC T8', 'KMC T9', 'KMC A5', 'KMC J7', 'KMC X5', 'KMC SR3', 'KMC EAGLE', 'KMC SHADOW', 'KMC SR6'].map(model => (
+                                                <option value="">-- بدون انتخاب خودرو / نامشخص --</option>
+                                                {availableCarModels.map(model => (
                                                     <option key={model} value={model}>{model}</option>
                                                 ))}
                                             </select>

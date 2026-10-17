@@ -87,7 +87,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         city: '',
         crmPerson: 'all',
         lastEditedBy: 'all',
-        itemsLimit: 500
+        itemsLimit: 200
     });
 
     const isFirstMount = useRef(true);
@@ -383,7 +383,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         // Find all user IDs that current user worked on
         const workedLeadIds = new Set<number>();
         
-        const currentFullName = loggedInUser?.FullName || '';
+        const currentFullName = loggedInUser?.full_name || (loggedInUser as any)?.FullName || '';
         const currentUsername = loggedInUser?.username || '';
         const currentFullNameAlt = loggedInUser?.full_name || '';
 
@@ -571,7 +571,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setModalLoading(true);
         setModalError(null);
         setModalMessages([]);
-        setModalFullUser(null);
+        setModalFullUser(lead);
         
         try {
             const historyPromise = getLeadHistory(lead.Number).catch(e => {
@@ -591,8 +591,16 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 setModalMessages(historyData.sort((a, b) => parseDate(a.createdAt).getTime() - parseDate(b.createdAt).getTime()));
             }
             
-            if (userData) {
-                setModalFullUser(userData);
+            // Check if userData is a valid real user object and not webhook echo metadata
+            const isValidUserData = Boolean(
+                userData && 
+                (userData.id || userData.Number || userData.FullName) && 
+                !(userData as any).webhookUrl && 
+                !(userData as any).headers
+            );
+
+            if (isValidUserData) {
+                setModalFullUser({ ...lead, ...userData });
             } else {
                 setModalFullUser(lead);
             }
@@ -627,7 +635,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const handleSave = async (userData: Omit<User, 'id'>) => {
         try {
             let savedUser: User;
-            const authorName = loggedInUser?.full_name || loggedInUser?.FullName || loggedInUser?.username || 'کاربر سیستم';
+            const authorName = loggedInUser?.full_name || (loggedInUser as any)?.FullName || loggedInUser?.username || 'کاربر سیستم';
             const nowFa = new Date().toLocaleString('fa-IR');
 
             if (currentUser) {
@@ -910,7 +918,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                 await sendSMS(number, message);
                 await createCustomerJournal({
                     userId: selectedLead.id,
-                    author: loggedInUser?.FullName || 'سیستم',
+                    author: loggedInUser?.full_name || (loggedInUser as any)?.FullName || 'سیستم',
                     content: `💬 پیامک ارسال شد:\n${message}`,
                 });
                 showToast('پیامک با موفقیت ارسال شد', 'success');
@@ -918,7 +926,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                 await sendMessage(number, message);
                 await createCustomerJournal({
                     userId: selectedLead.id,
-                    author: loggedInUser?.FullName || 'سیستم',
+                    author: loggedInUser?.full_name || (loggedInUser as any)?.FullName || 'سیستم',
                     content: `💬 پیام واتساپ ارسال شد:\n${message}`,
                 });
                 showToast('پیام واتساپ با موفقیت ارسال شد', 'success');
@@ -926,7 +934,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                 await sendBaleMessage(number, message, botId || 1941315571);
                 await createCustomerJournal({
                     userId: selectedLead.id,
-                    author: loggedInUser?.FullName || 'سیستم',
+                    author: loggedInUser?.full_name || (loggedInUser as any)?.FullName || 'سیستم',
                     content: `💬 پیام بله ارسال شد:\n${message}`,
                 });
                 showToast('پیام بله با موفقیت ارسال شد', 'success');
@@ -1024,7 +1032,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                     try {
                         await createCustomerJournal({
                             userId: user.id,
-                            author: loggedInUser?.FullName || 'سیستم',
+                            author: loggedInUser?.full_name || (loggedInUser as any)?.FullName || 'سیستم',
                             content: `💬 پیامک گروهی ارسال شد:\n${message}`,
                         });
                     } catch (err) {
@@ -1048,14 +1056,14 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                     await sendMessage(user.Number, message);
                     await createCustomerJournal({
                         userId: user.id,
-                        author: loggedInUser?.FullName || 'سیستم',
+                        author: loggedInUser?.full_name || (loggedInUser as any)?.FullName || 'سیستم',
                         content: `💬 پیام واتساپ گروهی ارسال شد:\n${message}`,
                     });
                 } else if (type === 'BALE') {
                     await sendBaleMessage(user.Number, message, botId || 1941315571);
                     await createCustomerJournal({
                         userId: user.id,
-                        author: loggedInUser?.FullName || 'سیستم',
+                        author: loggedInUser?.full_name || (loggedInUser as any)?.FullName || 'سیستم',
                         content: `💬 پیام بله گروهی ارسال شد:\n${message}`,
                     });
                 }
@@ -1183,7 +1191,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                                 city: '',
                                 crmPerson: 'all',
                                 lastEditedBy: 'all',
-                                itemsLimit: 500
+                                itemsLimit: 200
                             });
                             onFiltersCleared();
                         }}

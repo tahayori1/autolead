@@ -126,16 +126,16 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
 
     // Activity pill filter toggle
     const toggleActivityFilter = (type: 'no_activity' | 'has_activity') => {
-        const newval = draftFilters.activityFilter === type ? 'all' : type;
-        const updated = { ...draftFilters, activityFilter: newval };
+        const newval: 'all' | 'no_activity' | 'has_activity' = draftFilters.activityFilter === type ? 'all' : type;
+        const updated: UserFilters = { ...draftFilters, activityFilter: newval };
         setDraftFilters(updated);
         onFilterChange(updated);
     };
 
     // Meeting pill filter toggle
     const toggleMeetingFilter = (type: 'has_meeting' | 'no_meeting') => {
-        const newval = draftFilters.meetingFilter === type ? 'all' : type;
-        const updated = { ...draftFilters, meetingFilter: newval };
+        const newval: 'all' | 'has_meeting' | 'no_meeting' = draftFilters.meetingFilter === type ? 'all' : type;
+        const updated: UserFilters = { ...draftFilters, meetingFilter: newval };
         setDraftFilters(updated);
         onFilterChange(updated);
     };
@@ -206,7 +206,7 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
             city: '',
             crmPerson: 'all',
             lastEditedBy: 'all',
-            itemsLimit: filters.itemsLimit || 500
+            itemsLimit: filters.itemsLimit || 200
         };
         setDraftFilters(defaultState);
         onClear();
