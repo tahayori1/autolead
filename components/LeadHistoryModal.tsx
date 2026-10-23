@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LeadStatus } from '../types';
-import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfile, CrmCallLog, CrmMeeting } from '../types';
+import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfile, CrmCallLog, CrmMeeting, TelephonyCallLog } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import Spinner from './Spinner';
 import Toast from './Toast';
@@ -8,7 +8,7 @@ import {
     getCustomerJournals, createCustomerJournal, getMyProfile,
     sendCrmHeartbeat, getCrmStatus, clearCrmLock,
     createCallLog, getCallLogs, createCrmMeeting, getCrmMeetings, updateCrmMeeting,
-    updateUser
+    updateUser, getTelephonyCallLogs
 } from '../services/api';
 import SendMessageModal from './SendMessageModal';
 import { 
@@ -43,7 +43,9 @@ import {
     Share2,
     Copy,
     CheckCheck,
-    PlusCircle
+    PlusCircle,
+    Headphones,
+    PhoneCall
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -95,12 +97,32 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [isJournalSending, setIsJournalSending] = useState(false);
     const [callLogs, setCallLogs] = useState<CrmCallLog[]>([]);
     const [isCallLogsLoading, setIsCallLogsLoading] = useState(false);
+    const [telephonyLogs, setTelephonyLogs] = useState<TelephonyCallLog[]>([]);
+    const [isTelephonyLoading, setIsTelephonyLoading] = useState(false);
     const [crmMeetings, setCrmMeetings] = useState<CrmMeeting[]>([]);
     const [isCrmMeetingsLoading, setIsCrmMeetingsLoading] = useState(false);
     const [editingMeetingId, setEditingMeetingId] = useState<number | string | null>(null);
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
+
+    const formatDisconnectionCause = (cause?: string) => {
+        if (!cause) return 'پایان مکالمه';
+        switch (cause.toUpperCase()) {
+            case 'NORMAL_CLEARING':
+                return 'پایان عادی مکالمه';
+            case 'NO_ANSWER':
+                return 'عدم پاسخگویی';
+            case 'ORIGINATOR_CANCEL':
+                return 'قطع تماس توسط تماس‌گیرنده';
+            case 'CALL_REJECTED':
+                return 'رد تماس';
+            case 'USER_BUSY':
+                return 'مشغول بودن خط';
+            default:
+                return cause;
+        }
+    };
 
     // CRM Ratings & Tagging States
     const [crmTags, setCrmTags] = useState<string[]>([]);
@@ -121,11 +143,24 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [editDescription, setEditDescription] = useState('');
     const [editReference, setEditReference] = useState('');
     const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>(LeadStatus.NEW);
+    const [editCrmPerson, setEditCrmPerson] = useState('');
+    const [customEditCrmPerson, setCustomEditCrmPerson] = useState('');
     const [editFailReason, setEditFailReason] = useState('');
     const [customFailReason, setCustomFailReason] = useState('');
     const [editFailExplanation, setEditFailExplanation] = useState('');
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [isSavingEditLead, setIsSavingEditLead] = useState(false);
+
+    const PRESET_CRM_PERSONS = ['مبین غلامی', 'درسا محمدی', 'زهرا رستمی', 'علی حسینی'];
+
+    const availableCrmPersons = useMemo(() => {
+        const set = new Set(PRESET_CRM_PERSONS);
+        const curName = currentUser?.full_name || (currentUser as any)?.FullName || currentUser?.username;
+        if (curName && curName !== 'کاربر سیستم') {
+            set.add(curName);
+        }
+        return Array.from(set);
+    }, [currentUser]);
 
     // Polling and heartbeat for viewing status
     useEffect(() => {
@@ -287,6 +322,20 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setEditDescription(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description || '');
             setEditReference(targetUser.reference || (targetUser as any).Reference || '');
             setEditLeadStatus(targetUser.leadStatus || LeadStatus.NEW);
+
+            const existingCrmPerson = targetUser.crmPerson || '';
+            if (existingCrmPerson) {
+                if (availableCrmPersons.includes(existingCrmPerson)) {
+                    setEditCrmPerson(existingCrmPerson);
+                    setCustomEditCrmPerson('');
+                } else {
+                    setEditCrmPerson('CUSTOM');
+                    setCustomEditCrmPerson(existingCrmPerson);
+                }
+            } else {
+                setEditCrmPerson('');
+                setCustomEditCrmPerson('');
+            }
             
             const existingReason = targetUser.failReason || '';
             const PREDEFINED_LIST = [
@@ -343,6 +392,8 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             setEditDescription('');
             setEditReference('');
             setEditLeadStatus(LeadStatus.NEW);
+            setEditCrmPerson('');
+            setCustomEditCrmPerson('');
             setEditFailReason('');
             setCustomFailReason('');
             setEditFailExplanation('');
@@ -502,6 +553,7 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
         }
 
         const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
+        const finalCrmPerson = editCrmPerson === 'CUSTOM' ? customEditCrmPerson.trim() : editCrmPerson.trim();
         setIsSavingEditLead(true);
         try {
             const updatedUser: User = {
@@ -514,10 +566,14 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
                 Decription: editDescription.trim(),
                 reference: editReference.trim(),
                 leadStatus: editLeadStatus,
+                crmPerson: finalCrmPerson || null,
                 failReason: editLeadStatus === LeadStatus.LOST ? finalFailReason : undefined,
                 failExplanation: editLeadStatus === LeadStatus.LOST ? editFailExplanation.trim() : undefined,
                 lastEditedBy: authorName,
                 phoneRegisteredBy: (targetUser.Number !== cleanNumber) ? authorName : targetUser.phoneRegisteredBy,
+                successful_calls: targetUser.successful_calls ?? 0,
+                total_calls: targetUser.total_calls ?? 0,
+                last_successful_call: targetUser.last_successful_call ?? null,
                 LastAction: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -536,6 +592,7 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             if (targetUser.FullName !== updatedUser.FullName) changes.push(`👤 نام: "${targetUser.FullName || '-'}" ← "${updatedUser.FullName || '-'}"`);
             if (targetUser.Number !== updatedUser.Number) changes.push(`📞 شماره تماس: "${targetUser.Number || '-'}" ← "${updatedUser.Number || '-'}" (ثبت شماره توسط: ${authorName})`);
             if (targetUser.CarModel !== updatedUser.CarModel) changes.push(`🚘 خودروی درخواستی: "${targetUser.CarModel || '-'}" ← "${updatedUser.CarModel || '-'}"`);
+            if ((targetUser.crmPerson || '') !== (updatedUser.crmPerson || '')) changes.push(`🎧 پاسخگوی تماس: "${targetUser.crmPerson || 'ثبت نشده'}" ← "${updatedUser.crmPerson || 'ثبت نشده'}"`);
             if ((targetUser.Province || '') !== (updatedUser.Province || '')) changes.push(`📍 استان: "${targetUser.Province || ''}" ← "${updatedUser.Province || ''}"`);
             if ((targetUser.City || '') !== (updatedUser.City || '')) changes.push(`📍 شهر: "${targetUser.City || ''}" ← "${updatedUser.City || ''}"`);
             if ((targetUser.reference || '') !== (updatedUser.reference || '')) changes.push(`🏷️ مرجع جذب: "${targetUser.reference || ''}" ← "${updatedUser.reference || ''}"`);
@@ -632,16 +689,22 @@ ${changes.join('\n')}`,
         setIsJournalLoading(true);
         setIsCallLogsLoading(true);
         setIsCrmMeetingsLoading(true);
+        setIsTelephonyLoading(true);
         try {
-            const [journalData, callLogData, meetingData] = await Promise.all([
+            const [journalData, callLogData, meetingData, telephonyData] = await Promise.all([
                 getCustomerJournals(userNumber || userId),
                 getCallLogs(userNumber || undefined),
                 getCrmMeetings(userId).catch(err => {
                     console.error("Failed to fetch CRM meetings:", err);
                     return [] as CrmMeeting[];
+                }),
+                getTelephonyCallLogs(userNumber).catch(err => {
+                    console.warn("Failed to fetch VoIP telephony logs:", err);
+                    return [] as TelephonyCallLog[];
                 })
             ]);
             setJournals(journalData);
+            setTelephonyLogs(telephonyData || []);
             
             const filteredMeetings = meetingData.filter(m => {
                 if (userId && Number(m.userId) === Number(userId)) return true;
@@ -677,11 +740,12 @@ ${changes.join('\n')}`,
             });
             setCallLogs(filteredLogs);
         } catch (e) {
-            console.error("Failed to fetch journals, call logs or meetings", e);
+            console.error("Failed to fetch journals, call logs, meetings or VoIP logs", e);
         } finally {
             setIsJournalLoading(false);
             setIsCallLogsLoading(false);
             setIsCrmMeetingsLoading(false);
+            setIsTelephonyLoading(false);
         }
     }, [fullUserDetails, lead]);
 
@@ -1080,7 +1144,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
     const getCombinedTimeline = () => {
         const list: Array<{
             id: string;
-            type: 'MESSAGE' | 'JOURNAL' | 'CALL_LOG' | 'MEETING';
+            type: 'MESSAGE' | 'JOURNAL' | 'CALL_LOG' | 'MEETING' | 'TELEPHONY_CALL';
             content: string;
             createdAt: string;
             parsedDate: Date;
@@ -1088,6 +1152,7 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
             receive?: number;
             media?: string;
             callLog?: CrmCallLog;
+            telephonyLog?: TelephonyCallLog;
             meeting?: {
                 id?: number | string;
                 stage: string;
@@ -1231,6 +1296,20 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
                 parsedDate: parseDateSafely(log.timestamp),
                 author: log.agentName,
                 callLog: log
+            });
+        });
+
+        // Add Telephony VoIP Call Logs
+        telephonyLogs.forEach(tLog => {
+            const isInbound = tLog.direction === 'enterprise_did' || tLog.direction?.toLowerCase().includes('in');
+            list.push({
+                id: `telephony-${tLog.id}`,
+                type: 'TELEPHONY_CALL',
+                content: `تماس ${isInbound ? 'ورودی' : 'خروجی'} سانترال تلفنی (VoIP)${tLog.queueName ? ` - صف: ${tLog.queueName}` : ''}`,
+                createdAt: tLog.callTime || tLog.created_at || '',
+                parsedDate: parseDateSafely(tLog.callTime || tLog.created_at || ''),
+                author: tLog.destination,
+                telephonyLog: tLog
             });
         });
 
@@ -1689,8 +1768,47 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                             </div>
 
                             {targetUser && (targetUser.FullName || targetUser.Number || targetUser.id) ? (
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs">
                                     <DetailItem label="خودروی درخواستی" value={targetUser.CarModel || (targetUser as any).carModel || '-'} />
+                                    <DetailItem label="پاسخگوی تماس" value={
+                                        <span className="inline-flex items-center gap-1 font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-200/80 dark:border-sky-800/80">
+                                            <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                                            {targetUser.crmPerson || 'ثبت نشده'}
+                                        </span>
+                                    } />
+                                    <DetailItem label="تماس‌های موفق" value={
+                                        <span className="inline-flex items-center gap-1 font-bold font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/80 dark:border-emerald-800/80">
+                                            <PhoneCall className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                            {(() => {
+                                                const voipSuccessCount = telephonyLogs.filter(t => (t.callDuration > 0) || t.disconnectionCause === 'NORMAL_CLEARING').length;
+                                                const count = (targetUser.successful_calls !== null && targetUser.successful_calls !== undefined && targetUser.successful_calls > 0)
+                                                    ? targetUser.successful_calls
+                                                    : (voipSuccessCount > 0 ? voipSuccessCount : (targetUser.successful_calls ?? 0));
+                                                return count.toLocaleString('fa-IR');
+                                            })()} تماس
+                                        </span>
+                                    } />
+                                    <DetailItem label="آخرین تماس موفق" value={(() => {
+                                        if (targetUser.last_successful_call) return formatDate(targetUser.last_successful_call);
+                                        const latestVoip = telephonyLogs.find(t => (t.callDuration > 0) || t.disconnectionCause === 'NORMAL_CLEARING');
+                                        if (latestVoip?.callTime) return formatDate(latestVoip.callTime);
+                                        return '-';
+                                    })()} />
+                                    {telephonyLogs.length > 0 && (
+                                        <DetailItem label="سوابق سانترال VoIP" value={
+                                            <span className="inline-flex items-center gap-1 font-bold font-mono text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-200/80 dark:border-sky-800/80">
+                                                <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                                                {telephonyLogs.length.toLocaleString('fa-IR')} رکورد تماس
+                                            </span>
+                                        } />
+                                    )}
+                                    <DetailItem label="آخرین ویرایش توسط" value={
+                                        targetUser.lastEditedBy ? (
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                {targetUser.lastEditedBy}
+                                            </span>
+                                        ) : '-'
+                                    } />
                                     <DetailItem label="استان" value={targetUser.Province || (targetUser as any).province || '-'} />
                                     <DetailItem label="شهر" value={targetUser.City || (targetUser as any).city || '-'} />
                                     <DetailItem label="مرجع" value={targetUser.reference || (targetUser as any).Reference || '-'} />
@@ -2164,9 +2282,17 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
 
                                 {/* Combined Activity Timeline */}
                                 <div className="space-y-3.5">
-                                    <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 px-1">جدول زمانی ارتباطات و فعالیت‌های مشتری:</h3>
+                                    <div className="flex items-center justify-between px-1 flex-wrap gap-2">
+                                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400">جدول زمانی ارتباطات و فعالیت‌های مشتری:</h3>
+                                        {telephonyLogs.length > 0 && (
+                                            <span className="text-[10px] font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2.5 py-1 rounded-full border border-sky-200/80 dark:border-sky-800/80 flex items-center gap-1.5 shadow-xs">
+                                                <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                                                <span>{telephonyLogs.length.toLocaleString('fa-IR')} تماس ثبت‌شده در سانترال VoIP</span>
+                                            </span>
+                                        )}
+                                    </div>
                                     
-                                    {isLoading || isJournalLoading ? (
+                                    {isLoading || isJournalLoading || isTelephonyLoading ? (
                                         <div className="flex justify-center py-10"><Spinner /></div>
                                     ) : timelineItems.length === 0 ? (
                                         <div className="text-center text-slate-400 py-10 text-xs border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
@@ -2303,6 +2429,124 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                             >
                                                                 تغییر مرحله یا ویرایش جلسه 
                                                             </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            } else if (item.type === 'TELEPHONY_CALL') {
+                                                const tLog = item.telephonyLog!;
+                                                const isInbound = tLog.direction === 'enterprise_did' || tLog.direction?.toLowerCase().includes('in');
+                                                const isSuccessful = (tLog.callDuration && tLog.callDuration > 0) || tLog.disconnectionCause === 'NORMAL_CLEARING';
+                                                
+                                                const dur = tLog.callDuration || 0;
+                                                const formattedDuration = dur > 0
+                                                    ? (dur >= 60 ? `${Math.floor(dur / 60)} دقیقه و ${dur % 60} ثانیه` : `${dur} ثانیه`)
+                                                    : '۰ ثانیه (قطع بدون مکالمه)';
+
+                                                const borderCol = isSuccessful ? 'border-r-emerald-500' : 'border-r-amber-500';
+                                                const badgeBg = isInbound
+                                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
+                                                    : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80';
+
+                                                return (
+                                                    <div key={item.id} className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border-r-4 border-l border-y ${borderCol} border-l-slate-200 dark:border-l-slate-850 border-y-slate-200 dark:border-y-slate-850 shadow-sm flex flex-col gap-2.5 transition-all hover:shadow-md`}>
+                                                        {/* Header */}
+                                                        <div className="flex justify-between items-center text-[10px] text-slate-500 border-b border-slate-100 dark:border-slate-800/50 pb-2 flex-wrap gap-2">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="p-1 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-300 border border-sky-150 dark:border-sky-800/60">
+                                                                    {isInbound ? <PhoneIncoming className="w-3.5 h-3.5" /> : <PhoneOutgoing className="w-3.5 h-3.5" />}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${badgeBg} flex items-center gap-1`}>
+                                                                    <Headphones className="w-3 h-3 shrink-0" />
+                                                                    {isInbound ? 'تماس ورودی سانترال (VoIP)' : 'تماس خروجی سانترال (VoIP)'}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                                                    isSuccessful 
+                                                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' 
+                                                                        : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                                                }`}>
+                                                                    {isSuccessful ? '✓ مکالمه برقرار شد' : '✕ بدون مکالمه'}
+                                                                </span>
+                                                                {tLog.queueName && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60">
+                                                                        صف: {tLog.queueName}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1 font-mono text-slate-400 text-[10px]" dir="ltr">
+                                                                <Clock className="w-3 h-3 text-slate-400" />
+                                                                <span>{formatDate(tLog.callTime || item.createdAt)}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Structured Telephony Details Grid */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 bg-slate-50/70 dark:bg-slate-850/60 p-3 rounded-xl border border-slate-150 dark:border-slate-800 text-[11px]">
+                                                            {/* پاسخگو / داخلی */}
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                                    <Users className="w-3 h-3 text-sky-500" />
+                                                                    پاسخگوی تماس (مقصد/داخلی):
+                                                                </span>
+                                                                <span className="font-bold text-slate-800 dark:text-slate-100 font-mono" dir="ltr">
+                                                                    {tLog.destination || 'نامشخص'}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* شماره تماس گیرنده */}
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                                    <Phone className="w-3 h-3 text-emerald-500" />
+                                                                    شماره تماس‌گیرنده (مشتری):
+                                                                </span>
+                                                                <span className="font-bold text-slate-800 dark:text-slate-100 font-mono" dir="ltr">
+                                                                    {tLog.operator || leadNumber}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* مدت زمان مکالمه */}
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                                    <Clock className="w-3 h-3 text-emerald-500" />
+                                                                    مدت زمان مکالمه:
+                                                                </span>
+                                                                <span className="font-bold text-emerald-700 dark:text-emerald-300 font-mono">
+                                                                    {formattedDuration}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* زمان انتظار در صف */}
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                                    <Clock className="w-3 h-3 text-amber-500" />
+                                                                    زمان انتظار در صف:
+                                                                </span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-200 font-mono">
+                                                                    {(tLog.waitingTime ?? 0).toLocaleString('fa-IR')} ثانیه
+                                                                </span>
+                                                            </div>
+
+                                                            {/* علت قطع تماس */}
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                                    <Info className="w-3 h-3 text-slate-400" />
+                                                                    علت پایان مکالمه:
+                                                                </span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-200">
+                                                                    {formatDisconnectionCause(tLog.disconnectionCause)}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* شناسه یکتای تماس (CID) */}
+                                                            {tLog.cid && (
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                                        <Sparkles className="w-3 h-3 text-indigo-400" />
+                                                                        شناسه تماس سانترال (CID):
+                                                                    </span>
+                                                                    <span className="font-mono text-[9px] text-slate-500 dark:text-slate-400 truncate" title={tLog.cid} dir="ltr">
+                                                                        {tLog.cid}
+                                                                    </span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 );
@@ -2544,6 +2788,77 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                 </div>
                                             </div>
                                         )}
+
+                                        {/* Responder: crmPerson */}
+                                        <div className="space-y-1.5">
+                                            <label htmlFor="editCrmPerson" className="block text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                                <Headphones className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                                                <span>پاسخگوی تماس (crmPerson):</span>
+                                            </label>
+                                            <select 
+                                                id="editCrmPerson" 
+                                                value={editCrmPerson} 
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setEditCrmPerson(val);
+                                                    if (val !== 'CUSTOM') {
+                                                        setCustomEditCrmPerson('');
+                                                    }
+                                                }}
+                                                className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-750 rounded-xl dark:bg-slate-800 dark:text-white"
+                                            >
+                                                <option value="">-- بدون پاسخگو / نامشخص --</option>
+                                                {availableCrmPersons.map((person) => {
+                                                    const isCur = person === (currentUser?.full_name || (currentUser as any)?.FullName || currentUser?.username);
+                                                    return (
+                                                        <option key={person} value={person}>{person} {isCur ? '(شما)' : ''}</option>
+                                                    );
+                                                })}
+                                                <option value="CUSTOM">✏️ سایر (تایپ دستی نام پاسخگو)...</option>
+                                            </select>
+                                            {editCrmPerson === 'CUSTOM' && (
+                                                <input 
+                                                    type="text" 
+                                                    value={customEditCrmPerson} 
+                                                    onChange={(e) => setCustomEditCrmPerson(e.target.value)}
+                                                    placeholder="نام و نام خانوادگی پاسخگوی تماس را وارد کنید..."
+                                                    className="w-full px-3 py-2 text-xs border border-sky-300 dark:border-sky-600 rounded-xl dark:bg-slate-750 dark:text-white bg-sky-50/30 mt-1"
+                                                />
+                                            )}
+                                        </div>
+
+                                        {/* Telephony Statistics (Read-Only) */}
+                                        <div className="col-span-full p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-2">
+                                            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                    <PhoneCall className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                    <span>آمار تماس‌های تلفنی و سانترال مشترک (همگام‌سازی خودکار):</span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700 px-2 py-0.5 rounded-full font-bold">
+                                                    فقط خواندنی
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                                                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-750 border border-slate-200/80 dark:border-slate-700 flex flex-col gap-0.5">
+                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">تماس‌های موفق:</span>
+                                                    <span className="font-black font-mono text-emerald-600 dark:text-emerald-400 text-sm">
+                                                        {(targetUser?.successful_calls ?? 0).toLocaleString('fa-IR')} تماس
+                                                    </span>
+                                                </div>
+                                                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-750 border border-slate-200/80 dark:border-slate-700 flex flex-col gap-0.5">
+                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">کل تماس‌ها:</span>
+                                                    <span className="font-black font-mono text-slate-700 dark:text-slate-200 text-sm">
+                                                        {(targetUser?.total_calls ?? 0).toLocaleString('fa-IR')} تماس
+                                                    </span>
+                                                </div>
+                                                <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-white dark:bg-slate-750 border border-slate-200/80 dark:border-slate-700 flex flex-col gap-0.5">
+                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">آخرین تماس موفق:</span>
+                                                    <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                                                        {targetUser?.last_successful_call ? formatDate(targetUser.last_successful_call) : 'هنوز تماسی ثبت نشده'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
 
                                         {/* Reference */}
                                         <div className="space-y-1.5">

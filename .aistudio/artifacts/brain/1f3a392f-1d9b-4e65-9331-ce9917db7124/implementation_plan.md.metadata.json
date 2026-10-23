@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for CRM customer management enhancements: two-line table rows displaying call responder (crmPerson) and call descriptions (Decription), team member selection dropdown for call recipient, read-only telephony call statistics badges, and audit fields (lastEditedBy).",
+  "updatedAt":  "2026-10-23T08:18:23.253582303Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

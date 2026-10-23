@@ -33,6 +33,7 @@ import type {
     Announcement,
     OvertimeRequest,
     CrmCallLog,
+    TelephonyCallLog,
     SalaryAdvanceRequest,
     CrmMeeting,
     AdvertisementReport,
@@ -2817,6 +2818,49 @@ export const getCallLogs = async (customerNumber?: string): Promise<CrmCallLog[]
 
 export const getCallLogsByCustomerNumber = async (customerNumber: string): Promise<CrmCallLog[]> => {
     return getCallLogs(customerNumber);
+};
+
+/**
+ * Normalizes phone number to international Iranian standard format without leading '+' or '0'
+ * Example: 09153090724 -> 989153090724, 9153090724 -> 989153090724
+ */
+export const normalizeToTelephonyNumber = (phone: string): string => {
+    if (!phone) return '';
+    let clean = String(phone).replace(/\D/g, '');
+    if (!clean) return '';
+    if (clean.startsWith('0098')) {
+        clean = clean.substring(2);
+    } else if (clean.startsWith('09')) {
+        clean = '98' + clean.substring(1);
+    } else if (clean.startsWith('9') && clean.length === 10) {
+        clean = '98' + clean;
+    }
+    return clean;
+};
+
+/**
+ * Fetches VoIP / PBX Call Logs for a specific customer phone number
+ * Endpoint: https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/callLogs?number=...
+ */
+export const getTelephonyCallLogs = async (phoneNumber: string): Promise<TelephonyCallLog[]> => {
+    const normalized = normalizeToTelephonyNumber(phoneNumber);
+    if (!normalized) return [];
+    
+    try {
+        const url = `${API_BASE_URL}/callLogs?number=${encodeURIComponent(normalized)}`;
+        const response = await fetch(url, { headers: getAuthHeaders() });
+        const data = await handleResponse(response);
+        if (Array.isArray(data)) {
+            return data;
+        }
+        if (data && Array.isArray(data.data)) {
+            return data.data;
+        }
+        return [];
+    } catch (e) {
+        console.warn("Failed to fetch telephony VoIP call logs:", e);
+        return [];
+    }
 };
 
 export const createCallLog = async (log: Omit<CrmCallLog, 'id'> & { id?: string }): Promise<CrmCallLog> => {

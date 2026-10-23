@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, LeadStatus, MyProfile } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { sendCrmHeartbeat } from '../services/api';
-import { UserCheck, PlusCircle, AlertCircle } from 'lucide-react';
+import { UserCheck, PlusCircle, AlertCircle, Headphones, PhoneCall, Clock } from 'lucide-react';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -17,6 +17,8 @@ const CAR_MODELS = [
     'JAC J4', 'JAC S3', 'JAC S5', 'BAC X3PRO', 'KMC T8', 'KMC T9', 'KMC A5',
     'KMC J7', 'KMC X5', 'KMC SR3', 'KMC EAGLE', 'KMC SHADOW', 'KMC SR6'
 ];
+
+const PRESET_CRM_PERSONS = ['مبین غلامی', 'درسا محمدی', 'زهرا رستمی', 'علی حسینی'];
 
 const initialFormState: Omit<User, 'id'> = {
     FullName: '',
@@ -32,13 +34,31 @@ const initialFormState: Omit<User, 'id'> = {
     LastAction: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    crmPerson: null,
+    lastEditedBy: null,
+    successful_calls: 0,
+    total_calls: 0,
+    last_successful_call: null,
 };
 
 const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, loggedInUser }) => {
     const [formState, setFormState] = useState(initialFormState);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    
+    // crmPerson states (dropdown + custom input)
+    const [selectedCrmPerson, setSelectedCrmPerson] = useState<string>('');
+    const [customCrmPerson, setCustomCrmPerson] = useState<string>('');
 
     const currentUserName = loggedInUser?.full_name || (loggedInUser as any)?.FullName || loggedInUser?.username || 'کاربر سیستم';
+
+    // Build unique team members list including current logged-in user
+    const availableCrmPersons = React.useMemo(() => {
+        const set = new Set(PRESET_CRM_PERSONS);
+        if (currentUserName && currentUserName !== 'کاربر سیستم') {
+            set.add(currentUserName);
+        }
+        return Array.from(set);
+    }, [currentUserName]);
 
     // Send heartbeat when editing a lead
     useEffect(() => {
@@ -70,11 +90,27 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
             const localStatuses = JSON.parse(sessionStorage.getItem('crmStatuses') || '{}');
             const status = localStatuses[user.id] || user.leadStatus || LeadStatus.NEW;
             setFormState({ ...user, leadStatus: status });
+
+            const person = user.crmPerson || '';
+            if (person) {
+                if (availableCrmPersons.includes(person)) {
+                    setSelectedCrmPerson(person);
+                    setCustomCrmPerson('');
+                } else {
+                    setSelectedCrmPerson('CUSTOM');
+                    setCustomCrmPerson(person);
+                }
+            } else {
+                setSelectedCrmPerson('');
+                setCustomCrmPerson('');
+            }
         } else {
             setFormState(initialFormState);
+            setSelectedCrmPerson(currentUserName || '');
+            setCustomCrmPerson('');
         }
         setErrors({});
-    }, [user, isOpen]);
+    }, [user, isOpen, availableCrmPersons, currentUserName]);
 
     const handleChange = <T extends keyof Omit<User, 'id'>> (field: T, value: Omit<User, 'id'>[T]) => {
         setFormState(prevState => ({ ...prevState, [field]: value }));
@@ -97,11 +133,26 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
         }));
     };
 
+    const formatCallDate = (dateStr?: string | null) => {
+        if (!dateStr) return '-';
+        try {
+            return new Date(dateStr.replace(' ', 'T')).toLocaleString('fa-IR', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        } catch {
+            return dateStr;
+        }
+    };
+
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
-        if (!formState.FullName.trim()) newErrors.FullName = 'نام کامل الزامی است.';
-        if (!formState.Number.trim()) newErrors.Number = 'شماره تماس الزامی است.';
-        if (!/^\d{10,11}$/.test(formState.Number)) newErrors.Number = 'شماره تماس معتبر نیست.';
+        if (!formState.FullName?.trim()) newErrors.FullName = 'نام کامل الزامی است.';
+        if (!formState.Number?.trim()) newErrors.Number = 'شماره تماس الزامی است.';
+        if (!/^\d{10,11}$/.test(formState.Number || '')) newErrors.Number = 'شماره تماس معتبر نیست.';
         if (formState.leadStatus === LeadStatus.LOST) {
             if (!formState.failReason || !formState.failReason.trim()) {
                 newErrors.failReason = 'لطفاً علت شکست معامله را انتخاب کنید.';
@@ -115,11 +166,17 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
         e.preventDefault();
         if (validate()) {
             const isNumberNewOrChanged = !user || user.Number !== formState.Number;
+            const finalCrmPerson = selectedCrmPerson === 'CUSTOM' ? customCrmPerson.trim() : selectedCrmPerson;
+
             const updatedUserData: Omit<User, 'id'> = {
                 ...formState,
+                crmPerson: finalCrmPerson || null,
+                lastEditedBy: currentUserName,
                 registeredBy: user?.registeredBy || currentUserName,
                 phoneRegisteredBy: isNumberNewOrChanged ? currentUserName : (user?.phoneRegisteredBy || currentUserName),
-                lastEditedBy: currentUserName,
+                successful_calls: user?.successful_calls ?? formState.successful_calls ?? 0,
+                total_calls: user?.total_calls ?? formState.total_calls ?? 0,
+                last_successful_call: user?.last_successful_call ?? formState.last_successful_call ?? null,
             };
             onSave(updatedUserData);
         }
@@ -195,6 +252,76 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                     <option key={status} value={status}>{status}</option>
                                 ))}
                             </select>
+                        </div>
+
+                        {/* crmPerson field: Who answered the call */}
+                        <div className="space-y-1.5">
+                            <label htmlFor="crmPerson" className="block text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <Headphones className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                                <span>پاسخگوی تماس (crmPerson)</span>
+                            </label>
+                            <select 
+                                id="crmPerson"
+                                value={selectedCrmPerson}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSelectedCrmPerson(val);
+                                    if (val !== 'CUSTOM') {
+                                        setCustomCrmPerson('');
+                                    }
+                                }}
+                                className="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white border-slate-300 text-xs sm:text-sm"
+                            >
+                                <option value="">-- بدون پاسخگو / نامشخص --</option>
+                                {availableCrmPersons.map((p) => (
+                                    <option key={p} value={p}>{p} {p === currentUserName ? '(شما)' : ''}</option>
+                                ))}
+                                <option value="CUSTOM">✏️ سایر (تایپ دستی نام پاسخگو)...</option>
+                            </select>
+                            {selectedCrmPerson === 'CUSTOM' && (
+                                <input 
+                                    type="text"
+                                    value={customCrmPerson}
+                                    onChange={(e) => setCustomCrmPerson(e.target.value)}
+                                    placeholder="نام و نام خانوادگی پاسخگوی تماس را وارد کنید..."
+                                    className="w-full px-3 py-2 mt-1.5 border border-sky-300 dark:border-sky-600 rounded-md dark:bg-slate-750 dark:text-white text-xs sm:text-sm bg-sky-50/30"
+                                />
+                            )}
+                        </div>
+
+                        {/* Telephony Statistics Card (Read-only Synchronized Stats) */}
+                        <div className="md:col-span-2 p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    <PhoneCall className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                    <span>آمار تماس‌های تلفنی و سانترال (همگام‌سازی خودکار):</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700 px-2 py-0.5 rounded-full font-bold">
+                                    داده‌های همگام سانترال
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-750 border border-slate-200/80 dark:border-slate-700 flex flex-col gap-0.5 shadow-2xs">
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">تماس‌های موفق:</span>
+                                    <span className="font-black font-mono text-emerald-600 dark:text-emerald-400 text-sm">
+                                        {((formState.successful_calls !== null && formState.successful_calls !== undefined) ? formState.successful_calls : (user?.successful_calls ?? 0)).toLocaleString('fa-IR')} تماس موفق
+                                    </span>
+                                </div>
+                                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-750 border border-slate-200/80 dark:border-slate-700 flex flex-col gap-0.5 shadow-2xs">
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">کل تماس‌ها:</span>
+                                    <span className="font-black font-mono text-slate-700 dark:text-slate-200 text-sm">
+                                        {((formState.total_calls !== null && formState.total_calls !== undefined) ? formState.total_calls : (user?.total_calls ?? 0)).toLocaleString('fa-IR')} تماس
+                                    </span>
+                                </div>
+                                <div className="col-span-2 sm:col-span-1 p-2.5 rounded-lg bg-white dark:bg-slate-750 border border-slate-200/80 dark:border-slate-700 flex flex-col gap-0.5 shadow-2xs">
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">آخرین تماس موفق:</span>
+                                    <span className="font-bold text-slate-800 dark:text-slate-200 text-xs truncate" title={formState.last_successful_call || user?.last_successful_call || ''}>
+                                        {(formState.last_successful_call || user?.last_successful_call)
+                                            ? formatCallDate(formState.last_successful_call || user?.last_successful_call)
+                                            : 'هنوز تماسی ثبت نشده'}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
 
                         {formState.leadStatus === LeadStatus.LOST && (

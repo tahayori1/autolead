@@ -121,21 +121,26 @@ export interface CarSaleCondition {
 
 export interface User {
     id: number;
-    CarModel: string;
-    FullName: string;
+    CarModel?: string | null;
+    FullName?: string | null;
     Number: string;
-    Province: string | null;
-    City: string;
-    Decription: string;
-    IP: string | null;
-    RegisterTime: string;
-    reference: string;
-    LastAction: string | null;
-    createdAt: string;
-    updatedAt: string;
+    Province?: string | null;
+    City?: string | null;
+    Decription?: string | null;
+    IP?: string | null;
+    RegisterTime?: string | null;
+    reference?: string | null;
+    LastAction?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
     crmIsSend?: 0 | 1;
     crmPerson?: string | null;
     crmDate?: string | null;
+    lastEditedBy?: string | null;
+    total_calls?: number | null;
+    successful_calls?: number | null;
+    last_successful_call?: string | null;
+    calls_stats_checked_at?: string | null;
     // Club Fields
     segment?: CustomerSegment;
     behaviorScore?: number; // 1 to 5
@@ -150,7 +155,6 @@ export interface User {
     failExplanation?: string;
     registeredBy?: string;
     phoneRegisteredBy?: string;
-    lastEditedBy?: string;
 }
 
 export interface LeadMessage {
@@ -902,6 +906,21 @@ export interface CrmCallLog {
     followUpPhone?: string; // تلفن پیگیری
     notes: string;
     timestamp: string; // "jYYYY/jMM/jDD HH:mm"
+}
+
+export interface TelephonyCallLog {
+    id: string;
+    operator: string; // شماره تماس تماس گیرنده (Caller phone number)
+    destination: string; // شماره تماس کسی که پاسخ داده است (Answerer/Extension/Agent number)
+    callTime: string; // تاریخ و زمان برقراری تماس (e.g. "2026-08-15 08:53:06")
+    waitingTime: number; // زمان انتظار (ثانیه)
+    disconnectionCause: string; // علت قطع مکالمه (NORMAL_CLEARING, etc.)
+    cid?: string; // شناسه یکتای تماس در سانترال
+    direction: string; // جهت تماس: 'enterprise_did' (ورودی)، 'outbound', etc.
+    queueId?: string;
+    queueName?: string; // نام صف (واحد فروش، پشتیبانی، ...)
+    created_at?: string;
+    callDuration: number; // مدت مکالمه بر حسب ثانیه
 }
 
 export interface CrmMeeting {

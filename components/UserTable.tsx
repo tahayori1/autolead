@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Clock } from 'lucide-react';
+import { Clock, Headphones, FileText, PhoneCall, Edit3, UserCheck } from 'lucide-react';
 import { LeadStatus } from '../types';
 import type { User, MyProfile } from '../types';
 import { EditIcon } from './icons/EditIcon';
@@ -175,7 +174,7 @@ const UserTable: React.FC<UserTableProps> = ({
         );
     };
 
-    const getInitials = (name: string) => {
+    const getInitials = (name?: string | null) => {
         return name ? name.split(' ').map(n => n[0]).join('').slice(0, 2) : '??';
     };
 
@@ -208,133 +207,182 @@ const UserTable: React.FC<UserTableProps> = ({
                     </thead>
                     <tbody>
                         {users.map((user) => (
-                            <tr key={user.id} className={`border-b border-slate-50 dark:border-slate-700/50 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-700/50 
-                                ${selectedUserIds.has(user.id) ? 'bg-sky-50/60 dark:bg-sky-900/20' : ''}
-                            `}>
-                                <td className="p-4">
-                                    <div className="flex items-center">
-                                        <input
-                                            id={`checkbox-desktop-${user.id}`}
-                                            type="checkbox"
-                                            className="w-4 h-4 text-sky-600 bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-sky-500 dark:focus:ring-sky-600 transition-all cursor-pointer"
-                                            checked={selectedUserIds.has(user.id)}
-                                            onChange={() => onSelectionChange(user.id)}
-                                        />
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-100 to-blue-100 dark:from-sky-900 dark:to-blue-900 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-bold shadow-sm relative">
-                                            {getInitials(user.FullName)}
-                                            {/* Viewing Eye indicator */}
-                                            {(() => {
-                                                const viewers = (crmStatus?.activeViews || []).filter((v: any) => v.leadId === Number(user.id));
-                                                if (viewers.length > 0) {
-                                                    const isEditing = viewers.some((v: any) => v.isEditing);
-                                                    return (
-                                                        <span 
-                                                            className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shadow-sm font-bold ${isEditing ? 'bg-amber-500 animate-pulse' : 'bg-sky-500'}`}
-                                                            title={isEditing ? `در حال ویرایش توسط: ${viewers.map((v: any) => v.fullName).join(', ')}` : `در حال مشاهده توسط: ${viewers.map((v: any) => v.fullName).join(', ')}`}
-                                                        >
-                                                            {isEditing ? '✏️' : '👁️'}
-                                                        </span>
-                                                    );
-                                                }
-                                                return null;
-                                            })()}
+                            <React.Fragment key={user.id}>
+                                {/* Line 1: Primary User & Contact Details */}
+                                <tr className={`border-t border-slate-100/90 dark:border-slate-700/90 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-700/50 
+                                    ${selectedUserIds.has(user.id) ? 'bg-sky-50/70 dark:bg-sky-900/25' : 'bg-white dark:bg-slate-800'}
+                                `}>
+                                    <td className="p-4 align-middle">
+                                        <div className="flex items-center">
+                                            <input
+                                                id={`checkbox-desktop-${user.id}`}
+                                                type="checkbox"
+                                                className="w-4 h-4 text-sky-600 bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-sky-500 dark:focus:ring-sky-600 transition-all cursor-pointer"
+                                                checked={selectedUserIds.has(user.id)}
+                                                onChange={() => onSelectionChange(user.id)}
+                                            />
                                         </div>
-                                        <div className="flex flex-col">
-                                            <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                                                {user.FullName}
-                                                {/* Lock icon next to customer's name */}
+                                    </td>
+                                    <td className="px-6 py-3.5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-100 to-blue-100 dark:from-sky-900 dark:to-blue-900 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-bold shadow-sm relative">
+                                                {getInitials(user.FullName)}
+                                                {/* Viewing Eye indicator */}
                                                 {(() => {
-                                                    const lock = (crmStatus?.locks || []).find((l: any) => l.leadId === Number(user.id));
-                                                    if (lock) {
+                                                    const viewers = (crmStatus?.activeViews || []).filter((v: any) => v.leadId === Number(user.id));
+                                                    if (viewers.length > 0) {
+                                                        const isEditing = viewers.some((v: any) => v.isEditing);
                                                         return (
                                                             <span 
-                                                                className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 px-1.5 py-0.5 rounded"
-                                                                title={`قفل شده توسط: ${lock.fullName}`}
+                                                                className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px] text-white shadow-sm font-bold ${isEditing ? 'bg-amber-500 animate-pulse' : 'bg-sky-500'}`}
+                                                                title={isEditing ? `در حال ویرایش توسط: ${viewers.map((v: any) => v.fullName).join(', ')}` : `در حال مشاهده توسط: ${viewers.map((v: any) => v.fullName).join(', ')}`}
                                                             >
-                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                                </svg>
-                                                                {lock.fullName}
+                                                                {isEditing ? '✏️' : '👁️'}
                                                             </span>
                                                         );
                                                     }
                                                     return null;
                                                 })()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 font-mono font-medium text-slate-600 dark:text-slate-400" dir="ltr">{user.Number}</td>
-                                <td className="px-6 py-4">
-                                    <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-600">{user.CarModel || '-'}</span>
-                                </td>
-                                <td className="px-6 py-4">
-                                    {getStatusBadge(user.leadStatus)}
-                                </td>
-                                <td 
-                                    className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-[200px] overflow-hidden" 
-                                    style={{ maxWidth: '200px', overflow: 'hidden' }}
-                                >
-                                    <div 
-                                        className="max-w-[200px] truncate overflow-hidden whitespace-nowrap block"
-                                        style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                        title={(() => {
-                                            const parts = [user.Province, user.City].filter(Boolean);
-                                            return parts.length > 0 ? parts.join(' - ') : (user.City || user.Province || '-');
-                                        })()}
-                                    >
-                                        {user.Province && user.City && user.Province !== user.City 
-                                            ? `${user.Province} - ${user.City}` 
-                                            : (user.City || user.Province || '-')}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap" title={formatDateForTooltip(user.updatedAt)}>
-                                    {(() => {
-                                        const dt = formatDateTimeParts(user.updatedAt);
-                                        if (!dt.time) {
-                                            return <span className="text-xs text-slate-400 dark:text-slate-500">{dt.date}</span>;
-                                        }
-                                        return (
-                                            <div className="flex flex-col text-[11px] leading-tight font-mono" dir="rtl">
-                                                <div className="flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200">
-                                                    <Clock className="w-3 h-3 text-sky-500 shrink-0" />
-                                                    <span>{dt.time}</span>
-                                                </div>
-                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 pr-4">{dt.date}</span>
                                             </div>
-                                        );
-                                    })()}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center justify-end gap-1">
-                                        <button 
-                                            onClick={() => onViewDetails(user)} 
-                                            className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30"
-                                            title="گفتگو"
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                                    {user.FullName || 'بدون نام'}
+                                                    {/* Lock icon next to customer's name */}
+                                                    {(() => {
+                                                        const lock = (crmStatus?.locks || []).find((l: any) => l.leadId === Number(user.id));
+                                                        if (lock) {
+                                                            return (
+                                                                <span 
+                                                                    className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 px-1.5 py-0.5 rounded"
+                                                                    title={`قفل شده توسط: ${lock.fullName}`}
+                                                                >
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                                    </svg>
+                                                                    {lock.fullName}
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-3.5 font-mono font-medium text-slate-600 dark:text-slate-400" dir="ltr">{user.Number}</td>
+                                    <td className="px-6 py-3.5">
+                                        <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-600">{user.CarModel || '-'}</span>
+                                    </td>
+                                    <td className="px-6 py-3.5">
+                                        {getStatusBadge(user.leadStatus)}
+                                    </td>
+                                    <td 
+                                        className="px-6 py-3.5 text-slate-500 dark:text-slate-400 max-w-[200px] overflow-hidden" 
+                                        style={{ maxWidth: '200px', overflow: 'hidden' }}
+                                    >
+                                        <div 
+                                            className="max-w-[200px] truncate overflow-hidden whitespace-nowrap block"
+                                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                            title={(() => {
+                                                const parts = [user.Province, user.City].filter(Boolean);
+                                                return parts.length > 0 ? parts.join(' - ') : (user.City || user.Province || '-');
+                                            })()}
                                         >
-                                            <ChatIcon />
-                                        </button>
-                                        <button 
-                                            onClick={() => onEdit(user)} 
-                                            className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30"
-                                            title="ویرایش"
-                                        >
-                                            <EditIcon />
-                                        </button>
-                                        <button 
-                                            onClick={() => onDelete(user.id)} 
-                                            className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
-                                            title="حذف"
-                                        >
-                                            <TrashIcon />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
+                                            {user.Province && user.City && user.Province !== user.City 
+                                                ? `${user.Province} - ${user.City}` 
+                                                : (user.City || user.Province || '-')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-3.5 whitespace-nowrap" title={formatDateForTooltip(user.updatedAt)}>
+                                        {(() => {
+                                            const dt = formatDateTimeParts(user.updatedAt);
+                                            if (!dt.time) {
+                                                return <span className="text-xs text-slate-400 dark:text-slate-500">{dt.date}</span>;
+                                            }
+                                            return (
+                                                <div className="flex flex-col text-[11px] leading-tight font-mono" dir="rtl">
+                                                    <div className="flex items-center gap-1 font-bold text-slate-800 dark:text-slate-200">
+                                                        <Clock className="w-3 h-3 text-sky-500 shrink-0" />
+                                                        <span>{dt.time}</span>
+                                                    </div>
+                                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 pr-4">{dt.date}</span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
+                                    <td className="px-6 py-3.5">
+                                        <div className="flex items-center justify-end gap-1">
+                                            <button 
+                                                onClick={() => onViewDetails(user)} 
+                                                className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30"
+                                                title="گفتگو و گزارشات"
+                                            >
+                                                <ChatIcon />
+                                            </button>
+                                            <button 
+                                                onClick={() => onEdit(user)} 
+                                                className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30"
+                                                title="ویرایش"
+                                            >
+                                                <EditIcon />
+                                            </button>
+                                            <button 
+                                                onClick={() => onDelete(user.id)} 
+                                                className="p-2 rounded-xl transition-colors text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                                title="حذف"
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                {/* Line 2: Responder (crmPerson), Call Stats & Call Description Sub-Row */}
+                                <tr className={`border-b border-slate-200/80 dark:border-slate-700/80 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-700/50 
+                                    ${selectedUserIds.has(user.id) ? 'bg-sky-50/70 dark:bg-sky-900/25' : 'bg-slate-50/40 dark:bg-slate-800/40'}
+                                `}>
+                                    <td className="p-0"></td>
+                                    <td colSpan={7} className="px-6 pb-3 pt-0">
+                                        <div className="flex items-center gap-2.5 flex-wrap">
+                                            {/* 👤 پاسخگوی تماس (crmPerson) */}
+                                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-800/80 shrink-0">
+                                                <Headphones className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                                                <span className="text-slate-500 dark:text-slate-400 text-[11px] font-normal">پاسخگوی تماس:</span>
+                                                <span>{user.crmPerson || 'ثبت نشده'}</span>
+                                            </div>
+
+                                            {/* 📞 آمار تماس‌های موفق */}
+                                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0">
+                                                <PhoneCall className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                <span className="text-[11px] font-bold">تماس‌های موفق:</span>
+                                                <span className="font-black font-mono">{(user.successful_calls ?? 0).toLocaleString('fa-IR')}</span>
+                                                {user.last_successful_call && (
+                                                    <span className="text-[10px] text-emerald-600/90 dark:text-emerald-400/90 border-r border-emerald-200 dark:border-emerald-800 pr-1.5 mr-0.5" title="تاریخ آخرین تماس موفق">
+                                                        آخرین: {formatDate(user.last_successful_call)}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* 📝 توضیحات تماس */}
+                                            <div className="flex-1 min-w-[220px] flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-white dark:bg-slate-700/60 border border-slate-200/80 dark:border-slate-600/80 text-slate-700 dark:text-slate-200 shadow-2xs">
+                                                <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium shrink-0">توضیحات تماس:</span>
+                                                <span className="truncate max-w-[500px] font-sans text-[11px]" title={user.Decription || 'توضیحی ثبت نشده است'}>
+                                                    {user.Decription ? user.Decription : <span className="text-slate-400 italic font-normal">توضیحی ثبت نشده است</span>}
+                                                </span>
+                                            </div>
+
+                                            {/* ✏️ آخرین ویرایش */}
+                                            {user.lastEditedBy && (
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 shrink-0" title={`آخرین ویرایش توسط: ${user.lastEditedBy}`}>
+                                                    <Edit3 className="w-3 h-3 text-slate-400 shrink-0" />
+                                                    <span>ویرایش: {user.lastEditedBy}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -360,7 +408,7 @@ const UserTable: React.FC<UserTableProps> = ({
                             <div className="flex-1 min-w-0" onClick={() => onViewDetails(user)}>
                                 <div className="flex justify-between items-start">
                                     <h3 className="font-bold text-slate-900 dark:text-white text-base truncate flex items-center gap-1.5 flex-wrap">
-                                        {user.FullName}
+                                        {user.FullName || 'بدون نام'}
                                         {/* Mobile eye */}
                                         {(() => {
                                             const viewers = (crmStatus?.activeViews || []).filter((v: any) => v.leadId === Number(user.id));
@@ -403,6 +451,31 @@ const UserTable: React.FC<UserTableProps> = ({
                                 <div className="mt-2">
                                     {getStatusBadge(user.leadStatus)}
                                 </div>
+
+                                {/* Responder & Stats Badges on Mobile */}
+                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                                        <Headphones className="w-3 h-3 text-sky-500" />
+                                        <span>پاسخگو: {user.crmPerson || 'ثبت نشده'}</span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
+                                        <PhoneCall className="w-3 h-3 text-emerald-500" />
+                                        <span>تماس موفق: {(user.successful_calls ?? 0).toLocaleString('fa-IR')}</span>
+                                    </span>
+                                    {user.lastEditedBy && (
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                            (ویرایش: {user.lastEditedBy})
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Call Description bubble on Mobile */}
+                                {user.Decription && (
+                                    <div className="mt-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-750 border border-slate-100 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
+                                        <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                                        <p className="line-clamp-2 leading-relaxed text-[11px]">{user.Decription}</p>
+                                    </div>
+                                )}
                             </div>
                             
                             <div className="flex flex-col gap-2">
