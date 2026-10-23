@@ -2826,13 +2826,23 @@ export const getCallLogsByCustomerNumber = async (customerNumber: string): Promi
  */
 export const normalizeToTelephonyNumber = (phone: string): string => {
     if (!phone) return '';
-    let clean = String(phone).replace(/\D/g, '');
+    // Convert Persian and Arabic digits to English digits
+    let str = String(phone).trim()
+        .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    
+    let clean = str.replace(/\D/g, '');
     if (!clean) return '';
+    
     if (clean.startsWith('0098')) {
         clean = clean.substring(2);
+    } else if (clean.startsWith('098')) {
+        clean = clean.substring(1);
     } else if (clean.startsWith('09')) {
         clean = '98' + clean.substring(1);
     } else if (clean.startsWith('9') && clean.length === 10) {
+        clean = '98' + clean;
+    } else if (!clean.startsWith('98') && clean.startsWith('9')) {
         clean = '98' + clean;
     }
     return clean;

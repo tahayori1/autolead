@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, LeadStatus, MyProfile } from '../types';
+import { User, LeadStatus, MyProfile, TelephonyCallLog } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
-import { sendCrmHeartbeat } from '../services/api';
-import { UserCheck, PlusCircle, AlertCircle, Headphones, PhoneCall, Clock } from 'lucide-react';
+import { sendCrmHeartbeat, getTelephonyCallLogs, normalizeToTelephonyNumber } from '../services/api';
+import { UserCheck, PlusCircle, AlertCircle, Headphones, PhoneCall, Clock, RefreshCw, PhoneIncoming, PhoneOutgoing, Phone } from 'lucide-react';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -49,6 +49,11 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
     const [selectedCrmPerson, setSelectedCrmPerson] = useState<string>('');
     const [customCrmPerson, setCustomCrmPerson] = useState<string>('');
 
+    // Telephony Call Logs States from VoIP Webhook
+    const [telephonyLogs, setTelephonyLogs] = useState<TelephonyCallLog[]>([]);
+    const [isLoadingTelephonyLogs, setIsLoadingTelephonyLogs] = useState(false);
+    const [telephonyError, setTelephonyError] = useState<string | null>(null);
+
     const currentUserName = loggedInUser?.full_name || (loggedInUser as any)?.FullName || loggedInUser?.username || 'کاربر سیستم';
 
     // Build unique team members list including current logged-in user
@@ -59,6 +64,58 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
         }
         return Array.from(set);
     }, [currentUserName]);
+
+    const loadTelephonyLogs = async (phoneNumber?: string) => {
+        const rawNum = phoneNumber !== undefined ? phoneNumber : (formState.Number || user?.Number || '');
+        const normalized = normalizeToTelephonyNumber(rawNum);
+        if (!normalized) {
+            setTelephonyLogs([]);
+            return;
+        }
+
+        setIsLoadingTelephonyLogs(true);
+        setTelephonyError(null);
+        try {
+            const logs = await getTelephonyCallLogs(normalized);
+            setTelephonyLogs(logs || []);
+
+            // If we have telephony logs, sync statistics if not already populated
+            if (logs && logs.length > 0) {
+                const successfulCount = logs.filter(l => (l.callDuration > 0) || l.disconnectionCause === 'NORMAL_CLEARING').length;
+                const latestSuccess = logs.find(l => (l.callDuration > 0) || l.disconnectionCause === 'NORMAL_CLEARING');
+                
+                setFormState(prev => ({
+                    ...prev,
+                    total_calls: logs.length,
+                    successful_calls: (prev.successful_calls && prev.successful_calls > 0) ? prev.successful_calls : successfulCount,
+                    last_successful_call: prev.last_successful_call || latestSuccess?.callTime || null
+                }));
+            }
+        } catch (err: any) {
+            console.warn("Failed to fetch telephony logs in UserModal:", err);
+            setTelephonyError('خطا در دریافت سوابق تماس از سرور سانترال');
+        } finally {
+            setIsLoadingTelephonyLogs(false);
+        }
+    };
+
+    const formatDisconnectionCause = (cause?: string) => {
+        if (!cause) return 'پایان مکالمه';
+        switch (cause.toUpperCase()) {
+            case 'NORMAL_CLEARING':
+                return 'پایان عادی مکالمه';
+            case 'NO_ANSWER':
+                return 'عدم پاسخگویی';
+            case 'ORIGINATOR_CANCEL':
+                return 'قطع تماس توسط تماس‌گیرنده';
+            case 'CALL_REJECTED':
+                return 'رد تماس';
+            case 'USER_BUSY':
+                return 'مشغول بودن خط';
+            default:
+                return cause;
+        }
+    };
 
     // Send heartbeat when editing a lead
     useEffect(() => {
@@ -104,10 +161,15 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                 setSelectedCrmPerson('');
                 setCustomCrmPerson('');
             }
+
+            if (isOpen && user.Number) {
+                loadTelephonyLogs(user.Number);
+            }
         } else {
             setFormState(initialFormState);
             setSelectedCrmPerson(currentUserName || '');
             setCustomCrmPerson('');
+            setTelephonyLogs([]);
         }
         setErrors({});
     }, [user, isOpen, availableCrmPersons, currentUserName]);
@@ -225,13 +287,45 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                             {errors.FullName && <p className="text-red-500 text-xs mt-1">{errors.FullName}</p>}
                         </div>
                         <div>
-                            <label htmlFor="Number" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                شماره تماس
-                                <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold mr-1"> (ثبت‌کننده شماره: {currentUserName})</span>
-                            </label>
-                            <input type="tel" id="Number" value={formState.Number} onChange={(e) => handleChange('Number', e.target.value)}
-                                className={`w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono ${errors.Number ? 'border-red-500' : 'border-slate-300'}`} dir="ltr" />
+                            <div className="flex items-center justify-between mb-1">
+                                <label htmlFor="Number" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    شماره تماس
+                                    <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold mr-1"> (ثبت‌کننده: {currentUserName})</span>
+                                </label>
+                                {formState.Number && (
+                                    <button
+                                        type="button"
+                                        onClick={() => loadTelephonyLogs(formState.Number)}
+                                        disabled={isLoadingTelephonyLogs}
+                                        className="text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 flex items-center gap-1 hover:underline"
+                                        title="استعلام سوابق تماس‌های این شماره از سانترال هوشمند"
+                                    >
+                                        <RefreshCw className={`w-3 h-3 ${isLoadingTelephonyLogs ? 'animate-spin' : ''}`} />
+                                        <span>استعلام تماس‌ها</span>
+                                    </button>
+                                )}
+                            </div>
+                            <input 
+                                type="tel" 
+                                id="Number" 
+                                value={formState.Number} 
+                                onChange={(e) => handleChange('Number', e.target.value)}
+                                onBlur={() => {
+                                    if (formState.Number && formState.Number.trim().length >= 10) {
+                                        loadTelephonyLogs(formState.Number);
+                                    }
+                                }}
+                                placeholder="مثال: 09153090724 یا 989153090724"
+                                className={`w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono ${errors.Number ? 'border-red-500' : 'border-slate-300'}`} 
+                                dir="ltr" 
+                            />
                             {errors.Number && <p className="text-red-500 text-xs mt-1">{errors.Number}</p>}
+                            {formState.Number && (
+                                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1 font-mono" dir="ltr">
+                                    <span className="text-sky-600 dark:text-sky-400 font-bold">VoIP PBX Query:</span>
+                                    <span>{normalizeToTelephonyNumber(formState.Number)}</span>
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label htmlFor="CarModel" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">خودروی درخواستی</label>
@@ -322,6 +416,165 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                     </span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Previous Call Interactions List from PBX Webhook */}
+                        <div className="md:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-200/70 dark:border-slate-700 flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="p-1.5 rounded-lg bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300">
+                                        <Headphones className="w-4 h-4" />
+                                    </span>
+                                    <div>
+                                        <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                            <span>سوابق و تاریخچه تماس‌های قبلی با مشترک</span>
+                                            {telephonyLogs.length > 0 && (
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                                                    {telephonyLogs.length.toLocaleString('fa-IR')} تماس
+                                                </span>
+                                            )}
+                                        </h4>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            اطلاعات استخراج شده از سانترال (شماره استعلام: <span className="font-mono font-bold" dir="ltr">{normalizeToTelephonyNumber(formState.Number || user?.Number || '') || '---'}</span>)
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => loadTelephonyLogs(formState.Number || user?.Number)}
+                                    disabled={isLoadingTelephonyLogs}
+                                    className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 flex items-center gap-1 transition-all shadow-2xs disabled:opacity-60"
+                                >
+                                    <RefreshCw className={`w-3.5 h-3.5 text-sky-600 dark:text-sky-400 ${isLoadingTelephonyLogs ? 'animate-spin' : ''}`} />
+                                    <span>{isLoadingTelephonyLogs ? 'در حال استعلام...' : 'بروزرسانی سوابق تماس'}</span>
+                                </button>
+                            </div>
+
+                            {/* Content: Loading / Error / Empty / List */}
+                            {isLoadingTelephonyLogs ? (
+                                <div className="py-6 flex flex-col items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                    <RefreshCw className="w-5 h-5 text-sky-600 animate-spin" />
+                                    <span>در حال استخراج تاریخچه تماس‌های این شماره از سانترال...</span>
+                                </div>
+                            ) : telephonyError ? (
+                                <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <AlertCircle className="w-4 h-4 shrink-0" />
+                                        <span>{telephonyError}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => loadTelephonyLogs(formState.Number || user?.Number)}
+                                        className="text-[11px] font-bold underline hover:text-rose-900"
+                                    >
+                                        تلاش دوباره
+                                    </button>
+                                </div>
+                            ) : telephonyLogs.length === 0 ? (
+                                <div className="py-4 text-center text-xs text-slate-500 dark:text-slate-400 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">
+                                    {formState.Number ? (
+                                        <span>هیچ سابقه تماسی در سانترال برای شماره <strong className="font-mono text-slate-700 dark:text-slate-200" dir="ltr">{normalizeToTelephonyNumber(formState.Number)}</strong> ثبت نشده است.</span>
+                                    ) : (
+                                        <span>شماره تماس مشتری را وارد کنید تا تاریخچه مکالمات قبلی بارگذاری شود.</span>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                    {telephonyLogs.map((call, idx) => {
+                                        const isInbound = call.direction === 'enterprise_did' || call.direction?.toLowerCase().includes('in');
+                                        const isSuccess = (call.callDuration && call.callDuration > 0) || call.disconnectionCause === 'NORMAL_CLEARING';
+                                        const dur = call.callDuration || 0;
+                                        const formattedDuration = dur > 0
+                                            ? (dur >= 60 ? `${Math.floor(dur / 60)} دقیقه و ${dur % 60} ثانیه` : `${dur} ثانیه`)
+                                            : '۰ ثانیه (قطع بدون مکالمه)';
+
+                                        return (
+                                            <div 
+                                                key={call.id || idx} 
+                                                className={`p-3 rounded-xl border transition-all bg-white dark:bg-slate-750 ${
+                                                    isSuccess 
+                                                        ? 'border-r-4 border-r-emerald-500 border-l border-y border-l-slate-200 dark:border-l-slate-700 border-y-slate-200 dark:border-y-slate-700' 
+                                                        : 'border-r-4 border-r-amber-500 border-l border-y border-l-slate-200 dark:border-l-slate-700 border-y-slate-200 dark:border-y-slate-700'
+                                                } shadow-2xs space-y-2`}
+                                            >
+                                                <div className="flex items-center justify-between text-[11px] flex-wrap gap-2 pb-1.5 border-b border-slate-100 dark:border-slate-700/60">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black flex items-center gap-1 ${
+                                                            isInbound 
+                                                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800' 
+                                                                : 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border border-sky-200/80 dark:border-sky-800'
+                                                        }`}>
+                                                            {isInbound ? <PhoneIncoming className="w-3 h-3" /> : <PhoneOutgoing className="w-3 h-3" />}
+                                                            <span>{isInbound ? 'تماس ورودی به شرکت' : 'تماس خروجی'}</span>
+                                                        </span>
+
+                                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                                            isSuccess 
+                                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300' 
+                                                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
+                                                        }`}>
+                                                            {isSuccess ? '✓ مکالمه موفق' : '✕ بدون مکالمه'}
+                                                        </span>
+
+                                                        {call.queueName && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                                                صف: {call.queueName}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <span className="font-mono text-slate-400 text-[10px]" dir="ltr">
+                                                        {call.callTime ? formatCallDate(call.callTime) : '-'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-slate-400 flex items-center gap-1">
+                                                            <Headphones className="w-3 h-3 text-sky-500" />
+                                                            پاسخگو / مقصد:
+                                                        </span>
+                                                        <span className="font-bold font-mono text-slate-700 dark:text-slate-200 mt-0.5" dir="ltr">
+                                                            {call.destination || 'نامشخص'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex flex-col">
+                                                        <span className="text-slate-400 flex items-center gap-1">
+                                                            <Phone className="w-3 h-3 text-emerald-500" />
+                                                            تماس‌گیرنده:
+                                                        </span>
+                                                        <span className="font-bold font-mono text-slate-700 dark:text-slate-200 mt-0.5" dir="ltr">
+                                                            {call.operator || formState.Number}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex flex-col">
+                                                        <span className="text-slate-400 flex items-center gap-1">
+                                                            <Clock className="w-3 h-3 text-emerald-500" />
+                                                            مدت مکالمه:
+                                                        </span>
+                                                        <span className="font-black font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                                            {formattedDuration}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex flex-col">
+                                                        <span className="text-slate-400 flex items-center gap-1">
+                                                            <Clock className="w-3 h-3 text-amber-500" />
+                                                            انتظار / علت قطع:
+                                                        </span>
+                                                        <span className="font-medium text-slate-700 dark:text-slate-200 mt-0.5 truncate" title={call.disconnectionCause}>
+                                                            {(call.waitingTime ?? 0)} ثانیه | {formatDisconnectionCause(call.disconnectionCause)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
 
                         {formState.leadStatus === LeadStatus.LOST && (

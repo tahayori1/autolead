@@ -105,6 +105,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
+    const [timelineFilter, setTimelineFilter] = useState<'ALL' | 'TELEPHONY' | 'MESSAGES' | 'JOURNALS' | 'MEETINGS'>('ALL');
 
     const formatDisconnectionCause = (cause?: string) => {
         if (!cause) return 'پایان مکالمه';
@@ -2291,15 +2292,93 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             </span>
                                         )}
                                     </div>
+
+                                    {/* Timeline Filter Pills */}
+                                    <div className="flex items-center gap-1.5 flex-wrap px-1 pt-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setTimelineFilter('ALL')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${
+                                                timelineFilter === 'ALL'
+                                                    ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 shadow-xs'
+                                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750'
+                                            }`}
+                                        >
+                                            همه رویدادها ({timelineItems.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTimelineFilter('TELEPHONY')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                timelineFilter === 'TELEPHONY'
+                                                    ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                                                    : 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/40'
+                                            }`}
+                                        >
+                                            <Headphones className="w-3 h-3" />
+                                            <span>تماس‌های سانترال ({telephonyLogs.length})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTimelineFilter('MESSAGES')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                timelineFilter === 'MESSAGES'
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                            }`}
+                                        >
+                                            <MessageSquare className="w-3 h-3" />
+                                            <span>پیام‌ها ({messages.length})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTimelineFilter('JOURNALS')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                timelineFilter === 'JOURNALS'
+                                                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                                            }`}
+                                        >
+                                            <FileText className="w-3 h-3" />
+                                            <span>یادداشت‌ها ({journals.length})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTimelineFilter('MEETINGS')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                timelineFilter === 'MEETINGS'
+                                                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                                                    : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/40'
+                                            }`}
+                                        >
+                                            <Calendar className="w-3 h-3" />
+                                            <span>جلسات ({crmMeetings.length})</span>
+                                        </button>
+                                    </div>
                                     
                                     {isLoading || isJournalLoading || isTelephonyLoading ? (
                                         <div className="flex justify-center py-10"><Spinner /></div>
-                                    ) : timelineItems.length === 0 ? (
-                                        <div className="text-center text-slate-400 py-10 text-xs border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
-                                            هیچ پیام یا گزارش CRM برای این مشتری یافت نشد.
-                                        </div>
-                                    ) : (
-                                        timelineItems.map((item) => {
+                                    ) : (() => {
+                                        const filteredItems = timelineItems.filter(item => {
+                                            if (timelineFilter === 'ALL') return true;
+                                            if (timelineFilter === 'TELEPHONY') return item.type === 'TELEPHONY_CALL';
+                                            if (timelineFilter === 'MESSAGES') return item.type === 'MESSAGE';
+                                            if (timelineFilter === 'JOURNALS') return item.type === 'JOURNAL';
+                                            if (timelineFilter === 'MEETINGS') return item.type === 'MEETING';
+                                            return true;
+                                        });
+
+                                        if (filteredItems.length === 0) {
+                                            return (
+                                                <div className="text-center text-slate-400 py-10 text-xs border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
+                                                    {timelineFilter === 'TELEPHONY' 
+                                                        ? 'هیچ رکورد تماسی در سامانه سانترال برای این شماره ثبت نشده است.'
+                                                        : 'هیچ رکوردی برای فیلتر انتخابی یافت نشد.'}
+                                                </div>
+                                            );
+                                        }
+
+                                        return filteredItems.map((item) => {
                                             if (item.type === 'MESSAGE') {
                                                 const isWhatsApp = item.media === 'WHATSAPP';
                                                 return (
@@ -2637,8 +2716,8 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                     </div>
                                                 );
                                             }
-                                        })
-                                    )}
+                                        });
+                                    })()}
                                 </div>
                             </div>
                         )}
