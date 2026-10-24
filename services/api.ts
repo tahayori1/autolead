@@ -3217,6 +3217,7 @@ export const deleteCollabCar = async (id: string | number): Promise<void> => {
 
 // --- Storage Center Services (سامانه استاندارد مدیریت انبار و گردش کالا - اتصال مستقیم API) ---
 export const STORAGE_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/storage-center';
+export const STORAGE_TRANSACTIONS_WEBHOOK_URL = 'https://api.hoseinikhodro.com/webhook/54f76090-189b-47d7-964e-f871c4d6513b/api/v1/storage-transactions';
 
 // Helper to get current Gregorian datetime (e.g. "2026-10-13 14:30")
 export const getNowGregorianDateTime = (): string => {
@@ -3250,28 +3251,51 @@ export const getStorageData = async (): Promise<{ items: StorageItem[]; transact
         // ignore
     }
 
-    const response = await fetch(STORAGE_WEBHOOK_URL, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json',
-            ...getAuthHeaders()
-        }
-    });
-
-    const data = await handleResponse(response);
     let items: StorageItem[] = [];
     let transactions: StockTransaction[] = [];
 
-    if (Array.isArray(data)) {
-        items = data;
-    } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.items)) items = data.items;
-        else if (Array.isArray(data.data)) items = data.data;
+    // 1. Fetch items from STORAGE_WEBHOOK_URL
+    try {
+        const response = await fetch(STORAGE_WEBHOOK_URL, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                ...getAuthHeaders()
+            }
+        });
+        const data = await handleResponse(response);
+        if (Array.isArray(data)) {
+            items = data;
+        } else if (data && typeof data === 'object') {
+            if (Array.isArray(data.items)) items = data.items;
+            else if (Array.isArray(data.data)) items = data.data;
+            if (Array.isArray(data.transactions)) transactions = data.transactions;
+        }
+    } catch (e) {
+        console.warn('Error fetching storage items:', e);
+    }
 
-        if (Array.isArray(data.transactions)) transactions = data.transactions;
-        else if (Array.isArray(data.logs)) transactions = data.logs;
-        else if (Array.isArray(data.movements)) transactions = data.movements;
-        else if (Array.isArray(data.history)) transactions = data.history;
+    // 2. Fetch transactions from STORAGE_TRANSACTIONS_WEBHOOK_URL
+    try {
+        const resTx = await fetch(STORAGE_TRANSACTIONS_WEBHOOK_URL, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                ...getAuthHeaders()
+            }
+        });
+        const dataTx = await handleResponse(resTx);
+        if (Array.isArray(dataTx)) {
+            transactions = dataTx;
+        } else if (dataTx && typeof dataTx === 'object') {
+            if (Array.isArray(dataTx.transactions)) transactions = dataTx.transactions;
+            else if (Array.isArray(dataTx.data)) transactions = dataTx.data;
+            else if (Array.isArray(dataTx.logs)) transactions = dataTx.logs;
+            else if (Array.isArray(dataTx.movements)) transactions = dataTx.movements;
+            else if (Array.isArray(dataTx.history)) transactions = dataTx.history;
+        }
+    } catch (e) {
+        console.warn('Error fetching storage transactions:', e);
     }
 
     // Normalize items with Gregorian dates and numeric fields
@@ -3285,7 +3309,7 @@ export const getStorageData = async (): Promise<{ items: StorageItem[]; transact
 
     transactions = transactions.map(tx => ({
         ...tx,
-        quantity: Number(tx.quantity) || 0,
+        quantity: Number(tx.quantity || tx.transactionQuantity) || 0,
         previousStock: tx.previousStock !== undefined ? Number(tx.previousStock) : undefined,
         newStock: tx.newStock !== undefined ? Number(tx.newStock) : undefined,
         unitPrice: tx.unitPrice !== undefined ? Number(tx.unitPrice) : undefined,
@@ -3456,20 +3480,33 @@ export const recordStockMovement = async (params: {
         notes: params.notes || ''
     };
 
-    // 1. Send movement transaction via POST to API
-    const postResponse = await fetch(STORAGE_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-        },
-        body: JSON.stringify({
-            action: 'STOCK_MOVEMENT',
-            transaction: movement,
-            item: updatedItem
+    // 1. Send movement transaction via POST to API endpoints
+    await Promise.allSettled([
+        fetch(STORAGE_TRANSACTIONS_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+                action: 'STOCK_MOVEMENT',
+                transaction: movement,
+                item: updatedItem
+            })
+        }),
+        fetch(STORAGE_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+                action: 'STOCK_MOVEMENT',
+                transaction: movement,
+                item: updatedItem
+            })
         })
-    });
-    await handleResponse(postResponse);
+    ]);
 
     // 2. Sync updated item stock to API via PUT
     try {
