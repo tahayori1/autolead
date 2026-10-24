@@ -614,7 +614,7 @@ const App: React.FC = () => {
 
             {/* Main Content Area */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden pt-16 lg:pt-0 pb-20 lg:pb-0">
-                {activeView === 'home' && <HomePage onNavigate={handleNavigate} />}
+                {activeView === 'home' && <HomePage onNavigate={handleNavigate} loggedInUser={currentUser} />}
                 {activeView === 'ai-assistant' && <AiAssistantPage loggedInUser={currentUser} />}
                 {activeView === 'announcements' && <AnnouncementsHubPage loggedInUser={currentUser} />}
                 {activeView === 'conditions' && <ConditionsPage />}

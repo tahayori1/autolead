@@ -1,6 +1,6 @@
 {
-  "name": "AutoLead",
-  "description": "AutoLead: A modern, responsive web application to manage car sales leads, inventory conditions, sales manager strategic radar, and smart multi-channel reporting.",
+  "name": "آتولید",
+  "description": "آتولید: پیشخوان مانیتورینگ و مدیریت خودرو. بررسی لحظه‌ای قیمت بازار خودروها، آخرین بخشنامه‌های فروش، مدیریت سفارشات و دسترسی سریع به بخش‌های اجرایی CRM.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
