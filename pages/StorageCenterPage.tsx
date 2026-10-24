@@ -39,6 +39,44 @@ import {
     FolderKanban
 } from 'lucide-react';
 
+import PersianDatePicker from '../components/PersianDatePicker';
+
+declare const moment: any;
+
+const toJalali = (gregorianStr?: string): string => {
+    if (!gregorianStr) return '';
+    try {
+        const m = moment(gregorianStr);
+        if (m.isValid()) {
+            return m.locale('fa').format('jYYYY/jMM/jDD');
+        }
+    } catch (e) {
+        // ignore
+    }
+    return gregorianStr || '';
+};
+
+const toGregorian = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+        const normalized = dateStr.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦۷۸۹'.indexOf(d).toString());
+        if (!normalized.includes('/') && normalized.includes('-')) {
+            const m = moment(normalized);
+            if (m.isValid()) {
+                return m.format('YYYY-MM-DD');
+            }
+        }
+        const m = moment(normalized, 'jYYYY/jMM/jDD');
+        if (m.isValid()) {
+            return m.format('YYYY-MM-DD');
+        }
+    } catch (e) {
+        // ignore
+    }
+    return dateStr || '';
+};
+
 const CATEGORIES = [
     'همه دسته‌ها',
     'چای، قهوه و آبدارخانه',
@@ -132,7 +170,7 @@ export const StorageCenterPage: React.FC = () => {
     const [inboundForm, setInboundForm] = useState({
         itemId: '',
         quantity: 1,
-        date: getTodayGregorianDate(),
+        date: toJalali(getTodayGregorianDate()),
         referenceNumber: '',
         supplier: IN_SOURCES[0],
         unitPrice: 0,
@@ -145,7 +183,7 @@ export const StorageCenterPage: React.FC = () => {
     const [outboundForm, setOutboundForm] = useState({
         itemId: '',
         quantity: 1,
-        date: getTodayGregorianDate(),
+        date: toJalali(getTodayGregorianDate()),
         referenceNumber: '',
         receiver: OUT_RECEIVERS[0],
         reason: OUT_REASONS[0],
@@ -168,7 +206,7 @@ export const StorageCenterPage: React.FC = () => {
     const [adjustForm, setAdjustForm] = useState({
         newQuantity: 0,
         reason: 'انبارگردانی دوره‌ای و تطبیق موجودی فیزیکی',
-        date: getTodayGregorianDate(),
+        date: toJalali(getTodayGregorianDate()),
         notes: ''
     });
 
@@ -214,7 +252,7 @@ export const StorageCenterPage: React.FC = () => {
         setInboundForm({
             itemId: selectedId,
             quantity: 1,
-            date: getTodayGregorianDate(),
+            date: toJalali(getTodayGregorianDate()),
             referenceNumber: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
             supplier: targetItem?.supplier || IN_SOURCES[0],
             unitPrice: targetItem?.unitPrice || 0,
@@ -242,7 +280,7 @@ export const StorageCenterPage: React.FC = () => {
                 currentItem: targetItem,
                 type: 'IN',
                 quantity: Number(inboundForm.quantity),
-                date: inboundForm.date ? `${inboundForm.date} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
+                date: inboundForm.date ? `${toGregorian(inboundForm.date)} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
                 referenceNumber: inboundForm.referenceNumber,
                 sourceOrDestination: inboundForm.supplier,
                 reason: inboundForm.reason,
@@ -267,7 +305,7 @@ export const StorageCenterPage: React.FC = () => {
         setOutboundForm({
             itemId: selectedId,
             quantity: 1,
-            date: getTodayGregorianDate(),
+            date: toJalali(getTodayGregorianDate()),
             referenceNumber: `REQ-${Math.floor(100 + Math.random() * 900)}`,
             receiver: OUT_RECEIVERS[0],
             reason: OUT_REASONS[0],
@@ -306,7 +344,7 @@ export const StorageCenterPage: React.FC = () => {
                 currentItem: targetItem,
                 type: 'OUT',
                 quantity: outQty,
-                date: outboundForm.date ? `${outboundForm.date} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
+                date: outboundForm.date ? `${toGregorian(outboundForm.date)} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
                 referenceNumber: outboundForm.referenceNumber,
                 sourceOrDestination: outboundForm.receiver,
                 reason: outboundForm.reason,
@@ -330,7 +368,7 @@ export const StorageCenterPage: React.FC = () => {
         setAdjustForm({
             newQuantity: item.quantity || 0,
             reason: 'انبارگردانی دوره‌ای و تطبیق موجودی فیزیکی',
-            date: getTodayGregorianDate(),
+            date: toJalali(getTodayGregorianDate()),
             notes: ''
         });
         setIsAdjustModalOpen(true);
@@ -355,7 +393,7 @@ export const StorageCenterPage: React.FC = () => {
                 type: 'ADJUSTMENT',
                 quantity: Math.abs(diff),
                 targetStock: targetQty,
-                date: adjustForm.date ? `${adjustForm.date} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
+                date: adjustForm.date ? `${toGregorian(adjustForm.date)} ${getNowGregorianDateTime().split(' ')[1] || '12:00'}` : getNowGregorianDateTime(),
                 referenceNumber: `ADJ-${Math.floor(100 + Math.random() * 900)}`,
                 sourceOrDestination: 'انبارگردانی و تطبیق دستی',
                 reason: `${adjustForm.reason} (تغییر از ${adjustingItem.quantity} به ${targetQty})`,
@@ -453,8 +491,9 @@ export const StorageCenterPage: React.FC = () => {
     // --- Movement Edit & Delete Handlers ---
     const handleOpenEditMovement = (tx: StockTransaction) => {
         setEditingMovement(tx);
+        const txDatePart = tx.date ? tx.date.split(' ')[0] : getTodayGregorianDate();
         setEditMovementForm({
-            date: tx.date ? tx.date.split(' ')[0] : getTodayGregorianDate(),
+            date: toJalali(txDatePart),
             referenceNumber: tx.referenceNumber || '',
             sourceOrDestination: tx.sourceOrDestination || tx.receiverOrSource || '',
             reason: tx.reason || '',
@@ -470,7 +509,7 @@ export const StorageCenterPage: React.FC = () => {
         try {
             const timePart = editingMovement.date?.split(' ')[1] || '12:00';
             const updatedTx = await updateStockMovement(editingMovement.id, {
-                date: editMovementForm.date ? `${editMovementForm.date} ${timePart}` : editingMovement.date,
+                date: editMovementForm.date ? `${toGregorian(editMovementForm.date)} ${timePart}` : editingMovement.date,
                 referenceNumber: editMovementForm.referenceNumber,
                 sourceOrDestination: editMovementForm.sourceOrDestination,
                 receiverOrSource: editMovementForm.sourceOrDestination,
@@ -565,8 +604,10 @@ export const StorageCenterPage: React.FC = () => {
             let matchesDate = true;
             if (tx.date) {
                 const txDatePart = tx.date.split(' ')[0];
-                if (startDateFilter && txDatePart < startDateFilter) matchesDate = false;
-                if (endDateFilter && txDatePart > endDateFilter) matchesDate = false;
+                const startGregorian = startDateFilter ? toGregorian(startDateFilter) : '';
+                const endGregorian = endDateFilter ? toGregorian(endDateFilter) : '';
+                if (startGregorian && txDatePart < startGregorian) matchesDate = false;
+                if (endGregorian && txDatePart > endGregorian) matchesDate = false;
             }
 
             return matchesType && matchesSearch && matchesDate;
@@ -1042,24 +1083,24 @@ export const StorageCenterPage: React.FC = () => {
                                 />
                             </div>
 
-                            {/* Gregorian Date Range Filter */}
+                            {/* Jalali Date Range Filter */}
                             <div className="flex items-center gap-1.5 text-xs bg-slate-50 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <span className="text-[11px] text-slate-400 px-1 font-bold">تاریخ میلادی:</span>
-                                <input
-                                    type="date"
-                                    value={startDateFilter}
-                                    onChange={e => setStartDateFilter(e.target.value)}
-                                    className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-mono outline-none"
-                                    title="از تاریخ (میلادی)"
-                                />
+                                <span className="text-[11px] text-slate-400 px-1 font-bold">تاریخ:</span>
+                                <div className="w-32">
+                                    <PersianDatePicker
+                                        value={startDateFilter}
+                                        onChange={setStartDateFilter}
+                                        placeholder="از تاریخ"
+                                    />
+                                </div>
                                 <span className="text-slate-400">تا</span>
-                                <input
-                                    type="date"
-                                    value={endDateFilter}
-                                    onChange={e => setEndDateFilter(e.target.value)}
-                                    className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-mono outline-none"
-                                    title="تا تاریخ (میلادی)"
-                                />
+                                <div className="w-32">
+                                    <PersianDatePicker
+                                        value={endDateFilter}
+                                        onChange={setEndDateFilter}
+                                        placeholder="تا تاریخ"
+                                    />
+                                </div>
                                 {(startDateFilter || endDateFilter) && (
                                     <button
                                         type="button"
@@ -1327,13 +1368,11 @@ export const StorageCenterPage: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ ورود (میلادی YYYY-MM-DD) *</label>
-                                    <input
-                                        type="date"
-                                        required
+                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ ورود (هجری شمسی) *</label>
+                                    <PersianDatePicker
                                         value={inboundForm.date}
-                                        onChange={e => setInboundForm({...inboundForm, date: e.target.value})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
+                                        onChange={val => setInboundForm({...inboundForm, date: val})}
+                                        placeholder="تاریخ ورود"
                                     />
                                 </div>
                             </div>
@@ -1487,13 +1526,11 @@ export const StorageCenterPage: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ خروج (میلادی YYYY-MM-DD) *</label>
-                                    <input
-                                        type="date"
-                                        required
+                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ خروج (هجری شمسی) *</label>
+                                    <PersianDatePicker
                                         value={outboundForm.date}
-                                        onChange={e => setOutboundForm({...outboundForm, date: e.target.value})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
+                                        onChange={val => setOutboundForm({...outboundForm, date: val})}
+                                        placeholder="تاریخ خروج"
                                     />
                                 </div>
                             </div>
@@ -1633,13 +1670,11 @@ export const StorageCenterPage: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ انبارگردانی (میلادی YYYY-MM-DD)</label>
-                                <input
-                                    type="date"
-                                    required
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ انبارگردانی (هجری شمسی)</label>
+                                <PersianDatePicker
                                     value={adjustForm.date}
-                                    onChange={e => setAdjustForm({...adjustForm, date: e.target.value})}
-                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
+                                    onChange={val => setAdjustForm({...adjustForm, date: val})}
+                                    placeholder="تاریخ انبارگردانی"
                                 />
                             </div>
 
@@ -1771,13 +1806,11 @@ export const StorageCenterPage: React.FC = () => {
 
                         <form onSubmit={handleSaveEditMovement} className="p-6 space-y-4 text-xs">
                             <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ سند (میلادی YYYY-MM-DD) *</label>
-                                <input
-                                    type="date"
-                                    required
+                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاریخ سند (هجری شمسی) *</label>
+                                <PersianDatePicker
                                     value={editMovementForm.date}
-                                    onChange={e => setEditMovementForm({...editMovementForm, date: e.target.value})}
-                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
+                                    onChange={val => setEditMovementForm({...editMovementForm, date: val})}
+                                    placeholder="تاریخ سند"
                                 />
                             </div>
 
