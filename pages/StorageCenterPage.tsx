@@ -9,7 +9,9 @@ import {
     updateStockMovement, 
     deleteStockMovement,
     getNowGregorianDateTime,
-    getTodayGregorianDate
+    getTodayGregorianDate,
+    formatJalaliDateOnly,
+    formatJalaliDateTime
 } from '../services/api';
 import Spinner from '../components/Spinner';
 import { 
@@ -156,12 +158,7 @@ export const StorageCenterPage: React.FC = () => {
     const [itemForm, setItemForm] = useState({
         name: '',
         category: CATEGORIES[1],
-        quantity: 0,
         unit: 'عدد',
-        minStock: 5,
-        location: LOCATIONS[0],
-        unitPrice: 0,
-        supplier: '',
         description: ''
     });
 
@@ -382,12 +379,7 @@ export const StorageCenterPage: React.FC = () => {
         setItemForm({
             name: '',
             category: CATEGORIES[1],
-            quantity: 0,
             unit: 'عدد',
-            minStock: 5,
-            location: LOCATIONS[0],
-            unitPrice: 0,
-            supplier: '',
             description: ''
         });
         setIsItemModalOpen(true);
@@ -398,12 +390,7 @@ export const StorageCenterPage: React.FC = () => {
         setItemForm({
             name: item.name || '',
             category: item.category || CATEGORIES[1],
-            quantity: item.quantity || 0,
             unit: item.unit || 'عدد',
-            minStock: item.minStock || 5,
-            location: item.location || LOCATIONS[0],
-            unitPrice: item.unitPrice || 0,
-            supplier: item.supplier || '',
             description: item.description || ''
         });
         setIsItemModalOpen(true);
@@ -422,45 +409,25 @@ export const StorageCenterPage: React.FC = () => {
                 const updated = await updateStorageItem(editingItemId, {
                     name: itemForm.name.trim(),
                     category: itemForm.category,
-                    quantity: Number(itemForm.quantity) || 0,
                     unit: itemForm.unit,
-                    minStock: Number(itemForm.minStock) || 0,
-                    location: itemForm.location,
-                    unitPrice: Number(itemForm.unitPrice) || 0,
-                    supplier: itemForm.supplier.trim(),
                     description: itemForm.description.trim()
                 });
-                setItems(prev => prev.map(i => String(i.id) === String(editingItemId) ? updated : i));
-                showToast(`مشخصات کالای «${updated.name}» بروزرسانی شد.`);
+                setItems(prev => prev.map(i => String(i.id) === String(editingItemId) ? { ...i, ...updated, name: itemForm.name.trim(), category: itemForm.category, unit: itemForm.unit, description: itemForm.description.trim() } : i));
+                showToast(`مشخصات کالای «${itemForm.name.trim()}» بروزرسانی شد.`);
             } else {
                 // Create new item
                 const created = await createStorageItem({
                     name: itemForm.name.trim(),
                     category: itemForm.category,
-                    quantity: Number(itemForm.quantity) || 0,
+                    quantity: 0,
                     unit: itemForm.unit,
-                    minStock: Number(itemForm.minStock) || 0,
-                    location: itemForm.location,
-                    unitPrice: Number(itemForm.unitPrice) || 0,
-                    supplier: itemForm.supplier.trim(),
+                    minStock: 5,
+                    location: LOCATIONS[0],
+                    unitPrice: 0,
+                    supplier: '',
                     description: itemForm.description.trim(),
                     lastRestockDate: getTodayGregorianDate()
                 });
-
-                // If initial quantity > 0, record initial inbound movement
-                if (created.quantity > 0) {
-                    await recordStockMovement({
-                        itemId: created.id,
-                        currentItem: created,
-                        type: 'IN',
-                        quantity: created.quantity,
-                        date: getNowGregorianDateTime(),
-                        referenceNumber: `INIT-${Math.floor(100 + Math.random() * 900)}`,
-                        sourceOrDestination: created.supplier || 'موجودی افتتاحیه انبار',
-                        reason: 'ثبت کالای جدید و موجودی اولیه انبار',
-                        unitPrice: created.unitPrice
-                    });
-                }
 
                 loadData();
                 showToast(`کالای جدید «${created.name}» به انبار اضافه شد.`);
@@ -945,7 +912,7 @@ export const StorageCenterPage: React.FC = () => {
                                                         {(qty * (item.unitPrice || 0)).toLocaleString('en-US')} ت
                                                     </td>
                                                     <td className="p-3.5 font-mono text-slate-500 text-[11px]">
-                                                        {item.lastRestockDate || '---'}
+                                                        {formatJalaliDateOnly(item.lastRestockDate)}
                                                     </td>
                                                     <td className="p-3.5">
                                                         <div className="flex items-center justify-center gap-1.5">
@@ -1166,7 +1133,7 @@ export const StorageCenterPage: React.FC = () => {
                                                     <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300 font-bold">
                                                         <span className="flex items-center gap-1.5">
                                                             <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                            <span>{tx.date || '---'}</span>
+                                                            <span>{formatJalaliDateTime(tx.date)}</span>
                                                         </span>
                                                     </td>
                                                     <td className="p-3.5">
@@ -1728,7 +1695,7 @@ export const StorageCenterPage: React.FC = () => {
                                     value={itemForm.name}
                                     onChange={e => setItemForm({...itemForm, name: e.target.value})}
                                     placeholder="مثلاً: چای سیاه شکسته اعلا، کاغذ A4 دابل آ..."
-                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
                             </div>
 
@@ -1738,7 +1705,7 @@ export const StorageCenterPage: React.FC = () => {
                                     <select
                                         value={itemForm.category}
                                         onChange={e => setItemForm({...itemForm, category: e.target.value})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none"
                                     >
                                         {CATEGORIES.filter(c => c !== 'همه دسته‌ها').map(c => (
                                             <option key={c} value={c}>{c}</option>
@@ -1750,7 +1717,7 @@ export const StorageCenterPage: React.FC = () => {
                                     <select
                                         value={itemForm.unit}
                                         onChange={e => setItemForm({...itemForm, unit: e.target.value})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none"
                                     >
                                         {UNITS.map(u => (
                                             <option key={u} value={u}>{u}</option>
@@ -1759,74 +1726,14 @@ export const StorageCenterPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-3">
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                        {editingItemId ? 'موجودی فعلی' : 'موجودی اولیه'}
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={itemForm.quantity}
-                                        onChange={e => setItemForm({...itemForm, quantity: Math.max(0, Number(e.target.value))})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">حداقل هشدار کمبود</label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={itemForm.minStock}
-                                        onChange={e => setItemForm({...itemForm, minStock: Math.max(0, Number(e.target.value))})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">قیمت واحد (تومان)</label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={itemForm.unitPrice}
-                                        onChange={e => setItemForm({...itemForm, unitPrice: Math.max(0, Number(e.target.value))})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-mono font-bold outline-none"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">محل نگهداری / قفسه</label>
-                                    <select
-                                        value={itemForm.location}
-                                        onChange={e => setItemForm({...itemForm, location: e.target.value})}
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none"
-                                    >
-                                        {LOCATIONS.map(l => (
-                                            <option key={l} value={l}>{l}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تامین‌کننده / برند</label>
-                                    <input
-                                        type="text"
-                                        value={itemForm.supplier}
-                                        onChange={e => setItemForm({...itemForm, supplier: e.target.value})}
-                                        placeholder="نام برند یا شرکت..."
-                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none"
-                                    />
-                                </div>
-                            </div>
-
                             <div>
                                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">توضیحات و مشخصات کالا</label>
                                 <textarea
-                                    rows={2}
+                                    rows={3}
                                     value={itemForm.description}
                                     onChange={e => setItemForm({...itemForm, description: e.target.value})}
                                     placeholder="توضیحات مربوط به مصارف، ابعاد، مشخصات..."
-                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none resize-none"
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 dark:text-white font-bold outline-none resize-none"
                                 />
                             </div>
 

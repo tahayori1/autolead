@@ -425,49 +425,6 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         }
     };
 
-    const handleSaveCrmTags = async () => {
-        const userId = targetUser?.id;
-        if (!userId) return;
-
-        setIsSavingCrmRatings(true);
-        try {
-            const updatedUser: User = {
-                ...targetUser,
-                tags: crmTags,
-                LastAction: new Date().toISOString()
-            };
-
-            const result = await updateUser(Number(userId), updatedUser);
-
-            // Create customer journal log entry for history timeline
-            const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
-            const journalContent = `🏷️ به‌روزرسانی برچسب‌های مشتری:
-- برچسب‌ها: ${crmTags.length > 0 ? crmTags.join('، ') : 'بدون برچسب'}`;
-
-            await createCustomerJournal({
-                userId,
-                content: journalContent,
-                author: authorName
-            });
-
-            if (onUserUpdate) {
-                onUserUpdate(result);
-            }
-
-            // Fetch journals to immediately show on history timeline
-            fetchJournals();
-
-            setToastType('success');
-            setToastMessage('برچسب‌های مشتری با موفقیت ذخیره شد.');
-        } catch (err) {
-            console.error("Failed to save CRM tags:", err);
-            setToastType('error');
-            setToastMessage('خطا در ذخیره‌سازی برچسب‌ها.');
-        } finally {
-            setIsSavingCrmRatings(false);
-        }
-    };
-
     const handleSaveBehaviorRating = async () => {
         const userId = targetUser?.id;
         if (!userId) return;
@@ -479,6 +436,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
                 behaviorScore: crmBehaviorScore,
                 dealDifficulty: crmDealDifficulty,
                 behaviorRatingOpinion: crmOpinion,
+                tags: crmTags,
                 LastAction: new Date().toISOString()
             };
 
@@ -487,10 +445,11 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
             // Create customer journal log entry for history timeline
             const authorName = currentUser?.full_name || currentUser?.username || 'کاربر سیستم';
             const stars = '★'.repeat(crmBehaviorScore) + '☆'.repeat(5 - crmBehaviorScore);
-            const journalContent = `⭐ ثبت/به‌روزرسانی امتیاز اخلاق و رفتار مشتری:
+            const journalContent = `⭐ ثبت/به‌روزرسانی امتیاز اخلاق و برچسب‌های مشتری:
 - امتیاز اخلاق و رفتار: ${crmBehaviorScore} از ۵ (${stars})
-- وضعیت معامله: معامله با این مشتری ${crmDealDifficulty} است.
-${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpinion}` : ''}`;
+- میزان سختی معامله: ${crmDealDifficulty}
+- برچسب‌ها: ${crmTags.length > 0 ? crmTags.join('، ') : 'بدون برچسب'}
+${crmOpinion ? `- نظر کارشناس: ${crmOpinion}` : ''}`;
 
             await createCustomerJournal({
                 userId,
@@ -506,11 +465,11 @@ ${crmOpinion ? `- نظر کارشناس بابت رفتار مشتری: ${crmOpi
             fetchJournals();
 
             setToastType('success');
-            setToastMessage('اطلاعات امتیازدهی اخلاق مشتری با موفقیت ذخیره شد.');
+            setToastMessage('امتیاز اخلاق و برچسب‌های مشتری با موفقیت ذخیره شد.');
         } catch (err) {
-            console.error("Failed to save behavior rating:", err);
+            console.error("Failed to save behavior rating and tags:", err);
             setToastType('error');
-            setToastMessage('خطا در ذخیره‌سازی امتیاز اخلاق.');
+            setToastMessage('خطا در ذخیره‌سازی امتیاز اخلاق و برچسب‌ها.');
         } finally {
             setIsSavingCrmRatings(false);
         }
@@ -1987,7 +1946,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                     <div className="flex justify-end pt-1">
                                         <button
                                             type="button"
-                                            onClick={handleSaveCrmTags}
+                                            onClick={handleSaveBehaviorRating}
                                             disabled={isSavingCrmRatings}
                                             className="bg-indigo-650 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
                                         >
