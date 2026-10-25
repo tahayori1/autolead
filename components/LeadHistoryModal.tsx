@@ -105,7 +105,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
-    const [timelineFilter, setTimelineFilter] = useState<'ALL' | 'TELEPHONY' | 'MESSAGES' | 'JOURNALS' | 'MEETINGS'>('ALL');
+    const [timelineFilter, setTimelineFilter] = useState<'ALL' | 'NEW_CALLS' | 'ANSWERED_CALLS' | 'TELEPHONY' | 'MESSAGES' | 'JOURNALS' | 'MEETINGS'>('ALL');
 
     const formatDisconnectionCause = (cause?: string) => {
         if (!cause) return 'پایان مکالمه';
@@ -2267,6 +2267,30 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                         </button>
                                         <button
                                             type="button"
+                                            onClick={() => setTimelineFilter('NEW_CALLS')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                timelineFilter === 'NEW_CALLS'
+                                                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                                            }`}
+                                        >
+                                            <PhoneIncoming className="w-3 h-3" />
+                                            <span>تماس‌های جدید (بی‌پاسخ) ({telephonyLogs.filter(l => !(l.callDuration && l.callDuration > 0) && l.disconnectionCause !== 'NORMAL_CLEARING').length})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTimelineFilter('ANSWERED_CALLS')}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                timelineFilter === 'ANSWERED_CALLS'
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                                            }`}
+                                        >
+                                            <Headphones className="w-3 h-3" />
+                                            <span>پاسخ داده شده ({telephonyLogs.filter(l => (l.callDuration && l.callDuration > 0) || l.disconnectionCause === 'NORMAL_CLEARING').length})</span>
+                                        </button>
+                                        <button
+                                            type="button"
                                             onClick={() => setTimelineFilter('TELEPHONY')}
                                             className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border flex items-center gap-1 ${
                                                 timelineFilter === 'TELEPHONY'
@@ -2274,8 +2298,8 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                     : 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/40'
                                             }`}
                                         >
-                                            <Headphones className="w-3 h-3" />
-                                            <span>تماس‌های سانترال ({telephonyLogs.length})</span>
+                                            <Phone className="w-3 h-3" />
+                                            <span>کل تماس‌های سانترال ({telephonyLogs.length})</span>
                                         </button>
                                         <button
                                             type="button"
@@ -2320,7 +2344,27 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                     ) : (() => {
                                         const filteredItems = timelineItems.filter(item => {
                                             if (timelineFilter === 'ALL') return true;
-                                            if (timelineFilter === 'TELEPHONY') return item.type === 'TELEPHONY_CALL';
+                                            if (timelineFilter === 'NEW_CALLS') {
+                                                if (item.type === 'TELEPHONY_CALL' && item.telephonyLog) {
+                                                    const dur = item.telephonyLog.callDuration || 0;
+                                                    return !(dur > 0 || item.telephonyLog.disconnectionCause === 'NORMAL_CLEARING');
+                                                }
+                                                if (item.type === 'CALL_LOG' && item.callLog) {
+                                                    return item.callLog.callStatus === 'MISSED' || item.callLog.callStatus === 'NO_ANSWER' || item.callLog.callStatus === 'REJECTED';
+                                                }
+                                                return false;
+                                            }
+                                            if (timelineFilter === 'ANSWERED_CALLS') {
+                                                if (item.type === 'TELEPHONY_CALL' && item.telephonyLog) {
+                                                    const dur = item.telephonyLog.callDuration || 0;
+                                                    return dur > 0 || item.telephonyLog.disconnectionCause === 'NORMAL_CLEARING';
+                                                }
+                                                if (item.type === 'CALL_LOG' && item.callLog) {
+                                                    return item.callLog.callStatus === 'SUCCESSFUL' || (item.callLog.duration && item.callLog.duration > 0);
+                                                }
+                                                return false;
+                                            }
+                                            if (timelineFilter === 'TELEPHONY') return item.type === 'TELEPHONY_CALL' || item.type === 'CALL_LOG';
                                             if (timelineFilter === 'MESSAGES') return item.type === 'MESSAGE';
                                             if (timelineFilter === 'JOURNALS') return item.type === 'JOURNAL';
                                             if (timelineFilter === 'MEETINGS') return item.type === 'MEETING';
@@ -2330,7 +2374,11 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                         if (filteredItems.length === 0) {
                                             return (
                                                 <div className="text-center text-slate-400 py-10 text-xs border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
-                                                    {timelineFilter === 'TELEPHONY' 
+                                                    {timelineFilter === 'NEW_CALLS'
+                                                        ? 'هیچ تماس جدید یا بی‌پاسخی برای این مخاطب یافت نشد.'
+                                                        : timelineFilter === 'ANSWERED_CALLS'
+                                                        ? 'هیچ تماس پاسخ‌داده‌شده‌ای برای این مخاطب ثبت نشده است.'
+                                                        : timelineFilter === 'TELEPHONY' 
                                                         ? 'هیچ رکورد تماسی در سامانه سانترال برای این شماره ثبت نشده است.'
                                                         : 'هیچ رکوردی برای فیلتر انتخابی یافت نشد.'}
                                                 </div>
@@ -2500,9 +2548,9 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                                                     isSuccessful 
                                                                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' 
-                                                                        : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                                                                 }`}>
-                                                                    {isSuccessful ? '✓ مکالمه برقرار شد' : '✕ بدون مکالمه'}
+                                                                    {isSuccessful ? '✓ پاسخ داده شده' : '⏳ تماس جدید (بی‌پاسخ)'}
                                                                 </span>
                                                                 {tLog.queueName && (
                                                                     <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/60">
@@ -2611,7 +2659,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                 
                                                 // Status styling
                                                 let statusBadgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-                                                let statusLabel = 'موفق';
+                                                let statusLabel = 'پاسخ داده شده';
                                                 if (log?.callStatus === 'MISSED') {
                                                     statusBadgeColor = 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400';
                                                     statusLabel = 'از دست رفته';
@@ -2626,7 +2674,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                     statusLabel = 'رد تماس';
                                                 } else if (log?.callStatus === 'SUCCESSFUL') {
                                                     statusBadgeColor = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400';
-                                                    statusLabel = 'موفق';
+                                                    statusLabel = 'پاسخ داده شده';
                                                 }
 
                                                 const formattedDuration = log && log.duration > 0

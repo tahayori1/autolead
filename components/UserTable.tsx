@@ -351,17 +351,7 @@ const UserTable: React.FC<UserTableProps> = ({
                                                 <span>{user.crmPerson || 'ثبت نشده'}</span>
                                             </div>
 
-                                            {/* 📞 آمار تماس‌های موفق */}
-                                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0">
-                                                <PhoneCall className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                                <span className="text-[11px] font-bold">تماس‌های موفق:</span>
-                                                <span className="font-black font-mono">{(user.successful_calls ?? 0).toLocaleString('fa-IR')}</span>
-                                                {user.last_successful_call && (
-                                                    <span className="text-[10px] text-emerald-600/90 dark:text-emerald-400/90 border-r border-emerald-200 dark:border-emerald-800 pr-1.5 mr-0.5" title="تاریخ آخرین تماس موفق">
-                                                        آخرین: {formatDate(user.last_successful_call)}
-                                                    </span>
-                                                )}
-                                            </div>
+
 
                                             {/* 📝 توضیحات تماس */}
                                             <div className="flex-1 min-w-[220px] flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-white dark:bg-slate-700/60 border border-slate-200/80 dark:border-slate-600/80 text-slate-700 dark:text-slate-200 shadow-2xs">
@@ -457,10 +447,6 @@ const UserTable: React.FC<UserTableProps> = ({
                                     <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
                                         <Headphones className="w-3 h-3 text-sky-500" />
                                         <span>پاسخگو: {user.crmPerson || 'ثبت نشده'}</span>
-                                    </span>
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
-                                        <PhoneCall className="w-3 h-3 text-emerald-500" />
-                                        <span>تماس موفق: {(user.successful_calls ?? 0).toLocaleString('fa-IR')}</span>
                                     </span>
                                     {user.lastEditedBy && (
                                         <span className="text-[10px] text-slate-400 dark:text-slate-500">

@@ -128,7 +128,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
                 City: filters.city && filters.city !== 'all' ? filters.city : undefined,
                 reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
-                leadStatus: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                leadStatus: filters.status && filters.status !== 'all' && (filters.status as string) !== 'in_progress' ? filters.status : undefined,
                 crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
                 lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
             };
@@ -199,7 +199,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                         Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
                         City: filters.city && filters.city !== 'all' ? filters.city : undefined,
                         reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
-                        leadStatus: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                        leadStatus: filters.status && filters.status !== 'all' && (filters.status as string) !== 'in_progress' ? filters.status : undefined,
                         crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
                         lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
                     };
@@ -266,7 +266,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
                     City: filters.city && filters.city !== 'all' ? filters.city : undefined,
                     reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
-                    leadStatus: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                    leadStatus: filters.status && filters.status !== 'all' && (filters.status as string) !== 'in_progress' ? filters.status : undefined,
                     crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
                     lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
                 };
@@ -348,6 +348,32 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         });
         return Array.from(set).sort();
     }, [users, staffUsers]);
+
+    const statusCounts = useMemo(() => {
+        let newCount = 0;
+        let inProgressCount = 0;
+        let noAnswerCount = 0;
+        let wonCount = 0;
+        let lostCount = 0;
+
+        users.forEach(u => {
+            const s = u.leadStatus || LeadStatus.NEW;
+            if (s === LeadStatus.NEW) newCount++;
+            else if (s === LeadStatus.CONTACTED || s === LeadStatus.MEETING || s === LeadStatus.NEGOTIATION) inProgressCount++;
+            else if (s === LeadStatus.NO_ANSWER) noAnswerCount++;
+            else if (s === LeadStatus.WON) wonCount++;
+            else if (s === LeadStatus.LOST) lostCount++;
+        });
+
+        return {
+            all: users.length,
+            new: newCount,
+            inProgress: inProgressCount,
+            noAnswer: noAnswerCount,
+            won: wonCount,
+            lost: lostCount
+        };
+    }, [users]);
     
     const filteredUsers = useMemo(() => {
         const lowercasedQuery = filters.query.toLowerCase();
@@ -451,7 +477,15 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
 
             const carModelMatch = filters.carModel === 'all' || user.CarModel === filters.carModel;
             const referenceMatch = filters.reference === 'all' || user.reference === filters.reference;
-            const statusMatch = filters.status === 'all' || (user.leadStatus || LeadStatus.NEW) === filters.status;
+            let statusMatch = true;
+            if (filters.status === 'all') {
+                statusMatch = true;
+            } else if ((filters.status as string) === 'in_progress') {
+                const s = user.leadStatus;
+                statusMatch = s === LeadStatus.CONTACTED || s === LeadStatus.MEETING || s === LeadStatus.NEGOTIATION;
+            } else {
+                statusMatch = (user.leadStatus || LeadStatus.NEW) === filters.status;
+            }
 
             const provinceMatch = !filters.province || filters.province === 'all' || 
                 (user.Province?.toLowerCase() || '').includes(filters.province.toLowerCase().trim());
@@ -1177,6 +1211,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                         availableLastEditedBys={availableLastEditedBys}
                         isFetching={isFetchingUsers || isRefreshing}
                         totalLoadedCount={users.length}
+                        statusCounts={statusCounts}
                         onClear={() => {
                             setFilters({ 
                                 query: '', 

@@ -15,7 +15,7 @@ import {
     Calendar, Filter, TrendingUp, Activity, ShoppingCart,
     Copy, Check, FileText, Layers, Award, BarChart3, HelpCircle,
     PhoneCall, CheckCircle2, Flame, Share2, FileSpreadsheet, Phone,
-    Trophy
+    Trophy, Search, ArrowUpRight, ArrowDownLeft, Clock
 } from 'lucide-react';
 
 // Declare moment from global scope
@@ -29,6 +29,9 @@ const PERSIAN_MONTHS = [
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
 
 type TimeRange = 'all' | 'today' | 'week' | '28days';
+
+export const isAnsweredCall = (c: CrmCallLog) => c.callStatus === 'SUCCESSFUL' || (c.duration && c.duration > 0);
+export const isNewCall = (c: CrmCallLog) => c.callStatus === 'MISSED' || c.callStatus === 'NO_ANSWER' || c.callStatus === 'REJECTED' || (!c.duration && c.callStatus !== 'SUCCESSFUL');
 
 const StatCard = ({ title, value, subtitle, icon: Icon, color, delay }: any) => (
     <motion.div 
@@ -65,6 +68,37 @@ const ReportsPage: React.FC = () => {
     // Sub-tab selection and notifications
     const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics' | 'meetings' | 'callLogs' | 'staffPerformance'>('kpis');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    // Call logs tab filtering and search state
+    const [callLogsFilter, setCallLogsFilter] = useState<'all' | 'new' | 'answered' | 'outbound' | 'inbound'>('all');
+    const [callLogsSearch, setCallLogsSearch] = useState<string>('');
+
+    const filteredCallLogsList = useMemo(() => {
+        let list = callLogs;
+        if (callLogsFilter === 'new') {
+            list = list.filter(isNewCall);
+        } else if (callLogsFilter === 'answered') {
+            list = list.filter(isAnsweredCall);
+        } else if (callLogsFilter === 'outbound') {
+            list = list.filter(c => c.callType === 'OUTBOUND');
+        } else if (callLogsFilter === 'inbound') {
+            list = list.filter(c => c.callType === 'INBOUND');
+        }
+
+        if (callLogsSearch.trim()) {
+            const query = callLogsSearch.trim().toLowerCase();
+            list = list.filter(c => 
+                (c.customerNumber && c.customerNumber.toLowerCase().includes(query)) ||
+                (c.customerName && c.customerName.toLowerCase().includes(query)) ||
+                (c.agentName && c.agentName.toLowerCase().includes(query)) ||
+                (c.notes && c.notes.toLowerCase().includes(query)) ||
+                ((c as any).callerNumber && String((c as any).callerNumber).toLowerCase().includes(query)) ||
+                ((c as any).calleeNumber && String((c as any).calleeNumber).toLowerCase().includes(query))
+            );
+        }
+
+        return list;
+    }, [callLogs, callLogsFilter, callLogsSearch]);
 
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -107,26 +141,57 @@ const ReportsPage: React.FC = () => {
         const weekStart = now.clone().subtract(6, 'days').startOf('day');
         const month28Start = now.clone().subtract(27, 'days').startOf('day');
 
+        const parseDateMoment = (dateStr?: string) => {
+            if (!dateStr) return null;
+            try {
+                if (dateStr.includes('/')) {
+                    const firstPart = dateStr.split(',')[0].trim();
+                    const parts = firstPart.split('/');
+                    if (parts.length === 3) {
+                        return moment(firstPart, 'jYYYY/jMM/jDD').locale('fa');
+                    }
+                }
+                return moment(dateStr.replace(' ', 'T')).locale('fa');
+            } catch {
+                return null;
+            }
+        };
+
         const dailyLeads: User[] = [];
         const weeklyLeads: User[] = [];
         const month28Leads: User[] = [];
 
         users.forEach(u => {
             const dateStr = u.RegisterTime || u.createdAt;
-            if (!dateStr) return;
-            try {
-                const m = moment(dateStr.replace(' ', 'T')).locale('fa');
-                if (m.isSameOrAfter(todayStart)) {
-                    dailyLeads.push(u);
-                }
-                if (m.isSameOrAfter(weekStart)) {
-                    weeklyLeads.push(u);
-                }
-                if (m.isSameOrAfter(month28Start)) {
-                    month28Leads.push(u);
-                }
-            } catch (e) {}
+            const m = parseDateMoment(dateStr);
+            if (m) {
+                if (m.isSameOrAfter(todayStart)) dailyLeads.push(u);
+                if (m.isSameOrAfter(weekStart)) weeklyLeads.push(u);
+                if (m.isSameOrAfter(month28Start)) month28Leads.push(u);
+            }
         });
+
+        const dailyCalls: CrmCallLog[] = [];
+        const weeklyCalls: CrmCallLog[] = [];
+        const month28Calls: CrmCallLog[] = [];
+
+        callLogs.forEach(c => {
+            const m = parseDateMoment(c.timestamp);
+            if (m) {
+                if (m.isSameOrAfter(todayStart)) dailyCalls.push(c);
+                if (m.isSameOrAfter(weekStart)) weeklyCalls.push(c);
+                if (m.isSameOrAfter(month28Start)) month28Calls.push(c);
+            }
+        });
+
+        const getCallsStats = (logsList: CrmCallLog[]) => {
+            const total = logsList.length;
+            const answered = logsList.filter(isAnsweredCall).length;
+            const newCalls = logsList.filter(isNewCall).length;
+            const outbound = logsList.filter(c => c.callType === 'OUTBOUND').length;
+            const inbound = logsList.filter(c => c.callType === 'INBOUND').length;
+            return { total, answered, newCalls, outbound, inbound };
+        };
 
         const getStatusCounts = (leadsList: User[]) => {
             const counts: Record<string, number> = {
@@ -150,19 +215,25 @@ const ReportsPage: React.FC = () => {
         return {
             daily: {
                 count: dailyLeads.length,
-                status: getStatusCounts(dailyLeads)
+                status: getStatusCounts(dailyLeads),
+                calls: getCallsStats(dailyCalls)
             },
             weekly: {
                 count: weeklyLeads.length,
-                status: getStatusCounts(weeklyLeads)
+                status: getStatusCounts(weeklyLeads),
+                calls: getCallsStats(weeklyCalls)
             },
             month28: {
                 count: month28Leads.length,
-                status: getStatusCounts(month28Leads)
+                status: getStatusCounts(month28Leads),
+                calls: getCallsStats(month28Calls)
             },
-            funnel: getStatusCounts(users)
+            funnel: getStatusCounts(users),
+            allCalls: getCallsStats(callLogs),
+            meetingsCount: meetings.length,
+            journalsCount: customerJournals.length
         };
-    }, [users]);
+    }, [users, callLogs, meetings, customerJournals]);
 
     const handleCopyReport = (period: 'today' | 'week' | '28days' | 'all') => {
         const nowStr = moment().locale('fa').format('YYYY/MM/DD');
@@ -171,9 +242,11 @@ const ReportsPage: React.FC = () => {
         if (period === 'today') {
             const count = kpiStats.daily.count;
             const status = kpiStats.daily.status;
-            text = `📊 *گزارش سرنخ‌های ورودی امروز* 📊
+            const calls = kpiStats.daily.calls;
+            text = `📊 *گزارش سرنخ‌ها و فعالیت‌های CRM امروز* 📊
 📅 تاریخ: ${nowStr}
 ⚡ تعداد کل ورودی: ${count.toLocaleString('fa-IR')} سرنخ 🆕
+📞 تماس‌های ثبت‌شده: ${calls.total.toLocaleString('fa-IR')} تماس (${calls.answered.toLocaleString('fa-IR')} پاسخ داده شده | ${calls.newCalls.toLocaleString('fa-IR')} تماس جدید/بی‌پاسخ)
 
 ---
 🔍 *تفکیک وضعیت سرنخ‌های امروز:*
@@ -189,9 +262,11 @@ const ReportsPage: React.FC = () => {
         } else if (period === 'week') {
             const count = kpiStats.weekly.count;
             const status = kpiStats.weekly.status;
-            text = `📊 *گزارش سرنخ‌های ورودی این هفته (۷ روز اخیر)* 📊
+            const calls = kpiStats.weekly.calls;
+            text = `📊 *گزارش سرنخ‌ها و فعالیت‌های CRM این هفته (۷ روز اخیر)* 📊
 📅 تاریخ گزارش: ${nowStr}
 ⚡ تعداد کل ورودی: ${count.toLocaleString('fa-IR')} سرنخ 📅
+📞 تماس‌های ثبت‌شده: ${calls.total.toLocaleString('fa-IR')} تماس (${calls.answered.toLocaleString('fa-IR')} پاسخ داده شده | ${calls.newCalls.toLocaleString('fa-IR')} تماس جدید/بی‌پاسخ)
 
 ---
 🔍 *تفکیک وضعیت سرنخ‌های این هفته:*
@@ -207,9 +282,11 @@ const ReportsPage: React.FC = () => {
         } else if (period === '28days') {
             const count = kpiStats.month28.count;
             const status = kpiStats.month28.status;
-            text = `📊 *گزارش سرنخ‌های ورودی ۲۸ روز اخیر* 📊
+            const calls = kpiStats.month28.calls;
+            text = `📊 *گزارش سرنخ‌ها و فعالیت‌های CRM در ۲۸ روز اخیر* 📊
 📅 تاریخ گزارش: ${nowStr}
 ⚡ تعداد کل ورودی: ${count.toLocaleString('fa-IR')} سرنخ 🗓️
+📞 تماس‌های ثبت‌شده: ${calls.total.toLocaleString('fa-IR')} تماس (${calls.answered.toLocaleString('fa-IR')} پاسخ داده شده | ${calls.newCalls.toLocaleString('fa-IR')} تماس جدید/بی‌پاسخ)
 
 ---
 🔍 *تفکیک وضعیت سرنخ‌های ۲۸ روز اخیر:*
@@ -223,7 +300,7 @@ const ReportsPage: React.FC = () => {
 
 🚗 *سیستم مدیریت سرنخ‌های حسینی خودرو*`;
         } else {
-            text = `📊 *گزارش جامع شاخص‌های کلیدی عملکرد (KPI)* 📊
+            text = `📊 *گزارش جامع شاخص‌های کلیدی عملکرد (KPI) و تعاملات CRM* 📊
 📅 تاریخ گزارش: ${nowStr}
 
 ---
@@ -233,7 +310,14 @@ const ReportsPage: React.FC = () => {
 ▪️ ۲۸ روز اخیر: ${kpiStats.month28.count.toLocaleString('fa-IR')} سرنخ 🗓️
 
 ---
-⚡ *۲. وضعیت بررسی سرنخ‌های امروز:*
+📞 *۲. شاخص تماس‌های CRM:*
+▪️ کل تماس‌ها: ${kpiStats.allCalls.total.toLocaleString('fa-IR')} تماس
+▪️ تماس‌های پاسخ داده شده: ${kpiStats.allCalls.answered.toLocaleString('fa-IR')} تماس ✅
+▪️ تماس‌های جدید و بی‌پاسخ (در انتظار پیگیری): ${kpiStats.allCalls.newCalls.toLocaleString('fa-IR')} تماس ⏳
+▪️ خروجی توسط کارشناسان: ${kpiStats.allCalls.outbound.toLocaleString('fa-IR')} | ورودی: ${kpiStats.allCalls.inbound.toLocaleString('fa-IR')}
+
+---
+⚡ *۳. وضعیت بررسی سرنخ‌های امروز:*
 🆕 جدید: ${kpiStats.daily.status[LeadStatus.NEW].toLocaleString('fa-IR')}
 📞 تماس گرفته شده: ${kpiStats.daily.status[LeadStatus.CONTACTED].toLocaleString('fa-IR')}
 👥 جلسه حضوری: ${kpiStats.daily.status[LeadStatus.MEETING].toLocaleString('fa-IR')}
@@ -243,7 +327,7 @@ const ReportsPage: React.FC = () => {
 ☎️ پاسخ نداد: ${kpiStats.daily.status[LeadStatus.NO_ANSWER].toLocaleString('fa-IR')}
 
 ---
-📈 *۳. وضعیت بررسی سرنخ‌های این هفته:*
+📈 *۴. وضعیت بررسی سرنخ‌های این هفته:*
 🆕 جدید: ${kpiStats.weekly.status[LeadStatus.NEW].toLocaleString('fa-IR')}
 📞 تماس گرفته شده: ${kpiStats.weekly.status[LeadStatus.CONTACTED].toLocaleString('fa-IR')}
 👥 جلسه حضوری: ${kpiStats.weekly.status[LeadStatus.MEETING].toLocaleString('fa-IR')}
@@ -253,7 +337,7 @@ const ReportsPage: React.FC = () => {
 ☎️ پاسخ نداد: ${kpiStats.weekly.status[LeadStatus.NO_ANSWER].toLocaleString('fa-IR')}
 
 ---
-📊 *۴. وضعیت بررسی سرنخ‌های ۲۸ روز اخیر:*
+📊 *۵. وضعیت بررسی سرنخ‌های ۲۸ روز اخیر:*
 🆕 جدید: ${kpiStats.month28.status[LeadStatus.NEW].toLocaleString('fa-IR')}
 📞 تماس گرفته شده: ${kpiStats.month28.status[LeadStatus.CONTACTED].toLocaleString('fa-IR')}
 👥 جلسه حضوری: ${kpiStats.month28.status[LeadStatus.MEETING].toLocaleString('fa-IR')}
@@ -263,7 +347,7 @@ const ReportsPage: React.FC = () => {
 ☎️ پاسخ نداد: ${kpiStats.month28.status[LeadStatus.NO_ANSWER].toLocaleString('fa-IR')}
 
 ---
-🏆 *۵. قیف فروش کل:*
+🏆 *۶. قیف فروش کل:*
 🏁 سرنخ‌های جدید: ${kpiStats.funnel[LeadStatus.NEW].toLocaleString('fa-IR')}
 📞 تماس‌های برقرار شده: ${kpiStats.funnel[LeadStatus.CONTACTED].toLocaleString('fa-IR')}
 👥 جلسات حضوری: ${kpiStats.funnel[LeadStatus.MEETING].toLocaleString('fa-IR')}
@@ -459,7 +543,7 @@ const ReportsPage: React.FC = () => {
     ) => {
         const nowStr = moment().locale('fa').format('YYYY/MM/DD HH:mm');
         let dateLabel = '';
-        let targetStats = kpiStats.daily;
+        let targetStats: { count: number; status: Record<string, number>; calls?: { total: number; answered: number; newCalls: number; outbound: number; inbound: number; } } = kpiStats.daily;
 
         const getStatusCounts = (leadsList: User[]) => {
             const counts: Record<string, number> = {
@@ -1724,6 +1808,80 @@ const ReportsPage: React.FC = () => {
                             </div>
                         </motion.div>
                     </div>
+
+                    {/* CRM Interactions & Activities Breakdown */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.9 }}
+                        className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700"
+                    >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    <Activity className="w-5 h-5 text-indigo-500" />
+                                    تحلیل تعاملات و ارتباطات CRM (تماس‌ها، جلسات و وقایع)
+                                </h3>
+                                <p className="text-xs text-slate-400 mt-1 font-bold">بر اساس داده‌های همگام لاگ تماس‌های CRM، قرارهای ملاقات و وقایع ثبت‌شده در پرونده‌ها</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-sky-50 dark:bg-sky-950/30 p-4 rounded-2xl border border-sky-100 dark:border-sky-900/40">
+                                <p className="text-[11px] font-bold text-sky-600 dark:text-sky-400">کل تعاملات ثبت شده</p>
+                                <p className="text-2xl font-black text-slate-800 dark:text-white mt-1 font-mono">
+                                    {(callLogs.length + meetings.length + customerJournals.length).toLocaleString('fa-IR')}
+                                </p>
+                            </div>
+                            <div className="bg-emerald-50 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/40">
+                                <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">تماس‌های پاسخ داده شده</p>
+                                <p className="text-2xl font-black text-slate-800 dark:text-white mt-1 font-mono">
+                                    {callLogs.filter(isAnsweredCall).length.toLocaleString('fa-IR')}
+                                </p>
+                            </div>
+                            <div className="bg-rose-50 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-100 dark:border-rose-900/40">
+                                <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">تماس‌های جدید (بی‌پاسخ / پیگیری)</p>
+                                <p className="text-2xl font-black text-slate-800 dark:text-white mt-1 font-mono">
+                                    {callLogs.filter(isNewCall).length.toLocaleString('fa-IR')}
+                                </p>
+                            </div>
+                            <div className="bg-purple-50 dark:bg-purple-950/30 p-4 rounded-2xl border border-purple-100 dark:border-purple-900/40">
+                                <p className="text-[11px] font-bold text-purple-600 dark:text-purple-400">ملاقات‌ها و یادداشت‌های پرونده</p>
+                                <p className="text-2xl font-black text-slate-800 dark:text-white mt-1 font-mono">
+                                    {(meetings.length + customerJournals.length).toLocaleString('fa-IR')}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="h-[280px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart 
+                                    data={[
+                                        { name: 'تماس پاسخ داده شده', value: callLogs.filter(isAnsweredCall).length, fill: '#10b981' },
+                                        { name: 'تماس جدید (بی‌پاسخ)', value: callLogs.filter(isNewCall).length, fill: '#f43f5e' },
+                                        { name: 'جلسه حضوری', value: meetings.length, fill: '#8b5cf6' },
+                                        { name: 'یادداشت پرونده', value: customerJournals.length, fill: '#f59e0b' },
+                                    ]}
+                                    margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#64748b'}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                                    <Tooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
+                                    <Bar dataKey="value" name="تعداد رویداد" radius={[6, 6, 0, 0]} barSize={45}>
+                                        {[
+                                            { fill: '#10b981' },
+                                            { fill: '#f43f5e' },
+                                            { fill: '#8b5cf6' },
+                                            { fill: '#f59e0b' },
+                                        ].map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </motion.div>
                 </div>
             )}
 
@@ -1804,6 +1962,7 @@ const ReportsPage: React.FC = () => {
             {/* Call Logs Tab */}
             {activeSubTab === 'callLogs' && (
                 <div className="space-y-6">
+                    {/* Top Stat Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatCard 
                             title="کل تماس‌های ثبت شده" 
@@ -1813,28 +1972,29 @@ const ReportsPage: React.FC = () => {
                             delay={0.1} 
                         />
                         <StatCard 
-                            title="تماس‌های موفق" 
-                            value={callLogs.filter(c => c.callStatus === 'SUCCESSFUL').length.toLocaleString('fa-IR')} 
+                            title="تماس‌های پاسخ داده شده" 
+                            value={callLogs.filter(isAnsweredCall).length.toLocaleString('fa-IR')} 
                             icon={CheckCircle2} 
                             color="text-emerald-500" 
                             delay={0.2} 
+                        />
+                        <StatCard 
+                            title="تماس‌های جدید (بی‌پاسخ / در انتظار پیگیری)" 
+                            value={callLogs.filter(isNewCall).length.toLocaleString('fa-IR')} 
+                            icon={HelpCircle} 
+                            color="text-rose-500" 
+                            delay={0.3} 
                         />
                         <StatCard 
                             title="ورودی به خروجی" 
                             value={`${callLogs.filter(c => c.callType === 'INBOUND').length.toLocaleString('fa-IR')} / ${callLogs.filter(c => c.callType === 'OUTBOUND').length.toLocaleString('fa-IR')}`} 
                             icon={PhoneCall} 
                             color="text-amber-500" 
-                            delay={0.3} 
-                        />
-                        <StatCard 
-                            title="از دست رفته / بی‌پاسخ" 
-                            value={callLogs.filter(c => c.callStatus === 'MISSED' || c.callStatus === 'NO_ANSWER').length.toLocaleString('fa-IR')} 
-                            icon={HelpCircle} 
-                            color="text-rose-500" 
                             delay={0.4} 
                         />
                     </div>
                     
+                    {/* Charts Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-700">
                             <h3 className="text-lg font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
@@ -1845,8 +2005,8 @@ const ReportsPage: React.FC = () => {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart 
                                         data={[
-                                            { name: 'موفق', value: callLogs.filter(c => c.callStatus === 'SUCCESSFUL').length },
-                                            { name: 'بدون پاسخ', value: callLogs.filter(c => c.callStatus === 'NO_ANSWER').length },
+                                            { name: 'پاسخ داده شده', value: callLogs.filter(isAnsweredCall).length },
+                                            { name: 'تماس جدید (بدون پاسخ)', value: callLogs.filter(c => c.callStatus === 'NO_ANSWER').length },
                                             { name: 'از دست رفته', value: callLogs.filter(c => c.callStatus === 'MISSED').length },
                                             { name: 'مشغول', value: callLogs.filter(c => c.callStatus === 'BUSY').length },
                                             { name: 'رد شده', value: callLogs.filter(c => c.callStatus === 'REJECTED').length },
@@ -1860,8 +2020,8 @@ const ReportsPage: React.FC = () => {
                                         <Bar dataKey="value" name="تعداد تماس" fill="#0ea5e9" radius={[4, 4, 0, 0]} barSize={40}>
                                             {
                                                 [
-                                                    { name: 'موفق', value: callLogs.filter(c => c.callStatus === 'SUCCESSFUL').length },
-                                                    { name: 'بدون پاسخ', value: callLogs.filter(c => c.callStatus === 'NO_ANSWER').length },
+                                                    { name: 'پاسخ داده شده', value: callLogs.filter(isAnsweredCall).length },
+                                                    { name: 'تماس جدید (بدون پاسخ)', value: callLogs.filter(c => c.callStatus === 'NO_ANSWER').length },
                                                     { name: 'از دست رفته', value: callLogs.filter(c => c.callStatus === 'MISSED').length },
                                                     { name: 'مشغول', value: callLogs.filter(c => c.callStatus === 'BUSY').length },
                                                     { name: 'رد شده', value: callLogs.filter(c => c.callStatus === 'REJECTED').length },
@@ -1903,6 +2063,178 @@ const ReportsPage: React.FC = () => {
                                 </ResponsiveContainer>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Dedicated CRM Call Logs Table & Separation Section */}
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    <Phone className="w-5 h-5 text-sky-500" />
+                                    تفکیک و جزئیات لاگ تماس‌های CRM
+                                </h3>
+                                <p className="text-xs text-slate-400 mt-1 font-bold">
+                                    جداسازی تماس‌های جدید (بی‌پاسخ / در انتظار پیگیری) از تماس‌های پاسخ داده شده و خروجی
+                                </p>
+                            </div>
+
+                            {/* Search Box */}
+                            <div className="relative w-full sm:w-64">
+                                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    value={callLogsSearch}
+                                    onChange={(e) => setCallLogsSearch(e.target.value)}
+                                    placeholder="جستجوی شماره، کارشناس..."
+                                    className="w-full pl-3 pr-10 py-2 text-xs font-bold bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-sky-500/20 text-slate-800 dark:text-slate-200 placeholder:text-slate-400"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Filter Tabs */}
+                        <div className="flex flex-wrap items-center gap-2 mb-6 pb-4 border-b border-slate-100 dark:border-slate-700/60">
+                            {[
+                                { id: 'all', label: 'همه تماس‌ها', count: callLogs.length, color: 'sky' },
+                                { id: 'new', label: '⏳ تماس‌های جدید (بی‌پاسخ / پیگیری)', count: callLogs.filter(isNewCall).length, color: 'rose' },
+                                { id: 'answered', label: '✓ پاسخ داده شده', count: callLogs.filter(isAnsweredCall).length, color: 'emerald' },
+                                { id: 'outbound', label: '📤 خروجی', count: callLogs.filter(c => c.callType === 'OUTBOUND').length, color: 'indigo' },
+                                { id: 'inbound', label: '📥 ورودی', count: callLogs.filter(c => c.callType === 'INBOUND').length, color: 'amber' },
+                            ].map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setCallLogsFilter(tab.id as any)}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                        callLogsFilter === tab.id
+                                            ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
+                                            : 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                >
+                                    <span>{tab.label}</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                                        callLogsFilter === tab.id
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                    }`}>
+                                        {tab.count.toLocaleString('fa-IR')}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Call Logs Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right text-xs">
+                                <thead>
+                                    <tr className="border-b border-slate-100 dark:border-slate-700/60 text-slate-400 font-bold">
+                                        <th className="py-3 px-3">جهت تماس</th>
+                                        <th className="py-3 px-3">شماره تماس / مخاطب</th>
+                                        <th className="py-3 px-3">کارشناس مسئول</th>
+                                        <th className="py-3 px-3">وضعیت تماس</th>
+                                        <th className="py-3 px-3">مدت مکالمه</th>
+                                        <th className="py-3 px-3">تاریخ و زمان (شمسی)</th>
+                                        <th className="py-3 px-3">یادداشت و جزئیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                    {filteredCallLogsList.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="py-12 text-center text-slate-400 font-bold">
+                                                هیچ تماسی در این بخش یافت نشد.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredCallLogsList.slice(0, 50).map((call, idx) => {
+                                            const answered = isAnsweredCall(call);
+                                            const isNew = isNewCall(call);
+                                            const isOutbound = call.callType === 'OUTBOUND';
+                                            const durationSec = Number(call.duration) || 0;
+                                            const durationText = durationSec > 0
+                                                ? `${Math.floor(durationSec / 60)}:${(durationSec % 60).toString().padStart(2, '0')}`
+                                                : 'بدون مکالمه';
+
+                                            let dateDisplay = call.timestamp || '-';
+                                            try {
+                                                if (call.timestamp) {
+                                                    const m = moment(call.timestamp.replace(' ', 'T')).locale('fa');
+                                                    if (m.isValid()) {
+                                                        dateDisplay = m.format('jYYYY/jMM/jDD - HH:mm');
+                                                    }
+                                                }
+                                            } catch {
+                                                // keep original
+                                            }
+
+                                            return (
+                                                <tr key={call.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                                                    {/* Direction */}
+                                                    <td className="py-3 px-3">
+                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black ${
+                                                            isOutbound
+                                                                ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400'
+                                                                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+                                                        }`}>
+                                                            {isOutbound ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownLeft className="w-3 h-3" />}
+                                                            {isOutbound ? 'خروجی' : 'ورودی'}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Phone / Caller */}
+                                                    <td className="py-3 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                                        <div>{call.customerNumber || (call as any).callerNumber || (call as any).calleeNumber || 'ناشناس'}</div>
+                                                        {call.customerName && <div className="text-[10px] text-slate-400 font-sans font-normal">{call.customerName}</div>}
+                                                    </td>
+
+                                                    {/* Agent */}
+                                                    <td className="py-3 px-3 font-bold text-slate-700 dark:text-slate-300">
+                                                        {call.agentName || 'سیستم خودکار'}
+                                                    </td>
+
+                                                    {/* Status Badge - STRICTLY NO "موفق" */}
+                                                    <td className="py-3 px-3">
+                                                        {answered ? (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                                                                <Check className="w-3 h-3" />
+                                                                پاسخ داده شده
+                                                            </span>
+                                                        ) : isNew ? (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                                <Clock className="w-3 h-3" />
+                                                                تماس جدید (بی‌پاسخ)
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                                {call.callStatus || 'ثبت شده'}
+                                                            </span>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Duration */}
+                                                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">
+                                                        {durationText}
+                                                    </td>
+
+                                                    {/* Solar Date / Time */}
+                                                    <td className="py-3 px-3 font-mono text-slate-500 text-[11px]">
+                                                        {dateDisplay}
+                                                    </td>
+
+                                                    {/* Notes */}
+                                                    <td className="py-3 px-3 text-slate-500 max-w-xs truncate" title={call.notes || (call as any).disconnectionCause || ''}>
+                                                        {call.notes || (call as any).disconnectionCause || '-'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {filteredCallLogsList.length > 50 && (
+                            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 text-center text-xs text-slate-400 font-bold">
+                                نمایش ۵۰ تماس اخیر از مجموع {filteredCallLogsList.length.toLocaleString('fa-IR')} تماس
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

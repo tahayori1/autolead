@@ -28,7 +28,7 @@ export interface UserFilters {
     query: string; 
     carModel: string; 
     reference: string; 
-    status: LeadStatus | 'all'; 
+    status: LeadStatus | 'all' | 'in_progress'; 
     myLeadsOnly?: boolean; 
     staffUserId?: string; 
     activityFilter?: 'all' | 'no_activity' | 'has_activity';
@@ -52,6 +52,14 @@ interface UserFilterPanelProps {
     availableLastEditedBys?: string[];
     isFetching?: boolean;
     totalLoadedCount?: number;
+    statusCounts?: {
+        all: number;
+        new: number;
+        inProgress: number;
+        noAnswer: number;
+        won: number;
+        lost: number;
+    };
 
     // Optional legacy props to maintain backwards compatibility
     refreshMode?: 'off' | '5s' | '30s' | '1m' | 'custom';
@@ -88,6 +96,7 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
     availableLastEditedBys = [],
     isFetching = false,
     totalLoadedCount,
+    statusCounts,
 }) => {
     // Local draft filters: changes will not send requests until "جستجو و اعمال فیلتر" or Enter is pressed
     const [draftFilters, setDraftFilters] = useState<UserFilters>(filters);
@@ -367,83 +376,157 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
                 </div>
             </div>
 
-            {/* Quick Filter Pills Row (Always visible) */}
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1 ml-1">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    فیلترهای سریع:
-                </span>
+            {/* Merged Unified Quick Filters Row (فیلترهای سریع یکپارچه) */}
+            <div className="bg-slate-100/80 dark:bg-slate-900/60 p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center gap-2 flex-1">
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200 flex items-center gap-1.5 ml-1 shrink-0">
+                        <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>فیلترهای سریع:</span>
+                    </span>
 
-                {/* 1. بدون گزارش فعالیت */}
-                <button
-                    type="button"
-                    onClick={() => toggleActivityFilter('no_activity')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                        draftFilters.activityFilter === 'no_activity'
-                            ? 'bg-amber-500 border-amber-600 text-white shadow-xs ring-2 ring-amber-300 dark:ring-amber-800'
-                            : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100/80 dark:hover:bg-amber-900/30'
-                    }`}
-                    title="نمایش سرنخ‌های بدون ثبت گزارش تماس یا فعالیت"
-                >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>⚠️ بدون گزارش تماس/فعالیت</span>
-                    {draftFilters.activityFilter === 'no_activity' && (
-                        <Check className="w-3 h-3" />
-                    )}
-                </button>
+                    {/* Status Switcher Pills */}
+                    {[
+                        { 
+                            id: 'all', 
+                            label: 'همه سرنخ‌ها', 
+                            count: statusCounts?.all, 
+                            activeClass: 'bg-slate-800 text-white dark:bg-sky-600 shadow-md ring-2 ring-slate-400 dark:ring-sky-400',
+                            inactiveClass: 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700' 
+                        },
+                        { 
+                            id: LeadStatus.NEW, 
+                            label: '🆕 سرنخ جدید (دست‌نخورده)', 
+                            count: statusCounts?.new, 
+                            activeClass: 'bg-blue-600 text-white shadow-md shadow-blue-500/20 ring-2 ring-blue-300',
+                            inactiveClass: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100' 
+                        },
+                        { 
+                            id: 'in_progress', 
+                            label: '📞 پیگیری‌شده / در جریان', 
+                            count: statusCounts?.inProgress, 
+                            activeClass: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 ring-2 ring-indigo-300',
+                            inactiveClass: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100' 
+                        },
+                        { 
+                            id: LeadStatus.NO_ANSWER, 
+                            label: '☎️ پاسخ نداد', 
+                            count: statusCounts?.noAnswer, 
+                            activeClass: 'bg-amber-600 text-white shadow-md shadow-amber-500/20 ring-2 ring-amber-300',
+                            inactiveClass: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100' 
+                        },
+                        { 
+                            id: LeadStatus.WON, 
+                            label: '🎉 خرید موفق', 
+                            count: statusCounts?.won, 
+                            activeClass: 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 ring-2 ring-emerald-300',
+                            inactiveClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100' 
+                        },
+                        { 
+                            id: LeadStatus.LOST, 
+                            label: '❌ ناموفق', 
+                            count: statusCounts?.lost, 
+                            activeClass: 'bg-rose-600 text-white shadow-md shadow-rose-500/20 ring-2 ring-rose-300',
+                            inactiveClass: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100' 
+                        },
+                    ].map(item => {
+                        const isActive = draftFilters.status === item.id;
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                    const updated = { ...draftFilters, status: item.id as any };
+                                    setDraftFilters(updated);
+                                    onFilterChange(updated);
+                                }}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all duration-150 flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                                    isActive ? item.activeClass : item.inactiveClass
+                                }`}
+                            >
+                                <span>{item.label}</span>
+                                {item.count !== undefined && (
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                        isActive ? 'bg-white/20 text-white' : 'bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}>
+                                        {item.count.toLocaleString('fa-IR')}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
 
-                {/* 2. دارای گزارش تماس */}
-                <button
-                    type="button"
-                    onClick={() => toggleActivityFilter('has_activity')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                        draftFilters.activityFilter === 'has_activity'
-                            ? 'bg-emerald-600 border-emerald-700 text-white shadow-xs ring-2 ring-emerald-300 dark:ring-emerald-800'
-                            : 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/30'
-                    }`}
-                    title="نمایش سرنخ‌های دارای گزارش فعالیت"
-                >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>دارای گزارش تماس/فعالیت</span>
-                    {draftFilters.activityFilter === 'has_activity' && (
-                        <Check className="w-3 h-3" />
-                    )}
-                </button>
+                    {/* Divider */}
+                    <div className="h-5 w-px bg-slate-300 dark:bg-slate-700 mx-1 hidden sm:block"></div>
 
-                {/* 3. دارای ملاقات حضوری */}
-                <button
-                    type="button"
-                    onClick={() => toggleMeetingFilter('has_meeting')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                        draftFilters.meetingFilter === 'has_meeting'
-                            ? 'bg-purple-600 border-purple-700 text-white shadow-xs ring-2 ring-purple-300 dark:ring-purple-800'
-                            : 'bg-purple-50/70 dark:bg-purple-950/20 border-purple-200/80 dark:border-purple-800/40 text-purple-800 dark:text-purple-300 hover:bg-purple-100/80 dark:hover:bg-purple-900/30'
-                    }`}
-                    title="نمایش سرنخ‌های دارای جلسه یا ملاقات حضوری"
-                >
-                    <CalendarCheck className="w-3.5 h-3.5" />
-                    <span>🤝 دارای ملاقات حضوری</span>
-                    {draftFilters.meetingFilter === 'has_meeting' && (
-                        <Check className="w-3 h-3" />
-                    )}
-                </button>
+                    {/* Activity Pills */}
+                    <button
+                        type="button"
+                        onClick={() => toggleActivityFilter('no_activity')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                            draftFilters.activityFilter === 'no_activity'
+                                ? 'bg-amber-500 border-amber-600 text-white shadow-xs ring-2 ring-amber-300 dark:ring-amber-800'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750'
+                        }`}
+                        title="نمایش سرنخ‌های بدون ثبت گزارش تماس یا فعالیت"
+                    >
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                        <span>⚠️ بدون گزارش تماس</span>
+                        {draftFilters.activityFilter === 'no_activity' && (
+                            <Check className="w-3 h-3" />
+                        )}
+                    </button>
 
-                {/* 4. بدون ملاقات حضوری */}
-                <button
-                    type="button"
-                    onClick={() => toggleMeetingFilter('no_meeting')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                        draftFilters.meetingFilter === 'no_meeting'
-                            ? 'bg-rose-600 border-rose-700 text-white shadow-xs ring-2 ring-rose-300 dark:ring-rose-800'
-                            : 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-800/40 text-rose-800 dark:text-rose-300 hover:bg-rose-100/80 dark:hover:bg-rose-900/30'
-                    }`}
-                    title="نمایش سرنخ‌های بدون ملاقات حضوری"
-                >
-                    <span>🚫 بدون ملاقات حضوری</span>
-                    {draftFilters.meetingFilter === 'no_meeting' && (
-                        <Check className="w-3 h-3" />
-                    )}
-                </button>
+                    <button
+                        type="button"
+                        onClick={() => toggleActivityFilter('has_activity')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                            draftFilters.activityFilter === 'has_activity'
+                                ? 'bg-emerald-600 border-emerald-700 text-white shadow-xs ring-2 ring-emerald-300 dark:ring-emerald-800'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750'
+                        }`}
+                        title="نمایش سرنخ‌های دارای گزارش فعالیت"
+                    >
+                        <FileText className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>دارای گزارش تماس</span>
+                        {draftFilters.activityFilter === 'has_activity' && (
+                            <Check className="w-3 h-3" />
+                        )}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => toggleMeetingFilter('has_meeting')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                            draftFilters.meetingFilter === 'has_meeting'
+                                ? 'bg-purple-600 border-purple-700 text-white shadow-xs ring-2 ring-purple-300 dark:ring-purple-800'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750'
+                        }`}
+                        title="نمایش سرنخ‌های دارای جلسه یا ملاقات حضوری"
+                    >
+                        <CalendarCheck className="w-3.5 h-3.5 text-purple-500" />
+                        <span>🤝 دارای ملاقات حضوری</span>
+                        {draftFilters.meetingFilter === 'has_meeting' && (
+                            <Check className="w-3 h-3" />
+                        )}
+                    </button>
+
+                    {/* 4. بدون ملاقات حضوری */}
+                    <button
+                        type="button"
+                        onClick={() => toggleMeetingFilter('no_meeting')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                            draftFilters.meetingFilter === 'no_meeting'
+                                ? 'bg-rose-600 border-rose-700 text-white shadow-xs ring-2 ring-rose-300 dark:ring-rose-800'
+                                : 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-800/40 text-rose-800 dark:text-rose-300 hover:bg-rose-100/80 dark:hover:bg-rose-900/30'
+                        }`}
+                        title="نمایش سرنخ‌های بدون ملاقات حضوری"
+                    >
+                        <span>🚫 بدون ملاقات حضوری</span>
+                        {draftFilters.meetingFilter === 'no_meeting' && (
+                            <Check className="w-3 h-3" />
+                        )}
+                    </button>
+                </div>
 
                 {/* Advanced Filters Toggle Button (Styled as a sleek quick-filter pill) */}
                 <button

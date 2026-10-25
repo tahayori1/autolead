@@ -586,7 +586,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
             leaderboardText += `${medal} *${s.name}*
    ⚡ امتیاز و شاخص فعالیت: *${s.performanceScore.toLocaleString('fa-IR')}* | رتبه: *${(idx + 1).toLocaleString('fa-IR')}*
-   📞 تماس‌های گرفته شده: *${s.totalCalls.toLocaleString('fa-IR')}* تماس (${s.successfulCalls.toLocaleString('fa-IR')} موفق | ${s.outboundCalls.toLocaleString('fa-IR')} خروجی)
+   📞 تماس‌های گرفته شده: *${s.totalCalls.toLocaleString('fa-IR')}* تماس (${s.successfulCalls.toLocaleString('fa-IR')} پاسخ‌داده شده | ${s.outboundCalls.toLocaleString('fa-IR')} خروجی)
    🏆 معاملات موفق: *${s.totalWonDeals.toLocaleString('fa-IR')}* معامله قطعی ✅
    📝 گزارشات و تاریخچه ثبت شده: *${s.totalReportsAndHistories.toLocaleString('fa-IR')}* گزارش و یادداشت در CRM
    🤝 قرارهای ملاقات ثبت شده: *${s.totalMeetings.toLocaleString('fa-IR')}* جلسه (${s.completedMeetings.toLocaleString('fa-IR')} برگزار شده)
@@ -601,7 +601,7 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
 ━━━━━━━━━━━━━━━━━━━━
 🎯 *خلاصه ۵ معیار اصلی عملکرد در سطح کل سازمان:*
 1️⃣ ⚡ شاخص کل فعالیت در CRM: ${teamTotals.totalCrmActivities.toLocaleString('fa-IR')} اقدام و تعامل
-2️⃣ 📞 کل تماس‌های گرفته شده: ${teamTotals.totalCalls.toLocaleString('fa-IR')} تماس (${teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} موفق)
+2️⃣ 📞 کل تماس‌های گرفته شده: ${teamTotals.totalCalls.toLocaleString('fa-IR')} تماس (${teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} پاسخ‌داده شده)
 3️⃣ 🏆 کل معاملات موفق (Won): ${teamTotals.totalWonDeals.toLocaleString('fa-IR')} معامله
 4️⃣ 📝 گزارشات و تاریخچه‌های ثبت‌شده در CRM: ${teamTotals.totalReportsAndHistories.toLocaleString('fa-IR')} گزارش
 5️⃣ 🤝 کل قرارهای ملاقات ثبت‌شده: ${teamTotals.totalMeetings.toLocaleString('fa-IR')} جلسه (${teamTotals.totalCompletedMeetings.toLocaleString('fa-IR')} برگزار شده)
@@ -950,7 +950,7 @@ ${leaderboardText}
                         <span className="text-[10px] text-slate-400">تماس</span>
                     </div>
                     <p className="text-[10px] text-sky-600 dark:text-sky-400 mt-1 font-bold">
-                        {teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} تماس موفق پاسخ‌داده
+                        {teamTotals.totalSuccessfulCalls.toLocaleString('fa-IR')} تماس پاسخ‌داده شده
                     </p>
                 </motion.div>
 
@@ -1460,7 +1460,7 @@ ${leaderboardText}
                                                     <span className="text-[10px] text-slate-400">تماس</span>
                                                 </div>
                                                 <span className="text-[10px] text-slate-400 block font-mono">
-                                                    {staff.successfulCalls} موفق | {staff.outboundCalls} خروجی
+                                                    {staff.successfulCalls} پاسخ‌داده | {staff.outboundCalls} خروجی
                                                 </span>
                                             </td>
 
@@ -1612,7 +1612,7 @@ ${leaderboardText}
                                         <span className="text-lg font-black text-sky-600 dark:text-sky-400 font-mono">
                                             {selectedStaffForModal.totalCalls.toLocaleString('fa-IR')}
                                         </span>
-                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.successfulCalls} موفق</span>
+                                        <span className="text-[9px] text-slate-400 block mt-1">{selectedStaffForModal.successfulCalls} پاسخ‌داده</span>
                                     </div>
 
                                     {/* 3. معاملات موفق */}
@@ -1661,7 +1661,7 @@ ${leaderboardText}
                                                 <span className="font-black text-sky-600 font-mono">{selectedStaffForModal.inboundCalls} تماس</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-500">تماس موفق و موثر:</span>
+                                                <span className="text-slate-500">تماس‌های پاسخ‌داده شده:</span>
                                                 <span className="font-black text-emerald-600 font-mono">{selectedStaffForModal.successfulCalls} ({selectedStaffForModal.callSuccessRate}٪)</span>
                                             </div>
                                             <div className="flex justify-between items-center">
