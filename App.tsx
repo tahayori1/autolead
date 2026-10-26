@@ -34,6 +34,7 @@ import AttendancePage from './pages/AttendancePage';
 import BankLetterPage from './pages/BankLetterPage';
 import StorageCenterPage from './pages/StorageCenterPage';
 import RequestsHubPage from './pages/RequestsHubPage';
+import OperatorCallScoresPage from './pages/OperatorCallScoresPage';
 import Spinner from './components/Spinner';
 import { LogoutIcon } from './components/icons/LogoutIcon';
 import { SettingsIcon } from './components/icons/SettingsIcon';
@@ -63,7 +64,9 @@ import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './serv
 import type { MyProfile } from './types';
 import AutoRefreshWidget from './components/AutoRefreshWidget';
 
-export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
+export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'operator-scores' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
+
+
 
 interface MenuItemProps {
     label: string;
@@ -395,6 +398,7 @@ const App: React.FC = () => {
             icon: <ChartBarIcon className="w-5 h-5" />,
             items: [
                 { view: 'reports' as ActiveView, label: 'گزارشات و نمودارها', icon: <ChartBarIcon className="w-5 h-5" /> },
+                { view: 'operator-scores' as ActiveView, label: 'آمار پاسخگویی اپراتورها', icon: <Phone className="w-5 h-5 text-sky-500" /> },
                 { view: 'commission' as ActiveView, label: 'کمسیون و پاداش', icon: <CalculatorIcon className="w-5 h-5" /> },
                 { view: 'poll' as ActiveView, label: 'نظرسنجی مشتریان', icon: <PollIcon className="w-5 h-5" /> },
             ]
@@ -638,7 +642,9 @@ const App: React.FC = () => {
                 {activeView === 'access-control' && <AccessControlPage />}
                 {activeView === 'poll' && <PollPage />}
                 {activeView === 'reports' && <ReportsPage />}
+                {activeView === 'operator-scores' && <OperatorCallScoresPage />}
                 {activeView === 'settings' && <SettingsPage />}
+
                 {activeView === 'commission' && <CommissionPage />}
                 {activeView === 'corrective-actions' && <CorrectiveActionsPage />}
                 {activeView === 'meeting-minutes' && <MeetingMinutesPage />}

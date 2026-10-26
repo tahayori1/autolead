@@ -1183,5 +1183,18 @@ export interface EmployeeTimesheet {
     source: 'api' | 'csv_import' | 'manual' | 'sample';
 }
 
+export interface CallScoreItem {
+    report_type: 'total' | 'agent';
+    agent_name: string;
+    successful_calls_1_day: number;
+    successful_calls_yesterday?: number;
+    successful_calls_1_week: number;
+    successful_calls_4_weeks: number;
+    successful_calls_8_weeks: number;
+    successful_calls_12_weeks: number;
+    successful_calls_24_weeks: number;
+}
+
+
 
 

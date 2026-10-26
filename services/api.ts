@@ -43,8 +43,10 @@ import type {
     CollaborationCar,
     OrderPartner,
     StorageItem,
-    StockTransaction
+    StockTransaction,
+    CallScoreItem
 } from '../types';
+
 
 export type { StorageItem, StockTransaction };
 
@@ -3588,6 +3590,19 @@ export const deleteStockMovement = async (id: string | number, revertStock: bool
 
 // --- Attendance / Timesheet Services ---
 export * from './timesheetService';
+
+// --- Operator Call Scores API ---
+export const CALL_SCORE_API_URL = `${API_BASE_URL}/call_score`;
+
+export const getCallScores = async (): Promise<CallScoreItem[]> => {
+    ensureOnline();
+    const response = await fetch(CALL_SCORE_API_URL, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+    });
+    const data = await handleResponse(response);
+    return Array.isArray(data) ? data : [];
+};
 
 
 

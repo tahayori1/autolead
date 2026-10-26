@@ -199,87 +199,66 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
         return customerJournals.filter(j => isDateInPeriod(j.createdAt));
     }, [customerJournals, period, customStartYear, customStartMonth, customStartDay, customEndYear, customEndMonth, customEndDay]);
 
-    // Build consolidated list of staff identities
+    // Build consolidated list of staff identities with full name resolution
     const staffMembersMap = useMemo(() => {
-        const map = new Map<string, { id: string; name: string; username: string; role: string }>();
+        const map = new Map<string, { id: string; name: string; username: string; mobile?: string; role: string }>();
+
+        const resolveStaffName = (identifier?: string | null): string => {
+            if (!identifier) return '';
+            const cleanId = identifier.trim();
+            const cleanDigits = cleanId.replace(/\D/g, '');
+
+            const found = staffUsers.find(s => {
+                const sFull = (s.fullName || s.full_name || '').trim();
+                const sUsername = (s.username || '').trim();
+                const sMobile = (s.mobile || '').replace(/\D/g, '');
+                const sPhone = (s.phone || '').replace(/\D/g, '');
+
+                return (sFull && sFull.toLowerCase() === cleanId.toLowerCase()) ||
+                       (sUsername && sUsername.toLowerCase() === cleanId.toLowerCase()) ||
+                       (sMobile && cleanDigits && (sMobile.endsWith(cleanDigits.slice(-10)) || cleanDigits.endsWith(sMobile.slice(-10)))) ||
+                       (sPhone && cleanDigits && (sPhone.endsWith(cleanDigits.slice(-10)) || cleanDigits.endsWith(sPhone.slice(-10))));
+            });
+
+            if (found) {
+                return (found.fullName || found.full_name || found.username).trim();
+            }
+            return cleanId;
+        };
 
         // 1. From staffUsers
         staffUsers.forEach(s => {
-            const key = s.fullName?.trim() || s.username?.trim();
-            if (key) {
-                map.set(key, {
+            const displayName = (s.fullName || s.full_name || s.username || '').trim();
+            if (displayName) {
+                map.set(displayName, {
                     id: String(s.id),
-                    name: s.fullName?.trim() || s.username?.trim(),
-                    username: s.username?.trim() || s.fullName?.trim(),
+                    name: displayName,
+                    username: s.username?.trim() || displayName,
+                    mobile: s.mobile || undefined,
                     role: s.role === 'ADMIN' ? 'مدیر سیستم / فروش' : 'کارشناس فروش'
                 });
             }
         });
 
-        // 2. From call logs
-        filteredCallLogs.forEach(c => {
-            const agent = c.agentName?.trim();
-            if (agent && !map.has(agent)) {
-                map.set(agent, {
-                    id: agent,
-                    name: agent,
-                    username: agent,
+        const addIdentifierToMap = (rawId?: string | null) => {
+            if (!rawId || !rawId.trim()) return;
+            const resolvedName = resolveStaffName(rawId);
+            if (!map.has(resolvedName)) {
+                map.set(resolvedName, {
+                    id: rawId,
+                    name: resolvedName,
+                    username: rawId,
                     role: 'کارشناس فروش'
                 });
             }
-        });
+        };
 
-        // 3. From customer journals
-        filteredCustomerJournals.forEach(j => {
-            const author = j.author?.trim();
-            if (author && !map.has(author)) {
-                map.set(author, {
-                    id: author,
-                    name: author,
-                    username: author,
-                    role: 'کارشناس فروش'
-                });
-            }
-        });
-
-        // 4. From meetings
-        filteredMeetings.forEach(m => {
-            const agent = m.agentName?.trim();
-            if (agent && !map.has(agent)) {
-                map.set(agent, {
-                    id: agent,
-                    name: agent,
-                    username: agent,
-                    role: 'کارشناس فروش'
-                });
-            }
-        });
-
-        // 5. From leads
-        filteredLeads.forEach(u => {
-            const person = u.reservedByUserName?.trim() || u.crmPerson?.trim();
-            if (person && !map.has(person)) {
-                map.set(person, {
-                    id: person,
-                    name: person,
-                    username: person,
-                    role: 'کارشناس فروش'
-                });
-            }
-        });
-
-        // 6. From orders
-        filteredOrders.forEach(o => {
-            const creator = o.createdBy?.trim();
-            if (creator && !map.has(creator)) {
-                map.set(creator, {
-                    id: creator,
-                    name: creator,
-                    username: creator,
-                    role: 'کارشناس فروش'
-                });
-            }
-        });
+        // 2-6. Add from call logs, journals, meetings, leads, and orders
+        filteredCallLogs.forEach(c => addIdentifierToMap(c.agentName));
+        filteredCustomerJournals.forEach(j => addIdentifierToMap(j.author));
+        filteredMeetings.forEach(m => addIdentifierToMap(m.agentName));
+        filteredLeads.forEach(u => addIdentifierToMap(u.reservedByUserName || u.crmPerson));
+        filteredOrders.forEach(o => addIdentifierToMap(o.createdBy));
 
         return map;
     }, [staffUsers, filteredCallLogs, filteredCustomerJournals, filteredMeetings, filteredLeads, filteredOrders]);
@@ -292,12 +271,20 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
             const nameLower = staffInfo.name.toLowerCase();
             const usernameLower = staffInfo.username.toLowerCase();
 
-            // Matching helper
+            // Enhanced Matching helper
             const isMatch = (target?: string | null) => {
                 if (!target) return false;
                 const t = target.trim().toLowerCase();
-                return t === nameLower || t === usernameLower || t === staffKey.toLowerCase();
+                if (t === nameLower || t === usernameLower || t === staffKey.toLowerCase()) return true;
+                
+                const tClean = t.replace(/\D/g, '');
+                if (tClean && staffInfo.mobile) {
+                    const mClean = staffInfo.mobile.replace(/\D/g, '');
+                    if (mClean && (mClean.endsWith(tClean.slice(-10)) || tClean.endsWith(mClean.slice(-10)))) return true;
+                }
+                return false;
             };
+
 
             // -------------------------------------------------------------
             // Criterion 1 & CRM Activity: Leads assigned & managed

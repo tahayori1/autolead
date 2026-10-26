@@ -5,6 +5,8 @@ import type { User, Car, CarOrder, CrmCallLog, CrmMeeting, StaffUser, CustomerJo
 import { OrderStatus, LeadStatus } from '../types';
 import Spinner from '../components/Spinner';
 import { StaffPerformanceReport } from '../components/StaffPerformanceReport';
+import { OperatorCallScoresPage } from './OperatorCallScoresPage';
+
 import { motion } from 'framer-motion';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -66,7 +68,8 @@ const ReportsPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     
     // Sub-tab selection and notifications
-    const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics' | 'meetings' | 'callLogs' | 'staffPerformance'>('kpis');
+    const [activeSubTab, setActiveSubTab] = useState<'kpis' | 'analytics' | 'meetings' | 'callLogs' | 'staffPerformance' | 'operatorScores'>('kpis');
+
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     // Call logs tab filtering and search state
@@ -908,6 +911,17 @@ const ReportsPage: React.FC = () => {
                         گزارش ملاقات‌ها
                     </button>
                     <button
+                        onClick={() => setActiveSubTab('operatorScores')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                            activeSubTab === 'operatorScores'
+                            ? 'bg-sky-600 text-white shadow-md'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}
+                    >
+                        <PhoneCall className="w-4 h-4 text-sky-400" />
+                        آمار پاسخگویی اپراتورها 📞
+                    </button>
+                    <button
                         onClick={() => setActiveSubTab('callLogs')}
                         className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
                             activeSubTab === 'callLogs'
@@ -921,8 +935,14 @@ const ReportsPage: React.FC = () => {
                 </div>
             </div>
 
+            {/* Dedicated Operator Call Scores Dashboard Tab */}
+            {activeSubTab === 'operatorScores' && (
+                <OperatorCallScoresPage />
+            )}
+
             {/* Global Date Filters Card (shown for general KPIs, analytics, meetings, callLogs) */}
-            {activeSubTab !== 'staffPerformance' && (
+            {activeSubTab !== 'staffPerformance' && activeSubTab !== 'operatorScores' && (
+
             <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
