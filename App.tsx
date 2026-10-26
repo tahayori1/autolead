@@ -1,5 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getHiddenMenuItems, MANDATORY_MENU_ITEMS } from './utils/menuConfig';
+
 import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone, Landmark, Bot, Store, Car } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import AiAssistantPage from './pages/AiAssistantPage';
@@ -99,6 +101,17 @@ const App: React.FC = () => {
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [currentUser, setCurrentUser] = useState<MyProfile | null>(null);
 
+    // Hidden Menu Items Visibility State
+    const [hiddenMenuItems, setHiddenMenuItems] = useState<string[]>(() => getHiddenMenuItems());
+
+    useEffect(() => {
+        const handleMenuVisibility = () => {
+            setHiddenMenuItems(getHiddenMenuItems());
+        };
+        window.addEventListener('menu-visibility-changed', handleMenuVisibility);
+        return () => window.removeEventListener('menu-visibility-changed', handleMenuVisibility);
+    }, []);
+
     // Global Auto-Refresh States
     const [refreshInterval, setRefreshInterval] = useState<number>(() => {
         const saved = localStorage.getItem('globalRefreshInterval');
@@ -106,6 +119,7 @@ const App: React.FC = () => {
     });
     const [countdown, setCountdown] = useState<number | null>(null);
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
 
     const triggerManualRefresh = () => {
         setIsRefreshing(true);
@@ -269,18 +283,6 @@ const App: React.FC = () => {
         }
     };
 
-    if (isLoading) {
-        return (
-            <div className="flex h-screen justify-center items-center bg-slate-100 dark:bg-slate-900">
-                <Spinner />
-            </div>
-        );
-    }
-
-    if (!isAuthenticated) {
-        return <LoginPage onLoginSuccess={handleLoginSuccess} />;
-    }
-
     // Flat list of all available menu items for mobile more menu mapping
     const flatMenuItems = [
         { view: 'home' as ActiveView, label: 'داشبورد', icon: <HomeIcon className="w-5 h-5" /> },
@@ -419,6 +421,43 @@ const App: React.FC = () => {
         },
     ];
 
+    // Filter menu groups and items based on hiddenMenuItems
+    const visibleMenuGroups = useMemo(() => {
+        return menuGroups
+            .filter(group => {
+                const hasMandatory = group.items.some(i => MANDATORY_MENU_ITEMS.includes(i.view));
+                if (hasMandatory) return true;
+                return !hiddenMenuItems.includes(group.id);
+            })
+            .map(group => ({
+                ...group,
+                items: group.items.filter(item => {
+                    if (MANDATORY_MENU_ITEMS.includes(item.view)) return true;
+                    return !hiddenMenuItems.includes(item.view);
+                })
+            }))
+            .filter(group => group.items.length > 0);
+    }, [menuGroups, hiddenMenuItems]);
+
+    const visibleFlatMenuItems = useMemo(() => {
+        return flatMenuItems.filter(item => {
+            if (MANDATORY_MENU_ITEMS.includes(item.view)) return true;
+            return !hiddenMenuItems.includes(item.view);
+        });
+    }, [flatMenuItems, hiddenMenuItems]);
+
+    if (isLoading) {
+        return (
+            <div className="flex h-screen justify-center items-center bg-slate-100 dark:bg-slate-900">
+                <Spinner />
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    }
+
     return (
         <div className="flex h-screen bg-[#F2F4F7] dark:bg-[#0f172a] font-vazir text-right overflow-hidden">
             {/* Sidebar */}
@@ -444,8 +483,9 @@ const App: React.FC = () => {
                 </div>
 
                 <nav className="flex-1 space-y-1 pr-1">
-                    {menuGroups.map((group) => {
+                    {visibleMenuGroups.map((group) => {
                         if (group.items.length === 0) return null;
+
 
                         const isOpen = Boolean(openCategories[group.id]);
                         const hasActiveChild = group.items.some(child => child.view === activeView);
@@ -519,10 +559,12 @@ const App: React.FC = () => {
                     <HomeIcon className="w-6 h-6" />
                     <span className="text-[10px] mt-1 font-bold">خانه</span>
                 </button>
-                <button onClick={() => setActiveView('car-orders')} className={`flex flex-col items-center p-2 ${activeView === 'car-orders' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400'}`}>
-                    <ClipboardListIcon className="w-6 h-6" />
-                    <span className="text-[10px] mt-1 font-bold">سفارشات</span>
-                </button>
+                {!hiddenMenuItems.includes('car-orders') && (
+                    <button onClick={() => setActiveView('car-orders')} className={`flex flex-col items-center p-2 ${activeView === 'car-orders' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400'}`}>
+                        <ClipboardListIcon className="w-6 h-6" />
+                        <span className="text-[10px] mt-1 font-bold">سفارشات</span>
+                    </button>
+                )}
                 <button onClick={() => setActiveView('users')} className={`flex flex-col items-center p-2 ${activeView === 'users' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400'}`}>
                     <UsersIcon className="w-6 h-6" />
                     <span className="text-[10px] mt-1 font-bold">CRM</span>
@@ -554,7 +596,8 @@ const App: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-3 gap-4">
-                            {flatMenuItems
+                            {visibleFlatMenuItems
+
                                 .filter(item => {
                                     // Hide access-control, settings and advertising-campaigns for non-admins
                                     if (['access-control', 'settings', 'advertising-campaigns'].includes(item.view) && currentUser?.isAdmin !== 1) {

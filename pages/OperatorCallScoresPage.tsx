@@ -66,11 +66,9 @@ export const resolveAgentDisplayName = (agentName: string, staffUsers: StaffUser
     
     const matchedStaff = staffUsers.find(s => {
         const sMobile = (s.mobile || '').replace(/\D/g, '');
-        const sPhone = (s.phone || '').replace(/\D/g, '');
         const sUsername = (s.username || '').trim();
         const sFull = (s.fullName || s.full_name || '').trim();
         return (sMobile && cleanRaw.endsWith(sMobile.slice(-10))) || 
-               (sPhone && cleanRaw.endsWith(sPhone.slice(-10))) ||
                (sUsername && (agentName === sUsername || cleanRaw === sUsername)) ||
                (sFull && agentName === sFull);
     });
@@ -325,7 +323,7 @@ export const OperatorCallScoresPage: React.FC = () => {
             const display = resolveAgentDisplayName(agent.agent_name, staffUsers);
             const count = Number(agent[currentPeriodField]) || 0;
             const share = currentPeriodTotal > 0 ? ((count / currentPeriodTotal) * 100).toFixed(1) : '0';
-            report += `${idx + 1}. ${display.title}: ${count.toLocaleString('fa-IR')} تماس (${share.toLocaleString('fa-IR')}٪)\n`;
+            report += `${idx + 1}. ${display.title}: ${count.toLocaleString('fa-IR')} تماس (${Number(share).toLocaleString('fa-IR')}٪)\n`;
         });
 
         if (navigator.clipboard && window.isSecureContext) {
@@ -1032,7 +1030,7 @@ export const OperatorCallScoresPage: React.FC = () => {
                                                         ></div>
                                                     </div>
                                                     <span className="font-mono text-xs text-slate-600 dark:text-slate-300">
-                                                        {sharePct.toFixed(1).toLocaleString('fa-IR')}٪
+                                                        {Number(sharePct.toFixed(1)).toLocaleString('fa-IR')}٪
                                                     </span>
                                                 </div>
                                             </td>

@@ -212,12 +212,10 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
                 const sFull = (s.fullName || s.full_name || '').trim();
                 const sUsername = (s.username || '').trim();
                 const sMobile = (s.mobile || '').replace(/\D/g, '');
-                const sPhone = (s.phone || '').replace(/\D/g, '');
 
                 return (sFull && sFull.toLowerCase() === cleanId.toLowerCase()) ||
                        (sUsername && sUsername.toLowerCase() === cleanId.toLowerCase()) ||
-                       (sMobile && cleanDigits && (sMobile.endsWith(cleanDigits.slice(-10)) || cleanDigits.endsWith(sMobile.slice(-10)))) ||
-                       (sPhone && cleanDigits && (sPhone.endsWith(cleanDigits.slice(-10)) || cleanDigits.endsWith(sPhone.slice(-10))));
+                       (sMobile && cleanDigits && (sMobile.endsWith(cleanDigits.slice(-10)) || cleanDigits.endsWith(sMobile.slice(-10))));
             });
 
             if (found) {
@@ -489,8 +487,8 @@ export const StaffPerformanceReport: React.FC<StaffPerformanceReportProps> = ({
 
         // Sorting
         list.sort((a, b) => {
-            let valA = a[sortField];
-            let valB = b[sortField];
+            let valA: any = a[sortField];
+            let valB: any = b[sortField];
             if (typeof valA === 'string') valA = (valA as string).toLowerCase();
             if (typeof valB === 'string') valB = (valB as string).toLowerCase();
 
