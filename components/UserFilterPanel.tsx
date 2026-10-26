@@ -61,6 +61,12 @@ interface UserFilterPanelProps {
         lost: number;
     };
 
+    // On-demand lazy loading callbacks to minimize initial CRM API calls
+    onOpenAdvanced?: () => void;
+    isLoadingFilterOptions?: boolean;
+    onNeedActivityData?: () => void;
+    onNeedMeetingData?: () => void;
+
     // Optional legacy props to maintain backwards compatibility
     refreshMode?: 'off' | '5s' | '30s' | '1m' | 'custom';
     onRefreshModeChange?: (mode: 'off' | '5s' | '30s' | '1m' | 'custom') => void;
@@ -97,6 +103,10 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
     isFetching = false,
     totalLoadedCount,
     statusCounts,
+    onOpenAdvanced,
+    isLoadingFilterOptions = false,
+    onNeedActivityData,
+    onNeedMeetingData,
 }) => {
     // Local draft filters: changes will not send requests until "جستجو و اعمال فیلتر" or Enter is pressed
     const [draftFilters, setDraftFilters] = useState<UserFilters>(filters);
@@ -133,8 +143,22 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
         onFilterChange(updated);
     };
 
+    // Toggle advanced filters and request filter options on demand
+    const handleToggleAdvanced = () => {
+        setIsAdvancedOpen(prev => {
+            const next = !prev;
+            if (next && onOpenAdvanced) {
+                onOpenAdvanced();
+            }
+            return next;
+        });
+    };
+
     // Activity pill filter toggle
     const toggleActivityFilter = (type: 'no_activity' | 'has_activity') => {
+        if (onNeedActivityData) {
+            onNeedActivityData();
+        }
         const newval: 'all' | 'no_activity' | 'has_activity' = draftFilters.activityFilter === type ? 'all' : type;
         const updated: UserFilters = { ...draftFilters, activityFilter: newval };
         setDraftFilters(updated);
@@ -143,6 +167,9 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
 
     // Meeting pill filter toggle
     const toggleMeetingFilter = (type: 'has_meeting' | 'no_meeting') => {
+        if (onNeedMeetingData) {
+            onNeedMeetingData();
+        }
         const newval: 'all' | 'has_meeting' | 'no_meeting' = draftFilters.meetingFilter === type ? 'all' : type;
         const updated: UserFilters = { ...draftFilters, meetingFilter: newval };
         setDraftFilters(updated);
@@ -531,7 +558,12 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
                 {/* Advanced Filters Toggle Button (Styled as a sleek quick-filter pill) */}
                 <button
                     type="button"
-                    onClick={() => setIsAdvancedOpen(prev => !prev)}
+                    onClick={handleToggleAdvanced}
+                    onMouseEnter={() => {
+                        if (!isAdvancedOpen && onOpenAdvanced) {
+                            onOpenAdvanced();
+                        }
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs mr-auto ${
                         isAdvancedOpen
                             ? 'bg-sky-600 border-sky-700 text-white'
@@ -539,10 +571,13 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
                             ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-400 text-sky-700 dark:text-sky-300 ring-1 ring-sky-400'
                             : 'bg-slate-100/90 dark:bg-slate-700/80 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600'
                     }`}
-                    title={isAdvancedOpen ? 'بستن سایر فیلترها' : 'نمایش سایر فیلترها'}
+                    title={isAdvancedOpen ? 'بستن سایر فیلترها' : 'نمایش سایر فیلترها (بارگذاری گزینه‌ها)'}
                 >
                     <SlidersHorizontal className="w-3.5 h-3.5" />
                     <span>فیلترهای بیشتر</span>
+                    {isLoadingFilterOptions && (
+                        <Loader2 className="w-3 h-3 animate-spin text-sky-400 dark:text-sky-200" />
+                    )}
                     {activeAdvancedFilterCount > 0 && (
                         <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-white/90 text-sky-800 dark:bg-slate-800 dark:text-sky-300">
                             {activeAdvancedFilterCount.toLocaleString('fa-IR')}
@@ -632,12 +667,16 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
                             <select
                                 id="reference-filter"
                                 name="reference"
+                                onFocus={() => onOpenAdvanced?.()}
                                 className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 outline-none cursor-pointer pr-1 max-w-[130px] truncate"
                                 value={draftFilters.reference}
                                 onChange={(e) => handleDraftChange('reference', e.target.value)}
                                 onKeyDown={handleKeyDown}
                             >
                                 <option value="all" className="dark:bg-slate-800">همه مراجع</option>
+                                {isLoadingFilterOptions && references.length === 0 && (
+                                    <option disabled value="" className="dark:bg-slate-800">⏳ در حال بارگذاری مراجع...</option>
+                                )}
                                 {references.map(ref => (
                                     <option key={ref.reference} value={ref.reference} className="dark:bg-slate-800">{ref.reference}</option>
                                 ))}
@@ -728,12 +767,21 @@ const UserFilterPanel: React.FC<UserFilterPanelProps> = ({
                             <select
                                 id="staff-user-filter"
                                 name="staffUserId"
+                                onFocus={() => onOpenAdvanced?.()}
                                 className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 outline-none cursor-pointer pr-1 max-w-[120px] truncate"
                                 value={draftFilters.staffUserId || 'all'}
-                                onChange={(e) => handleDraftChange('staffUserId', e.target.value)}
+                                onChange={(e) => {
+                                    if (e.target.value !== 'all' && onNeedActivityData) {
+                                        onNeedActivityData();
+                                    }
+                                    handleDraftChange('staffUserId', e.target.value);
+                                }}
                                 onKeyDown={handleKeyDown}
                             >
                                 <option value="all" className="dark:bg-slate-800">همه کارشناسان</option>
+                                {isLoadingFilterOptions && staffUsers.length === 0 && (
+                                    <option disabled value="" className="dark:bg-slate-800">⏳ در حال بارگذاری کارشناسان...</option>
+                                )}
                                 {staffUsers.map(user => (
                                     <option key={user.id} value={user.id} className="dark:bg-slate-800">{user.fullName || user.username}</option>
                                 ))}

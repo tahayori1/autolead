@@ -37,6 +37,15 @@ const ITEMS_PER_PAGE = 50;
 
 type SortConfig = { key: keyof User; direction: 'ascending' | 'descending' } | null;
 
+// Module-level in-memory cache to prevent re-requesting across navigation
+let cachedReferences: Reference[] | null = null;
+let cachedStaffUsers: StaffUser[] | null = null;
+let cachedCars: Car[] | null = null;
+let cachedConditions: CarSaleCondition[] | null = null;
+let cachedCallLogs: any[] | null = null;
+let cachedCustomerJournals: any[] | null = null;
+let cachedCrmMeetings: CrmMeeting[] | null = null;
+
 interface UsersPageProps {
     initialFilters: { carModel?: string };
     onFiltersCleared: () => void;
@@ -45,10 +54,10 @@ interface UsersPageProps {
 
 const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared, loggedInUser }) => {
     const [users, setUsers] = useState<User[]>([]);
-    const [cars, setCars] = useState<Car[]>([]);
-    const [conditions, setConditions] = useState<CarSaleCondition[]>([]);
-    const [references, setReferences] = useState<Reference[]>([]);
-    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+    const [cars, setCars] = useState<Car[]>(cachedCars || []);
+    const [conditions, setConditions] = useState<CarSaleCondition[]>(cachedConditions || []);
+    const [references, setReferences] = useState<Reference[]>(cachedReferences || []);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>(cachedStaffUsers || []);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -98,9 +107,17 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     
     // CRM live status and polling states
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
-    const [callLogs, setCallLogs] = useState<any[]>([]);
-    const [customerJournals, setCustomerJournals] = useState<any[]>([]);
-    const [crmMeetings, setCrmMeetings] = useState<CrmMeeting[]>([]);
+    const [callLogs, setCallLogs] = useState<any[]>(cachedCallLogs || []);
+    const [customerJournals, setCustomerJournals] = useState<any[]>(cachedCustomerJournals || []);
+    const [crmMeetings, setCrmMeetings] = useState<CrmMeeting[]>(cachedCrmMeetings || []);
+
+    // Lazy loading state flags for on-demand filter items and activity logs
+    const [isLoadingFilterOptions, setIsLoadingFilterOptions] = useState<boolean>(false);
+    const hasRequestedFilterOptions = useRef<boolean>(Boolean(cachedReferences && cachedStaffUsers));
+    const [isLoadingActivityData, setIsLoadingActivityData] = useState<boolean>(false);
+    const hasRequestedActivityData = useRef<boolean>(Boolean(cachedCallLogs && cachedCustomerJournals));
+    const [isLoadingMeetingData, setIsLoadingMeetingData] = useState<boolean>(false);
+    const hasRequestedMeetingData = useRef<boolean>(Boolean(cachedCrmMeetings));
 
     // Auto-refresh states
     const [refreshMode, setRefreshMode] = useState<'off' | '5s' | '30s' | '1m' | 'custom'>('off');
@@ -117,8 +134,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
         setFilters(prev => ({ ...prev, carModel: initialFilters.carModel || 'all' }));
     }, [initialFilters]);
 
-
-    const fetchAllData = useCallback(async () => {
+    // 1. Initial Load: ONLY loads users & lightweight CRM status.
+    // Extremely reduces initial API calls from 9 down to 1-2 calls!
+    const fetchInitialData = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
@@ -133,34 +151,169 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
             };
 
-            const [usersData, carsData, conditionsData, referencesData, staffData, statusData, callsData, journalsData, meetingsData] = await Promise.all([
+            const [usersData, statusData] = await Promise.all([
                 getUsers(usersParams),
-                getCars(),
-                getConditions(),
-                getReferences(),
-                getStaffUsers(),
-                getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
-                getCallLogs().catch(() => []),
-                getAllCustomerJournals().catch(() => []),
-                getCrmMeetings().catch(() => [])
+                getCrmStatus().catch(() => ({ activeViews: [], locks: [] }))
             ]);
             
             setUsers(usersData);
-            setCars(carsData);
-            setConditions(conditionsData);
-            setReferences(referencesData);
-            setStaffUsers(staffData);
             setCrmStatus(statusData);
-            setCallLogs(callsData);
-            setCustomerJournals(journalsData);
-            setCrmMeetings(meetingsData);
         } catch (err) {
             setError('خطا در دریافت اطلاعات');
             showToast('خطا در دریافت اطلاعات', 'error');
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters.itemsLimit]);
+
+    // 2. On-demand loader for items in "فیلترهای بیشتر" (references & staffUsers)
+    // Only triggered when user clicks/focuses on "فیلترهای بیشتر"
+    const loadAdvancedFilterOptions = useCallback(async () => {
+        if (hasRequestedFilterOptions.current && references.length > 0 && staffUsers.length > 0) {
+            return;
+        }
+        hasRequestedFilterOptions.current = true;
+
+        if (cachedReferences && cachedStaffUsers) {
+            setReferences(cachedReferences);
+            setStaffUsers(cachedStaffUsers);
+            return;
+        }
+
+        setIsLoadingFilterOptions(true);
+        try {
+            const needRefs = !cachedReferences;
+            const needStaff = !cachedStaffUsers;
+            const promises: Promise<any>[] = [];
+            if (needRefs) promises.push(getReferences().catch(() => []));
+            if (needStaff) promises.push(getStaffUsers().catch(() => []));
+
+            const results = await Promise.all(promises);
+            let idx = 0;
+            if (needRefs) {
+                const refsData = results[idx++];
+                cachedReferences = refsData;
+                setReferences(refsData);
+            } else if (cachedReferences) {
+                setReferences(cachedReferences);
+            }
+            if (needStaff) {
+                const staffData = results[idx++];
+                cachedStaffUsers = staffData;
+                setStaffUsers(staffData);
+            } else if (cachedStaffUsers) {
+                setStaffUsers(cachedStaffUsers);
+            }
+        } catch (err) {
+            console.error('Error loading filter options:', err);
+        } finally {
+            setIsLoadingFilterOptions(false);
+        }
+    }, [references.length, staffUsers.length]);
+
+    // 3. On-demand loader for Activity Data (callLogs & journals)
+    // Only triggered if user activates an activity filter
+    const loadActivityData = useCallback(async () => {
+        if (hasRequestedActivityData.current) return;
+        hasRequestedActivityData.current = true;
+
+        if (cachedCallLogs && cachedCustomerJournals) {
+            setCallLogs(cachedCallLogs);
+            setCustomerJournals(cachedCustomerJournals);
+            return;
+        }
+
+        setIsLoadingActivityData(true);
+        try {
+            const [calls, journals] = await Promise.all([
+                getCallLogs().catch(() => []),
+                cachedCustomerJournals ? Promise.resolve(cachedCustomerJournals) : getAllCustomerJournals().catch(() => [])
+            ]);
+            cachedCallLogs = calls;
+            cachedCustomerJournals = journals;
+            setCallLogs(calls);
+            setCustomerJournals(journals);
+        } catch (err) {
+            console.error('Error loading activity logs:', err);
+        } finally {
+            setIsLoadingActivityData(false);
+        }
+    }, []);
+
+    // 4. On-demand loader for Meeting Data
+    // Only triggered if user activates a meeting filter
+    const loadMeetingData = useCallback(async () => {
+        if (hasRequestedMeetingData.current) return;
+        hasRequestedMeetingData.current = true;
+
+        if (cachedCrmMeetings && cachedCustomerJournals) {
+            setCrmMeetings(cachedCrmMeetings);
+            setCustomerJournals(cachedCustomerJournals);
+            return;
+        }
+
+        setIsLoadingMeetingData(true);
+        try {
+            const [meetings, journals] = await Promise.all([
+                getCrmMeetings().catch(() => []),
+                cachedCustomerJournals ? Promise.resolve(cachedCustomerJournals) : getAllCustomerJournals().catch(() => [])
+            ]);
+            cachedCrmMeetings = meetings;
+            cachedCustomerJournals = journals;
+            setCrmMeetings(meetings);
+            setCustomerJournals(journals);
+        } catch (err) {
+            console.error('Error loading meeting logs:', err);
+        } finally {
+            setIsLoadingMeetingData(false);
+        }
+    }, []);
+
+    // 5. Lazy-load cars & conditions ONLY when a modal needing them opens
+    const loadCarsAndConditions = useCallback(async () => {
+        if (cars.length > 0 && conditions.length > 0) return;
+        if (cachedCars && cachedConditions) {
+            setCars(cachedCars);
+            setConditions(cachedConditions);
+            return;
+        }
+
+        try {
+            const [carsData, conditionsData] = await Promise.all([
+                getCars().catch(() => []),
+                getConditions().catch(() => [])
+            ]);
+            cachedCars = carsData;
+            cachedConditions = conditionsData;
+            setCars(carsData);
+            setConditions(conditionsData);
+        } catch (err) {
+            console.error('Error loading cars & conditions:', err);
+        }
+    }, [cars.length, conditions.length]);
+
+    useEffect(() => {
+        if (isDetailModalOpen || isBroadcastModalOpen) {
+            loadCarsAndConditions();
+        }
+    }, [isDetailModalOpen, isBroadcastModalOpen, loadCarsAndConditions]);
+
+    // Check if initial advanced or activity filters were already set
+    useEffect(() => {
+        if (filters.activityFilter && filters.activityFilter !== 'all') {
+            loadActivityData();
+        }
+        if (filters.meetingFilter && filters.meetingFilter !== 'all') {
+            loadMeetingData();
+        }
+        if (filters.staffUserId && filters.staffUserId !== 'all') {
+            loadActivityData();
+            loadAdvancedFilterOptions();
+        }
+        if (filters.reference && filters.reference !== 'all') {
+            loadAdvancedFilterOptions();
+        }
+    }, [filters.activityFilter, filters.meetingFilter, filters.staffUserId, filters.reference, loadActivityData, loadMeetingData, loadAdvancedFilterOptions]);
 
     // Auto-refresh timer mappings
     const getIntervalSeconds = useCallback(() => {
@@ -191,7 +344,6 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             setNextRefreshCountdown(prev => {
                 if (prev === null) return null;
                 if (prev <= 1) {
-                    // Trigger silent refresh
                     setIsRefreshing(true);
                     const usersParams: GetUsersParams = {
                         search: filters.query || undefined,
@@ -204,25 +356,39 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                         lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
                     };
 
-                    Promise.all([
+                    const refreshPromises: Promise<any>[] = [
                         getUsers(usersParams),
-                        getCrmStatus().catch(() => ({ activeViews: [], locks: [] })),
-                        getCallLogs().catch(() => []),
-                        getAllCustomerJournals().catch(() => []),
-                        getCrmMeetings().catch(() => [])
-                    ]).then(([usersData, statusData, callsData, journalsData, meetingsData]) => {
+                        getCrmStatus().catch(() => ({ activeViews: [], locks: [] }))
+                    ];
+                    if (hasRequestedActivityData.current) {
+                        refreshPromises.push(getCallLogs().catch(() => []));
+                        refreshPromises.push(getAllCustomerJournals().catch(() => []));
+                    }
+                    if (hasRequestedMeetingData.current) {
+                        refreshPromises.push(getCrmMeetings().catch(() => []));
+                    }
+
+                    Promise.all(refreshPromises).then(([usersData, statusData, callsData, journalsData, meetingsData]) => {
                         setUsers(usersData);
                         setCrmStatus(statusData);
-                        setCallLogs(callsData);
-                        setCustomerJournals(journalsData);
-                        setCrmMeetings(meetingsData);
+                        if (callsData) {
+                            cachedCallLogs = callsData;
+                            setCallLogs(callsData);
+                        }
+                        if (journalsData) {
+                            cachedCustomerJournals = journalsData;
+                            setCustomerJournals(journalsData);
+                        }
+                        if (meetingsData) {
+                            cachedCrmMeetings = meetingsData;
+                            setCrmMeetings(meetingsData);
+                        }
                     }).catch(err => {
                         console.error("Auto refresh failed", err);
                     }).finally(() => {
                         setIsRefreshing(false);
                     });
 
-                    // Reset countdown
                     return getIntervalSeconds() || 10;
                 }
                 return prev - 1;
@@ -236,19 +402,72 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     const handleManualRefresh = useCallback(async () => {
         setIsRefreshing(true);
         try {
-            await fetchAllData();
+            const usersParams: GetUsersParams = {
+                search: filters.query || undefined,
+                items: filters.itemsLimit,
+                Province: filters.province && filters.province !== 'all' ? filters.province : undefined,
+                City: filters.city && filters.city !== 'all' ? filters.city : undefined,
+                reference: filters.reference && filters.reference !== 'all' ? filters.reference : undefined,
+                leadStatus: filters.status && filters.status !== 'all' && (filters.status as string) !== 'in_progress' ? filters.status : undefined,
+                crmPerson: filters.crmPerson && filters.crmPerson !== 'all' ? filters.crmPerson : undefined,
+                lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
+            };
+
+            const promises: Promise<any>[] = [
+                getUsers(usersParams),
+                getCrmStatus().catch(() => ({ activeViews: [], locks: [] }))
+            ];
+
+            if (hasRequestedFilterOptions.current) {
+                promises.push(getReferences().catch(() => []));
+                promises.push(getStaffUsers().catch(() => []));
+            }
+            if (hasRequestedActivityData.current) {
+                promises.push(getCallLogs().catch(() => []));
+                promises.push(getAllCustomerJournals().catch(() => []));
+            }
+            if (hasRequestedMeetingData.current) {
+                promises.push(getCrmMeetings().catch(() => []));
+            }
+
+            const results = await Promise.all(promises);
+            setUsers(results[0]);
+            setCrmStatus(results[1]);
+
+            let curIdx = 2;
+            if (hasRequestedFilterOptions.current) {
+                const refs = results[curIdx++];
+                const staff = results[curIdx++];
+                cachedReferences = refs;
+                cachedStaffUsers = staff;
+                setReferences(refs);
+                setStaffUsers(staff);
+            }
+            if (hasRequestedActivityData.current) {
+                const calls = results[curIdx++];
+                const journals = results[curIdx++];
+                cachedCallLogs = calls;
+                cachedCustomerJournals = journals;
+                setCallLogs(calls);
+                setCustomerJournals(journals);
+            }
+            if (hasRequestedMeetingData.current) {
+                const meetings = results[curIdx++];
+                cachedCrmMeetings = meetings;
+                setCrmMeetings(meetings);
+            }
+
             showToast('اطلاعات با موفقیت بروزرسانی شد', 'success');
         } catch (err) {
             showToast('خطا در بروزرسانی اطلاعات', 'error');
         } finally {
             setIsRefreshing(false);
-            // Reset countdown if active
             const secs = getIntervalSeconds();
             if (secs !== null) {
                 setNextRefreshCountdown(secs);
             }
         }
-    }, [fetchAllData, getIntervalSeconds]);
+    }, [filters, getIntervalSeconds]);
 
     // Refetch users with server-side query params when search, itemsLimit, or server filters change
     useEffect(() => {
@@ -277,7 +496,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             } finally {
                 setIsFetchingUsers(false);
             }
-        }, 10);
+        }, 120);
 
         return () => clearTimeout(timer);
     }, [
@@ -292,16 +511,16 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
     ]);
 
     useEffect(() => {
-        fetchAllData();
-    }, [fetchAllData]);
+        fetchInitialData();
+    }, [fetchInitialData]);
 
     useEffect(() => {
         const handleRefresh = () => {
-            fetchAllData();
+            handleManualRefresh();
         };
         window.addEventListener('app-refresh', handleRefresh);
         return () => window.removeEventListener('app-refresh', handleRefresh);
-    }, [fetchAllData]);
+    }, [handleManualRefresh]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -823,7 +1042,7 @@ ${savedUser.failExplanation ? `توضیحات تکمیلی: ${savedUser.failExpl
             
             setIsModalOpen(false);
             setCurrentUser(null);
-            fetchAllData();
+            fetchInitialData();
         } catch (err) {
             showToast('عملیات با خطا مواجه شد', 'error');
         }
@@ -925,7 +1144,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                 showToast('کاربر با موفقیت حذف شد', 'success');
                 setIsDeleteModalOpen(false);
                 setUserToDelete(null);
-                fetchAllData();
+                fetchInitialData();
             } catch (err) {
                 showToast('حذف کاربر با خطا مواجه شد', 'error');
             }
@@ -1212,6 +1431,10 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                         isFetching={isFetchingUsers || isRefreshing}
                         totalLoadedCount={users.length}
                         statusCounts={statusCounts}
+                        onOpenAdvanced={loadAdvancedFilterOptions}
+                        isLoadingFilterOptions={isLoadingFilterOptions}
+                        onNeedActivityData={loadActivityData}
+                        onNeedMeetingData={loadMeetingData}
                         onClear={() => {
                             setFilters({ 
                                 query: '', 
@@ -1291,7 +1514,7 @@ ${failExplanation ? `توضیحات تکمیلی: ${failExplanation}` : ''}`,
                     onClose={() => setIsImportModalOpen(false)}
                     existingUsers={users}
                     onImportSuccess={() => {
-                        fetchAllData();
+                        fetchInitialData();
                     }}
                 />
             )}
