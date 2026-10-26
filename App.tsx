@@ -64,11 +64,9 @@ import { RocketIcon } from './components/icons/RocketIcon';
 import { ClipboardListIcon } from './components/icons/ClipboardListIcon';
 import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './services/api';
 import type { MyProfile } from './types';
-import AutoRefreshWidget from './components/AutoRefreshWidget';
+import AutoRefreshWidget, { REFRESH_OPTIONS, formatRemainingTime } from './components/AutoRefreshWidget';
 
 export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'operator-scores' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
-
-
 
 interface MenuItemProps {
     label: string;
@@ -98,6 +96,7 @@ const App: React.FC = () => {
     const [userPageInitialFilters, setUserPageInitialFilters] = useState<{ carModel?: string }>({});
     const [carPageInitialFilters, setCarPageInitialFilters] = useState<{ carModel?: string }>({});
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+    const [isDataRefreshModalOpen, setIsDataRefreshModalOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [currentUser, setCurrentUser] = useState<MyProfile | null>(null);
 
@@ -462,24 +461,34 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-[#F2F4F7] dark:bg-[#0f172a] font-vazir text-right overflow-hidden">
             {/* Sidebar */}
             <aside className="hidden lg:flex flex-col w-72 bg-[#F2F4F7] dark:bg-[#0f172a] border-l border-slate-200 dark:border-slate-800 p-4 overflow-y-auto">
-                <div className="flex items-center gap-3 px-2 mb-4 mt-2">
-                    <img src="/vite.svg" alt="Logo" className="w-8 h-8" />
-                    <div>
-                        <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight leading-none">AutoLead</h1>
-                        <span className="text-[10px] font-bold text-slate-400">سامانه جامع مدیریت فروش</span>
-                    </div>
-                </div>
-
-                {/* Global Auto Refresh Controller */}
-                <div className="mb-5">
-                    <AutoRefreshWidget
-                        refreshInterval={refreshInterval}
-                        onSetInterval={handleSetRefreshInterval}
-                        onManualRefresh={triggerManualRefresh}
-                        isRefreshing={isRefreshing}
-                        countdown={countdown}
-                        variant="sidebar"
-                    />
+                {/* Sidebar Top: Circle Icon Button to trigger Data Refresh Modal */}
+                <div className="mb-6 mt-2 px-1">
+                    <button
+                        type="button"
+                        onClick={() => setIsDataRefreshModalOpen(true)}
+                        className="w-full flex items-center gap-3 p-2.5 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200/80 dark:border-slate-800 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-md transition-all group text-right cursor-pointer"
+                        title="تنظیمات بروزرسانی داده‌ها"
+                    >
+                        <div className="relative flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
+                            <RefreshCw className={`w-5 h-5 text-white ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                            {refreshInterval > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900"></span>
+                                </span>
+                            )}
+                        </div>
+                        <div className="overflow-hidden">
+                            <h1 className="text-xs font-black text-slate-800 dark:text-white leading-tight group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
+                                آتولید
+                            </h1>
+                            <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate">
+                                {refreshInterval > 0
+                                    ? `خودکار: ${formatRemainingTime(countdown)}`
+                                    : 'پیشخوان یکپارچه مدیریت خودرو'}
+                            </p>
+                        </div>
+                    </button>
                 </div>
 
                 <nav className="flex-1 space-y-1 pr-1">
@@ -714,6 +723,55 @@ const App: React.FC = () => {
                 {activeView === 'storage-center' && <StorageCenterPage />}
                 {activeView === 'about' && <AboutPage />}
             </main>
+
+            {/* Data Refresh Modal */}
+            {isDataRefreshModalOpen && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setIsDataRefreshModalOpen(false)}
+                >
+                    <div 
+                        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95 duration-200"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-sky-100 dark:bg-sky-950/80 flex items-center justify-center text-sky-600 dark:text-sky-400">
+                                    <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-slate-800 dark:text-white">بروزرسانی داده‌ها</h3>
+                                    <p className="text-xs text-slate-400">تنظیم زمان‌بندی و همگام‌سازی اطلاعات</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setIsDataRefreshModalOpen(false)}
+                                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <AutoRefreshWidget
+                            refreshInterval={refreshInterval}
+                            onSetInterval={handleSetRefreshInterval}
+                            onManualRefresh={triggerManualRefresh}
+                            isRefreshing={isRefreshing}
+                            countdown={countdown}
+                            variant="sidebar"
+                        />
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                onClick={() => setIsDataRefreshModalOpen(false)}
+                                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors"
+                            >
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
