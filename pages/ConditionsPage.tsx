@@ -1,8 +1,19 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getConditions, createCondition, updateCondition, deleteCondition, getCars, getMyProfile, getConditionDateInfo, toMySQLDateTime } from '../services/api';
+import { 
+    getConditions, 
+    createCondition, 
+    updateCondition, 
+    deleteCondition, 
+    getCars, 
+    getMyProfile, 
+    getConditionDateInfo, 
+    toMySQLDateTime,
+    getStaffUsers,
+    resolveUserFullName
+} from '../services/api';
 import { SaleType, ConditionStatus } from '../types';
-import type { CarSaleCondition, Car, MyProfile } from '../types';
+import type { CarSaleCondition, Car, MyProfile, StaffUser } from '../types';
 import ConditionTable from '../components/ConditionTable';
 import FilterPanel from '../components/FilterPanel';
 import ConditionModal from '../components/ConditionModal';
@@ -27,6 +38,7 @@ export interface ConditionsPageProps {
 const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) => {
     const [conditions, setConditions] = useState<CarSaleCondition[]>([]);
     const [cars, setCars] = useState<Car[]>([]);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -54,12 +66,16 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
         setLoading(true);
         setError(null);
         try {
-            const [conditionsData, carsData] = await Promise.all([
+            const [conditionsData, carsData, staffData] = await Promise.all([
                 getConditions(),
-                getCars()
+                getCars(),
+                getStaffUsers().catch(() => [])
             ]);
             setConditions(conditionsData);
             setCars(carsData);
+            if (staffData && staffData.length > 0) {
+                setStaffUsers(staffData);
+            }
         } catch (err) {
             setError('خطا در دریافت اطلاعات');
             showToast('خطا در دریافت اطلاعات', 'error');
@@ -113,24 +129,27 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
     
     const handleSave = async (conditionData: Omit<CarSaleCondition, 'id'>) => {
         try {
-            // Retrieve current user info for audit tracking
+            // Retrieve current user info for audit tracking with First & Last Name
             let userProfile: any = null;
             try {
                 userProfile = await getMyProfile();
             } catch (pErr) {
                 console.warn("Could not retrieve profile during condition save:", pErr);
             }
-            const currentDisplayName = userProfile?.full_name || userProfile?.fullName || userProfile?.username || localStorage.getItem('username') || 'کاربر سیستم';
-            const currentUsername = userProfile?.username || localStorage.getItem('username') || currentDisplayName;
+            const currentFullName = userProfile?.full_name || userProfile?.fullName || resolveUserFullName(userProfile?.username || localStorage.getItem('username'), staffUsers) || localStorage.getItem('userFullName') || 'کاربر سیستم';
+            const currentUsername = userProfile?.username || localStorage.getItem('username') || currentFullName;
 
             if (currentCondition && currentCondition.id !== 0) {
+                const creatorRaw = currentCondition.created_by || currentCondition.createdBy || currentUsername;
+                const creatorFullName = currentCondition.created_by_name || resolveUserFullName(creatorRaw, staffUsers) || currentFullName;
+
                 const updatedPayload = {
                     ...conditionData,
                     id: currentCondition.id,
-                    created_by: currentCondition.created_by || currentCondition.createdBy || currentDisplayName,
-                    created_by_name: currentCondition.created_by_name || currentCondition.created_by || currentCondition.createdBy || currentDisplayName,
+                    created_by: creatorRaw,
+                    created_by_name: creatorFullName,
                     updated_by: currentUsername,
-                    updated_by_name: currentDisplayName,
+                    updated_by_name: currentFullName,
                     updatedAt: toMySQLDateTime()
                 };
                 await updateCondition(currentCondition.id, updatedPayload);
@@ -139,9 +158,9 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
                 const newPayload = {
                     ...conditionData,
                     created_by: currentUsername,
-                    created_by_name: currentDisplayName,
+                    created_by_name: currentFullName,
                     updated_by: currentUsername,
-                    updated_by_name: currentDisplayName,
+                    updated_by_name: currentFullName,
                     createdAt: toMySQLDateTime(),
                     updatedAt: toMySQLDateTime()
                 };
@@ -272,8 +291,8 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
             } catch (pErr) {
                 console.warn("Could not retrieve profile during bulk save:", pErr);
             }
-            const currentDisplayName = userProfile?.full_name || userProfile?.fullName || userProfile?.username || localStorage.getItem('username') || 'کاربر سیستم';
-            const currentUsername = userProfile?.username || localStorage.getItem('username') || currentDisplayName;
+            const currentFullName = userProfile?.full_name || userProfile?.fullName || resolveUserFullName(userProfile?.username || localStorage.getItem('username'), staffUsers) || localStorage.getItem('userFullName') || 'کاربر سیستم';
+            const currentUsername = userProfile?.username || localStorage.getItem('username') || currentFullName;
 
             const selectedConditions = conditions.filter(c => selectedIds.has(c.id));
             
@@ -283,7 +302,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
                     ...condition, 
                     ...updates,
                     updated_by: currentUsername,
-                    updated_by_name: currentDisplayName,
+                    updated_by_name: currentFullName,
                     updatedAt: new Date().toISOString()
                 });
             }
@@ -435,6 +454,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
             ) : (
                 <ConditionTable 
                     conditions={sortedAndFilteredConditions} 
+                    staffUsers={staffUsers}
                     onEdit={handleEdit} 
                     onDelete={handleDelete} 
                     onView={handleView}

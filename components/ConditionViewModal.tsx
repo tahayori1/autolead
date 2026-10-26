@@ -2,7 +2,7 @@ import React from 'react';
 import type { CarSaleCondition } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { User, ClipboardCheck, Info, Sparkles, Clock, UserCheck, ShieldCheck } from 'lucide-react';
-import { formatConditionDateTime, getConditionDateInfo } from '../services/api';
+import { formatConditionDateTime, getConditionDateInfo, resolveUserFullName } from '../services/api';
 
 interface ConditionViewModalProps {
     isOpen: boolean;
@@ -24,8 +24,10 @@ const ConditionViewModal: React.FC<ConditionViewModalProps> = ({ isOpen, onClose
         window.print();
     };
 
-    const creator = condition.created_by_name || condition.created_by || condition.createdBy;
-    const editor = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+    const creatorIdentifier = condition.created_by_name || condition.created_by || condition.createdBy;
+    const creator = resolveUserFullName(creatorIdentifier) || 'کاربر سیستم';
+    const editorIdentifier = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+    const editor = editorIdentifier ? resolveUserFullName(editorIdentifier) : null;
     const dateInfo = getConditionDateInfo(condition);
 
     return (
@@ -48,31 +50,30 @@ const ConditionViewModal: React.FC<ConditionViewModalProps> = ({ isOpen, onClose
                         </div>
                     </div>
 
-                    {/* Audit Trail: Creator & Editor Information */}
+                    {/* Audit Trail: Creator & Editor Full Names (نام و نام خانوادگی) */}
                     {(creator || editor) && (
                         <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-slate-50/80 dark:bg-slate-900/40 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                            {creator && (
-                                <div className="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/50">
-                                    <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
-                                        <User className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 dark:text-slate-400 block">کاربر ثبت‌کننده اولیه:</span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-200">{creator}</span>
-                                    </div>
+                            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/50">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                    <User className="w-4 h-4" />
                                 </div>
-                            )}
-                            {editor && (
-                                <div className="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/50">
-                                    <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                                        <UserCheck className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 dark:text-slate-400 block">آخرین ویرایش توسط:</span>
-                                        <span className="font-bold text-indigo-700 dark:text-indigo-300">{editor}</span>
-                                    </div>
+                                <div>
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-400 block font-medium">کاربر ثبت‌کننده (نام و نام خانوادگی):</span>
+                                    <span className="font-bold text-slate-800 dark:text-slate-200 text-xs sm:text-sm">{creator}</span>
                                 </div>
-                            )}
+                            </div>
+                            
+                            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/50">
+                                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                    <UserCheck className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-indigo-500/80 block font-medium">کاربر ویرایش‌کننده (نام و نام خانوادگی):</span>
+                                    <span className="font-bold text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm">
+                                        {editor || 'بدون ویرایش ثانویه'}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     )}
 

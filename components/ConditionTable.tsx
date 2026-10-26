@@ -10,10 +10,12 @@ import {
     Clock, User, UserCheck, LayoutGrid, Table as TableIcon, 
     CheckSquare, Square, Calendar, ShieldCheck, Tag
 } from 'lucide-react';
-import { formatConditionDateTime, getConditionDateInfo } from '../services/api';
+import { formatConditionDateTime, getConditionDateInfo, resolveUserFullName } from '../services/api';
+import type { StaffUser } from '../types';
 
 interface ConditionTableProps {
     conditions: CarSaleCondition[];
+    staffUsers?: StaffUser[];
     onEdit: (condition: CarSaleCondition) => void;
     onDelete: (condition: CarSaleCondition) => void;
     onView: (condition: CarSaleCondition) => void;
@@ -32,7 +34,7 @@ const statusColorMap: Record<ConditionStatus, string> = {
 };
 
 const ConditionTable: React.FC<ConditionTableProps> = ({ 
-    conditions, onEdit, onDelete, onView, onDuplicate, onSort, sortConfig,
+    conditions, staffUsers, onEdit, onDelete, onView, onDuplicate, onSort, sortConfig,
     selectedIds, onSelectionChange, onSelectAll
 }) => {
     // Default to 'grid' (2-column layout) as requested: "ردیف های بخشنامه های فروش را دو ردیفه کن که عرض ردیفها کم شود"
@@ -142,8 +144,13 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                     {conditions.map((condition) => {
                         const dateInfo = getConditionDateInfo(condition);
                         const isSelected = selectedIds.has(condition.id);
-                        const creatorName = condition.created_by_name || condition.created_by || condition.createdBy || 'کاربر سیستم';
-                        const updaterName = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+                        
+                        // Resolve First & Last Name for Creator & Updater
+                        const creatorIdentifier = condition.created_by_name || condition.created_by || condition.createdBy;
+                        const creatorFullName = resolveUserFullName(creatorIdentifier, staffUsers) || 'کاربر سیستم';
+
+                        const updaterIdentifier = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+                        const updaterFullName = updaterIdentifier ? resolveUserFullName(updaterIdentifier, staffUsers) : null;
 
                         return (
                             <div 
@@ -158,7 +165,7 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                 <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2.5 min-w-0">
                                         <input 
-                                            type="checkbox" 
+                                             type="checkbox" 
                                             className="w-4.5 h-4.5 text-sky-600 rounded border-slate-300 dark:border-slate-600 focus:ring-sky-500 cursor-pointer shrink-0"
                                             checked={isSelected}
                                             onChange={() => onSelectionChange(condition.id)}
@@ -240,29 +247,42 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                         </div>
                                     )}
 
-                                    {/* Audit Trail (Creator and Last Updater) */}
-                                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-col gap-1.5 text-[11px]">
-                                        <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                                            <div className="flex items-center gap-1.5">
-                                                <User className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                                <span className="text-[10px] text-slate-400">ثبت:</span>
-                                                <span className="font-bold text-slate-700 dark:text-slate-300">{creatorName}</span>
+                                    {/* Audit Trail: کاربر ثبت‌کننده و کاربر ویرایش‌کننده - نام و نام خانوادگی */}
+                                    <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-col gap-2 text-[11px]">
+                                        {/* کاربر ثبت‌کننده */}
+                                        <div className="flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <User className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0 font-medium">کاربر ثبت‌کننده:</span>
+                                                <span className="font-bold text-slate-800 dark:text-slate-100 truncate" title={`نام و نام خانوادگی: ${creatorFullName}`}>
+                                                    {creatorFullName}
+                                                </span>
                                             </div>
-                                            <span className="text-[10px] text-slate-400 font-mono dir-ltr">
+                                            <span className="text-[10px] text-slate-400 font-mono dir-ltr shrink-0">
                                                 {dateInfo.createdDateFormatted || (condition.created_at ? formatConditionDateTime(condition.created_at) : dateInfo.formattedDate)}
                                             </span>
                                         </div>
 
-                                        {updaterName && (
-                                            <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400">
-                                                <div className="flex items-center gap-1.5">
-                                                    <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                                    <span className="text-[10px] text-indigo-400">آخرین ویرایش:</span>
-                                                    <span className="font-bold">{updaterName}</span>
+                                        {/* کاربر ویرایش‌کننده */}
+                                        {updaterFullName ? (
+                                            <div className="flex items-center justify-between gap-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-2.5 py-1.5 rounded-xl border border-indigo-100/80 dark:border-indigo-900/40">
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <UserCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                                    <span className="text-[10px] text-indigo-500/90 shrink-0 font-medium">کاربر ویرایش‌کننده:</span>
+                                                    <span className="font-bold text-indigo-700 dark:text-indigo-300 truncate" title={`نام و نام خانوادگی: ${updaterFullName}`}>
+                                                        {updaterFullName}
+                                                    </span>
                                                 </div>
-                                                <span className="text-[10px] text-slate-400 font-mono dir-ltr">
+                                                <span className="text-[10px] text-slate-400 font-mono dir-ltr shrink-0">
                                                     {dateInfo.formattedDate}
                                                 </span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between gap-2 text-slate-400 dark:text-slate-500 px-2.5 py-1 text-[10px]">
+                                                <div className="flex items-center gap-1">
+                                                    <span>کاربر ویرایش‌کننده:</span>
+                                                    <span className="font-medium text-slate-500 dark:text-slate-400">بدون ویرایش ثانویه</span>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -331,7 +351,7 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                     <SortableHeader title="تحویل" sortKey="delivery_time" />
                                     <SortableHeader title="عمومی" sortKey="is_public" />
                                     <th scope="col" className="px-5 py-3.5 font-bold text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                                        ثبت و ویرایش‌کننده
+                                        کاربر ثبت و ویرایش‌کننده
                                     </th>
                                     <th scope="col" className="px-5 py-3.5"></th>
                                 </tr>
@@ -339,8 +359,11 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                             <tbody className="divide-y divide-slate-150 dark:divide-slate-700/60">
                                 {conditions.map((condition) => {
                                     const dateInfo = getConditionDateInfo(condition);
-                                    const creatorName = condition.created_by_name || condition.created_by || condition.createdBy || 'کاربر سیستم';
-                                    const updaterName = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+                                    const creatorIdentifier = condition.created_by_name || condition.created_by || condition.createdBy;
+                                    const creatorFullName = resolveUserFullName(creatorIdentifier, staffUsers) || 'کاربر سیستم';
+
+                                    const updaterIdentifier = condition.updated_by_name || condition.updated_by || condition.updatedBy;
+                                    const updaterFullName = updaterIdentifier ? resolveUserFullName(updaterIdentifier, staffUsers) : null;
                                     const isSelected = selectedIds.has(condition.id);
 
                                     return (
@@ -375,15 +398,18 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                                 )}
                                             </td>
                                             <td className="px-5 py-4">
-                                                <div className="flex flex-col gap-1 text-[11px] min-w-[180px]">
-                                                    <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                                                        <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                                <div className="flex flex-col gap-2 text-[11px] min-w-[210px]">
+                                                    {/* کاربر ثبت‌کننده */}
+                                                    <div className="flex items-start gap-1.5 text-slate-700 dark:text-slate-300">
+                                                        <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
                                                             <User className="w-3 h-3" />
                                                         </div>
-                                                        <div className="flex flex-col">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="text-[10px] text-slate-400">ثبت:</span>
-                                                                <span className="font-bold text-slate-800 dark:text-slate-200">{creatorName}</span>
+                                                        <div className="flex flex-col min-w-0">
+                                                            <div className="flex items-baseline gap-1">
+                                                                <span className="text-[10px] text-slate-400 shrink-0 font-medium">کاربر ثبت‌کننده:</span>
+                                                                <span className="font-bold text-slate-800 dark:text-slate-100 truncate" title={`نام و نام خانوادگی: ${creatorFullName}`}>
+                                                                    {creatorFullName}
+                                                                </span>
                                                             </div>
                                                             <span className="text-[10px] text-slate-400 font-mono dir-ltr text-right">
                                                                 {dateInfo.createdDateFormatted || (condition.created_at ? formatConditionDateTime(condition.created_at) : dateInfo.formattedDate)}
@@ -391,15 +417,18 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                                         </div>
                                                     </div>
 
-                                                    {updaterName ? (
-                                                        <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-700/60 text-slate-700 dark:text-slate-300">
-                                                            <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                                    {/* کاربر ویرایش‌کننده */}
+                                                    {updaterFullName ? (
+                                                        <div className="flex items-start gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/60 text-slate-700 dark:text-slate-300">
+                                                            <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
                                                                 <UserCheck className="w-3 h-3" />
                                                             </div>
-                                                            <div className="flex flex-col">
-                                                                <div className="flex items-center gap-1">
-                                                                    <span className="text-[10px] text-indigo-500 font-medium">ویرایش:</span>
-                                                                    <span className="font-bold text-indigo-600 dark:text-indigo-300">{updaterName}</span>
+                                                            <div className="flex flex-col min-w-0">
+                                                                <div className="flex items-baseline gap-1">
+                                                                    <span className="text-[10px] text-indigo-500 shrink-0 font-medium">کاربر ویرایش‌کننده:</span>
+                                                                    <span className="font-bold text-indigo-600 dark:text-indigo-300 truncate" title={`نام و نام خانوادگی: ${updaterFullName}`}>
+                                                                        {updaterFullName}
+                                                                    </span>
                                                                 </div>
                                                                 <span className="text-[10px] text-slate-400 font-mono dir-ltr text-right">
                                                                     {dateInfo.formattedDate}
@@ -407,8 +436,9 @@ const ConditionTable: React.FC<ConditionTableProps> = ({
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
-                                                            <span>بدون ویرایش ثانویه</span>
+                                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700/60 flex items-center gap-1">
+                                                            <span>کاربر ویرایش‌کننده:</span>
+                                                            <span className="text-slate-400">بدون ویرایش ثانویه</span>
                                                         </div>
                                                     )}
                                                 </div>

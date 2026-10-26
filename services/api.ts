@@ -405,6 +405,14 @@ export const syncPasswordChangeToWebhook = async (username: string, passwordHash
 
 // --- Staff Management ---
 
+let cachedStaffUsers: StaffUser[] = [];
+export const setCachedStaffUsers = (users: StaffUser[]) => {
+    cachedStaffUsers = users;
+};
+export const getCachedStaffUsers = (): StaffUser[] => {
+    return cachedStaffUsers;
+};
+
 const USER_MGMT_URL = `${API_BASE_URL}/auth/user`;
 
 export const getStaffUsers = async (): Promise<StaffUser[]> => {
@@ -433,7 +441,7 @@ export const getStaffUsers = async (): Promise<StaffUser[]> => {
 
     const activityMap = getAllUsersActivityMap();
 
-    return usersArray.map(user => {
+    const staffList: StaffUser[] = usersArray.map(user => {
         const isAdmin = user.isAdmin === 1;
         const usernameKey = (user.username || '').trim().toLowerCase();
         const activity = activityMap[usernameKey];
@@ -479,6 +487,9 @@ export const getStaffUsers = async (): Promise<StaffUser[]> => {
             isActive: true 
         };
     });
+
+    cachedStaffUsers = staffList;
+    return staffList;
 };
 
 const addApiUser = async (payload: any): Promise<ApiSystemUser> => {
@@ -861,6 +872,91 @@ export const formatConditionDateTime = (condition: CarSaleCondition | Partial<Ca
     return info.formattedDate;
 };
 
+/**
+ * Resolves any user identifier (username, email, ID, or name) to Persian First and Last Name (نام و نام خانوادگی).
+ */
+export const resolveUserFullName = (
+    identifier?: string | number | null, 
+    customStaffList?: StaffUser[]
+): string => {
+    if (identifier === null || identifier === undefined) return '';
+    const raw = String(identifier).trim();
+    if (!raw || raw === 'undefined' || raw === 'null') return '';
+
+    // If it's already a clean Persian full name (has Persian letters, no @, not "admin")
+    const hasPersian = /[\u0600-\u06FF]/.test(raw);
+    const hasAt = raw.includes('@');
+    
+    // Static well-known system dictionary for quick matching
+    const knownDictionary: Record<string, string> = {
+        'admin': 'مدیر سیستم (سید علی حسینی)',
+        'administrator': 'مدیر سیستم (سید علی حسینی)',
+        'hoseini': 'سید علی حسینی',
+        'hoseinikhodro': 'سید علی حسینی',
+        'hoseinikhodro@gmail.com': 'سید علی حسینی',
+        'tahayori': 'علیرضا طاهری',
+        'tahayori1': 'علیرضا طاهری',
+        'tahayori1@gmail.com': 'علیرضا طاهری',
+        'taha': 'طاها طاهری',
+        'system': 'کاربر سیستم',
+        'سیستم': 'کاربر سیستم',
+        'کاربر سیستم': 'کاربر سیستم',
+    };
+
+    const key = raw.toLowerCase().trim();
+    if (knownDictionary[key]) {
+        return knownDictionary[key];
+    }
+
+    // Check custom staff list or cached staff list
+    const staff = (customStaffList && customStaffList.length > 0) ? customStaffList : cachedStaffUsers;
+    if (staff && staff.length > 0) {
+        const found = staff.find(u => {
+            const uName = (u.username || '').toLowerCase().trim();
+            const uEmail = (u.email || '').toLowerCase().trim();
+            const uId = String(u.id);
+            const uMobile = (u.mobile || '').replace(/\D/g, '');
+            const cleanRaw = raw.replace(/\D/g, '');
+
+            return (
+                uName === key ||
+                uEmail === key ||
+                (hasAt && uEmail.split('@')[0] === key.split('@')[0]) ||
+                uId === raw ||
+                (cleanRaw && cleanRaw.length >= 7 && uMobile && uMobile.endsWith(cleanRaw))
+            );
+        });
+
+        if (found && (found.fullName || found.full_name)) {
+            return (found.fullName || found.full_name || '').trim();
+        }
+    }
+
+    // Check localStorage currentUser info
+    try {
+        const storedFullName = localStorage.getItem('currentUserFullName') || localStorage.getItem('userFullName');
+        const storedUsername = localStorage.getItem('currentUsername') || localStorage.getItem('username');
+        if (storedFullName && storedUsername && storedUsername.toLowerCase() === key) {
+            return storedFullName;
+        }
+    } catch {}
+
+    // If it contains Persian letters and is at least 3 chars long and no @, treat it as full name
+    if (hasPersian && !hasAt) {
+        return raw;
+    }
+
+    // If it is an email, check if the username part matches knownDictionary
+    if (hasAt) {
+        const userPart = raw.split('@')[0].toLowerCase();
+        if (knownDictionary[userPart]) {
+            return knownDictionary[userPart];
+        }
+    }
+
+    return raw;
+};
+
 const normalizeCondition = (condition: any): CarSaleCondition => {
     if (!condition) return condition;
 
@@ -907,8 +1003,14 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
 
     const updateStamp = hasValidUpdate ? (updatedAt || updated_at || last_update || last_updated) : null;
     const createStamp = hasValidCreate ? (createdAt || created_at) : null;
-    const creatorVal = created_by || createdBy || created_by_name || createdByName || restOfApiData.author || null;
-    const updaterVal = updated_by || updatedBy || updated_by_name || updatedByName || null;
+
+    const creatorNameVal = created_by_name || createdByName || null;
+    const creatorUserVal = created_by || createdBy || restOfApiData.author || creatorNameVal || null;
+    const creatorResolvedFullName = resolveUserFullName(creatorNameVal || creatorUserVal) || creatorNameVal || creatorUserVal || 'کاربر سیستم';
+
+    const updaterNameVal = updated_by_name || updatedByName || null;
+    const updaterUserVal = updated_by || updatedBy || updaterNameVal || null;
+    const updaterResolvedFullName = updaterUserVal ? (resolveUserFullName(updaterNameVal || updaterUserVal) || updaterNameVal || updaterUserVal) : null;
             
     return { 
         ...restOfApiData, 
@@ -916,12 +1018,12 @@ const normalizeCondition = (condition: any): CarSaleCondition => {
         colors: colorsArray,
         is_public: !!is_public,
         stock_quantity: parseInt(rawStock, 10) || 0,
-        created_by: creatorVal,
-        createdBy: creatorVal,
-        created_by_name: creatorVal,
-        updated_by: updaterVal,
-        updatedBy: updaterVal,
-        updated_by_name: updaterVal,
+        created_by: creatorUserVal,
+        createdBy: creatorUserVal,
+        created_by_name: creatorResolvedFullName,
+        updated_by: updaterUserVal,
+        updatedBy: updaterUserVal,
+        updated_by_name: updaterResolvedFullName,
         updatedAt: updateStamp,
         updated_at: updateStamp,
         createdAt: createStamp,
@@ -936,7 +1038,10 @@ const denormalizeCondition = (condition: Omit<CarSaleCondition, 'id'> | CarSaleC
         : parseInt(condition.stock_quantity as any, 10) || 0;
 
     const creatorVal = condition.created_by || condition.createdBy || condition.created_by_name || null;
+    const creatorFullName = condition.created_by_name || resolveUserFullName(creatorVal) || creatorVal;
+
     const updaterVal = condition.updated_by || condition.updatedBy || condition.updated_by_name || null;
+    const updaterFullName = condition.updated_by_name || (updaterVal ? resolveUserFullName(updaterVal) : null) || updaterVal;
     
     // Convert all datetime fields strictly to MySQL 'YYYY-MM-DD HH:MM:SS' format
     const createdAtVal = toMySQLDateTime(condition.createdAt || condition.created_at);
@@ -950,12 +1055,12 @@ const denormalizeCondition = (condition: Omit<CarSaleCondition, 'id'> | CarSaleC
         stock_quantity: stockQtyVal,
         created_by: creatorVal,
         createdBy: creatorVal,
-        created_by_name: creatorVal,
-        createdByName: creatorVal,
+        created_by_name: creatorFullName,
+        createdByName: creatorFullName,
         updated_by: updaterVal,
         updatedBy: updaterVal,
-        updated_by_name: updaterVal,
-        updatedByName: updaterVal,
+        updated_by_name: updaterFullName,
+        updatedByName: updaterFullName,
         createdAt: createdAtVal,
         created_at: createdAtVal,
         updatedAt: updatedAtVal,
