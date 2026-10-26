@@ -366,9 +366,9 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
 
     const content = (
         <>
-            <div className={`bg-white dark:bg-slate-800 ${isSubPage ? 'pb-6' : 'p-6 rounded-lg shadow-md mb-8'} space-y-4`}>
+            <div className={`bg-white dark:bg-slate-850 ${isSubPage ? 'pb-6' : 'p-5 sm:p-6 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-800 mb-6'} space-y-4`}>
                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    {!isSubPage && <h2 className="text-xl font-bold text-slate-700 dark:text-white">شرایط فروش</h2>}
+                    {!isSubPage && <h2 className="text-xl font-black text-slate-800 dark:text-white">بخشنامه‌های فروش</h2>}
                     <div className={`flex items-center gap-2 flex-wrap ${isSubPage ? 'w-full justify-end' : ''}`}>
                         <button
                             onClick={() => setIsCopyModalOpen(true)}
@@ -482,7 +482,7 @@ const ConditionsPage: React.FC<ConditionsPageProps> = ({ isSubPage = false }) =>
             {isSubPage ? (
                 <div className="animate-fade-in relative pb-20">{content}</div>
             ) : (
-                <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+                <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative max-w-7xl">
                     {content}
                 </main>
             )}
