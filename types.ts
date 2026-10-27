@@ -79,6 +79,8 @@ export interface Announcement {
 export interface CustomerJournal {
     id?: number | string;
     userId?: number;
+    customerId?: number;
+    customer_id?: number;
     number?: string;
     customerNumber?: string;
     author: string;

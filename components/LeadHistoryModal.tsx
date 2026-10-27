@@ -6,7 +6,7 @@ import Spinner from './Spinner';
 import Toast from './Toast';
 import { 
     getCustomerJournals, createCustomerJournal, getMyProfile,
-    sendCrmHeartbeat, getCrmStatus, clearCrmLock,
+    clearCrmLock,
     createCallLog, getCallLogs, createCrmMeeting, getCrmMeetings, updateCrmMeeting,
     updateUser, getTelephonyCallLogs
 } from '../services/api';
@@ -163,32 +163,6 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
         return Array.from(set);
     }, [currentUser]);
 
-    // Polling and heartbeat for viewing status
-    useEffect(() => {
-        if (!isOpen || !lead || !loggedInUser) return;
-
-        const username = loggedInUser.username || 'ناشناس';
-        const fullName = (loggedInUser as any).FullName || loggedInUser.full_name || 'کاربر سیستم';
-        const leadId = Number(lead.id);
-
-        const sendHeartbeatAndFetch = async () => {
-            try {
-                // Send heartbeat (isEditing is true when activeTab is EDIT_LEAD)
-                await sendCrmHeartbeat(leadId, username, fullName, activeTab === 'EDIT_LEAD');
-                const status = await getCrmStatus();
-                setCrmStatus(status);
-            } catch (err) {
-                console.warn("CRM Live Status Heartbeat failed:", err);
-            }
-        };
-
-        sendHeartbeatAndFetch();
-        const timer = setInterval(sendHeartbeatAndFetch, 3000);
-
-        return () => {
-            clearInterval(timer);
-        };
-    }, [isOpen, lead, loggedInUser, activeTab]);
 
     // Registration Survey State
     const [regQ1Type, setRegQ1Type] = useState<'internet' | 'presence' | ''>('');
@@ -451,8 +425,14 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
 - برچسب‌ها: ${crmTags.length > 0 ? crmTags.join('، ') : 'بدون برچسب'}
 ${crmOpinion ? `- نظر کارشناس: ${crmOpinion}` : ''}`;
 
+            const targetCustId = Number(userId || targetUser?.id);
+            const targetCustNumber = targetUser?.Number || '';
             await createCustomerJournal({
-                userId,
+                userId: targetCustId,
+                customerId: targetCustId,
+                customer_id: targetCustId,
+                number: targetCustNumber,
+                customerNumber: targetCustNumber,
                 content: journalContent,
                 author: authorName
             });
@@ -580,8 +560,14 @@ ${crmOpinion ? `- نظر کارشناس: ${crmOpinion}` : ''}`;
 👤 کاربر ویرایش‌کننده: ${authorName}
 ${changes.join('\n')}`;
 
+                const targetCustId = Number(userId || targetUser?.id);
+                const targetCustNumber = cleanNumber || updatedUser.Number || targetUser?.Number || '';
                 await createCustomerJournal({
-                    userId,
+                    userId: targetCustId,
+                    customerId: targetCustId,
+                    customer_id: targetCustId,
+                    number: targetCustNumber,
+                    customerNumber: targetCustNumber,
                     content: journalContent,
                     author: authorName
                 });
@@ -651,9 +637,11 @@ ${changes.join('\n')}`,
         setIsCrmMeetingsLoading(true);
         setIsTelephonyLoading(true);
         try {
+            // Priority: use userId if available, otherwise userNumber
+            const primaryParam = userId ? Number(userId) : userNumber;
             const [journalData, callLogData, meetingData, telephonyData] = await Promise.all([
-                getCustomerJournals(userNumber || userId),
-                getCallLogs(userNumber || undefined),
+                getCustomerJournals(primaryParam),
+                Promise.resolve([]),
                 getCrmMeetings(userId).catch(err => {
                     console.error("Failed to fetch CRM meetings:", err);
                     return [] as CrmMeeting[];
@@ -1079,14 +1067,14 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
     };
 
     const parseMeetingContent = (content: string) => {
-        const lines = content.split('\n');
+        const lines = (content || '').toString().split('\n');
         let stage = 'دعوت';
         let dateTime = '';
         let location = '';
         let result = '';
 
         for (const line of lines) {
-            const trimmed = line.trim();
+            const trimmed = (line || '').toString().trim();
             if (trimmed.startsWith('مرحله:')) {
                 stage = trimmed.substring(trimmed.indexOf(':') + 1).trim();
             } else if (trimmed.startsWith('زمان جلسه:')) {
@@ -1208,10 +1196,11 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
 
         // 2. Add Journals (filter out manual call logs and deduplicate meetings)
         journals.forEach(j => {
-            if (j.content.startsWith('📞 لاگ تماس تلفنی')) {
+            const jContent = (j?.content || '').toString();
+            if (jContent.startsWith('📞 لاگ تماس تلفنی')) {
                 return; // skip duplicate manual journal
             }
-            const isMeetingJournal = j.content.includes('ملاقات حضوری') && (j.content.includes('زمان جلسه:') || j.content.includes('مرحله:'));
+            const isMeetingJournal = jContent.includes('ملاقات حضوری') && (jContent.includes('زمان جلسه:') || jContent.includes('مرحله:'));
             if (isMeetingJournal) {
                 const { stage, dateTime, location, result } = parseMeetingContent(j.content);
                 // Deduplicate if we already added a CRM meeting at this exact time
@@ -1284,14 +1273,15 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
     const timelineItems = getCombinedTimeline();
 
     // Scan for submitted surveys in journals list
-    const historicalRegSurveys = journals.filter(j => j.content.includes('📝 گزارش نظرسنجی ثبت‌نام / خرید'));
-    const historicalDelSurveys = journals.filter(j => j.content.includes('🚗 نظرسنجی تحویل خودرو'));
+    const historicalRegSurveys = journals.filter(j => (j?.content || '').toString().includes('📝 گزارش نظرسنجی ثبت‌نام / خرید'));
+    const historicalDelSurveys = journals.filter(j => (j?.content || '').toString().includes('🚗 نظرسنجی تحویل خودرو'));
 
     // Parser for delivery survey entries
     const parseDeliverySurvey = (journal: CustomerJournal) => {
-        if (!journal.content.includes('🚗 نظرسنجی تحویل خودرو')) return null;
+        const content = (journal?.content || '').toString();
+        if (!content.includes('🚗 نظرسنجی تحویل خودرو')) return null;
         
-        const lines = journal.content.split('\n');
+        const lines = content.split('\n');
         let q1 = 0, q2 = 0, q3 = 0, q4 = 0, q5 = 0, q6 = 0;
         let comment = '';
 
@@ -1301,26 +1291,27 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
         };
 
         lines.forEach(line => {
-            if (line.includes('سرعت')) {
-                q1 = extractScore(line);
-            } else if (line.includes('فرایند') || line.includes('تحویل خودرو') || line.includes('مدارک') || line.includes('توضیحات هنگام')) {
-                q2 = extractScore(line);
-            } else if (line.includes('برخورد') || line.includes('پاسخگویی') || line.includes('پرسنل')) {
-                q3 = extractScore(line);
-            } else if (line.includes('سلامت') || line.includes('کیفیت')) {
-                q4 = extractScore(line);
-            } else if (line.includes('اطلاع') || line.includes('پیامک') || line.includes('تماس')) {
-                q5 = extractScore(line);
-            } else if (line.includes('امکانات') || line.includes('رفاهی') || line.includes('انتظار') || line.includes('پارکینگ')) {
-                q6 = extractScore(line);
-            } else if (line.includes('توضیحات تکمیلی') || line.includes('توضیحات:')) {
-                comment = line.replace(/توضیحات تکمیلی مشتری:|توضیحات تکمیلی:|توضیحات:/g, '').trim();
+            const l = (line || '').toString();
+            if (l.includes('سرعت')) {
+                q1 = extractScore(l);
+            } else if (l.includes('فرایند') || l.includes('تحویل خودرو') || l.includes('مدارک') || l.includes('توضیحات هنگام')) {
+                q2 = extractScore(l);
+            } else if (l.includes('برخورد') || l.includes('پاسخگویی') || l.includes('پرسنل')) {
+                q3 = extractScore(l);
+            } else if (l.includes('سلامت') || l.includes('کیفیت')) {
+                q4 = extractScore(l);
+            } else if (l.includes('اطلاع') || l.includes('پیامک') || l.includes('تماس')) {
+                q5 = extractScore(l);
+            } else if (l.includes('امکانات') || l.includes('رفاهی') || l.includes('انتظار') || l.includes('پارکینگ')) {
+                q6 = extractScore(l);
+            } else if (l.includes('توضیحات تکمیلی') || l.includes('توضیحات:')) {
+                comment = l.replace(/توضیحات تکمیلی مشتری:|توضیحات تکمیلی:|توضیحات:/g, '').trim();
             }
         });
 
         // Fallback: match bracket scores sequentially if names changed
         if (q1 === 0 && q2 === 0 && q3 === 0 && q4 === 0 && q5 === 0 && q6 === 0) {
-            const allMatches = [...journal.content.matchAll(/\[(\d+)\s*(?:از|\/)\s*۱۰\]/g)].map(m => parseInt(m[1], 10));
+            const allMatches = [...content.matchAll(/\[(\d+)\s*(?:از|\/)\s*۱۰\]/g)].map(m => parseInt(m[1], 10));
             if (allMatches.length >= 6) {
                 [q1, q2, q3, q4, q5, q6] = allMatches;
             }
@@ -1695,8 +1686,10 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                     type="button" 
                                                     onClick={async () => {
                                                         await clearCrmLock(Number(lead.id));
-                                                        const status = await getCrmStatus();
-                                                        setCrmStatus(status);
+                                                        setCrmStatus(prev => ({
+                                                            ...prev,
+                                                            locks: prev.locks.filter(l => l.leadId !== Number(lead.id))
+                                                        }));
                                                     }}
                                                     className="px-2 py-1 bg-rose-600 text-white hover:bg-rose-750 rounded-md transition text-[10px] shadow-sm font-black flex-shrink-0 mr-2"
                                                 >

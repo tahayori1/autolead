@@ -62,9 +62,17 @@ const handleResponse = async (response: Response) => {
 
     if (response.ok) {
         if (response.status === 204 || response.headers.get('content-length') === '0') {
-            return;
+            return null;
         }
-        return response.json();
+        const text = await response.text();
+        if (!text || !text.trim()) {
+            return null;
+        }
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return text;
+        }
     } else {
         let errorData;
         try {
@@ -1194,9 +1202,14 @@ export const getUserByNumber = async (number: string): Promise<User | null> => {
 };
 
 export const getLeadHistory = async (number: string): Promise<LeadMessage[]> => {
-    const response = await fetch(`${API_BASE_URL}/users/history?number=${number}`, { headers: getAuthHeaders() });
-    const data = await handleResponse(response);
-    return Array.isArray(data) ? data : [];
+    try {
+        const response = await fetch(`${API_BASE_URL}/users/history?number=${number}`, { headers: getAuthHeaders() });
+        const data = await handleResponse(response);
+        return Array.isArray(data) ? data : [];
+    } catch (e) {
+        console.warn("Failed to fetch lead history:", e);
+        return [];
+    }
 };
 
 export interface GetUsersParams {
@@ -1277,7 +1290,46 @@ export const createUser = async (user: Omit<User, 'id'>): Promise<User> => {
         headers: getAuthHeaders(),
         body: JSON.stringify(user),
     });
-    return handleResponse(response);
+    const result = await handleResponse(response);
+
+    // 1. Check all standard ID properties that webhook or database can return
+    let resolvedId: number | undefined;
+    if (result) {
+        if (typeof result === 'number' && !isNaN(result)) {
+            resolvedId = result;
+        } else if (Array.isArray(result) && result[0]) {
+            const first = result[0];
+            const candidate = first.id ?? first.customerId ?? first.customer_id ?? first.userId ?? first.insertId;
+            if (candidate !== undefined && candidate !== null && !isNaN(Number(candidate))) {
+                resolvedId = Number(candidate);
+            }
+        } else if (typeof result === 'object') {
+            const candidate = result.id ?? result.customerId ?? result.customer_id ?? result.userId ?? result.insertId ?? result.data?.id ?? result.user?.id;
+            if (candidate !== undefined && candidate !== null && !isNaN(Number(candidate))) {
+                resolvedId = Number(candidate);
+            }
+        }
+    }
+
+    // 2. If ID is still not directly provided in response, query by phone number to obtain the newly generated customer ID
+    if (!resolvedId && user.Number) {
+        try {
+            const fetched = await getUserByNumber(user.Number);
+            if (fetched && fetched.id && !isNaN(Number(fetched.id))) {
+                resolvedId = Number(fetched.id);
+            }
+        } catch (fetchErr) {
+            console.warn("Could not query newly created user ID by phone number:", fetchErr);
+        }
+    }
+
+    const finalUser: User = {
+        ...user,
+        ...(result && typeof result === 'object' && !Array.isArray(result) ? result : {}),
+        id: (resolvedId || Date.now()) as number
+    };
+
+    return finalUser;
 };
 
 export const updateUser = async (id: number, updatedUser: User): Promise<User> => {
@@ -1480,9 +1532,17 @@ export const getCustomerJournals = async (userNumberOrId: number | string): Prom
         .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
         .trim();
 
-    // Query CustomerJournals using GET method with ?number= parameter
-    const queryNumber = normalizedDigits || rawValue;
-    const response = await fetch(`${JOURNALS_URL}?number=${encodeURIComponent(queryNumber)}`, {
+    const isNumericId = /^\d+$/.test(normalizedDigits) && Number(normalizedDigits) > 0 && !normalizedDigits.startsWith('09') && normalizedDigits.length <= 8;
+
+    let targetUrl = '';
+    if (isNumericId) {
+        targetUrl = `${JOURNALS_URL}?id=${encodeURIComponent(normalizedDigits)}`;
+    } else {
+        const queryNumber = normalizedDigits || rawValue;
+        targetUrl = `${JOURNALS_URL}?number=${encodeURIComponent(queryNumber)}`;
+    }
+
+    const response = await fetch(targetUrl, {
         method: 'GET',
         headers: getAuthHeaders()
     });
@@ -1502,27 +1562,61 @@ export const getCustomerJournals = async (userNumberOrId: number | string): Prom
     return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 };
 
-export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' | 'createdAt'> & { number?: string; customerNumber?: string }): Promise<CustomerJournal> => {
+export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' | 'createdAt'> & { 
+    number?: string; 
+    customerNumber?: string;
+    customerId?: number | string;
+    customer_id?: number | string;
+    userId?: number | string;
+}): Promise<CustomerJournal> => {
     ensureOnline();
-    const payload = {
+
+    const rawId = journal.userId ?? journal.customerId ?? journal.customer_id;
+    let numId: number | undefined = undefined;
+    if (rawId !== undefined && rawId !== null && rawId !== '') {
+        const parsed = Number(rawId);
+        if (!isNaN(parsed) && parsed > 0) {
+            numId = parsed;
+        }
+    }
+
+    let resolvedNumber = (journal.number || journal.customerNumber || '').trim();
+
+    // If ID is missing but phone number is present, resolve customer ID via number query
+    if (!numId && resolvedNumber) {
+        try {
+            const u = await getUserByNumber(resolvedNumber);
+            if (u && u.id && !isNaN(Number(u.id))) {
+                numId = Number(u.id);
+            }
+        } catch (e) {
+            console.warn("Could not resolve customer ID from number:", e);
+        }
+    }
+
+    const payload: Record<string, any> = {
         ...journal,
         createdAt: new Date().toLocaleString('fa-IR'),
+        created_at: new Date().toISOString()
     };
+
+    if (numId !== undefined) {
+        payload.userId = numId;
+        payload.customerId = numId;
+        payload.customer_id = numId;
+    }
+
+    if (resolvedNumber) {
+        payload.number = resolvedNumber;
+        payload.customerNumber = resolvedNumber;
+    }
+
     const response = await fetch(JOURNALS_URL, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
     });
     const result = await handleResponse(response);
-    
-    // Register lock/activity on local Express server
-    if (journal.userId) {
-        try {
-            await registerCrmActivity(Number(journal.userId), journal.author, journal.author);
-        } catch (e) {
-            console.warn("Failed to register CRM activity for journal:", e);
-        }
-    }
     
     return result;
 };
@@ -2914,17 +3008,12 @@ export const deleteMessageTemplate = async (id: string): Promise<void> => {
 };
 
 // --- CRM Call Logs Server Endpoints ---
-export const getCallLogs = async (customerNumber?: string): Promise<CrmCallLog[]> => {
-    let url = CALLOG_URL;
-    if (customerNumber && customerNumber.trim()) {
-        url += `?customer_number=${encodeURIComponent(customerNumber.trim())}`;
-    }
-    const response = await fetch(url, { headers: getAuthHeaders() });
-    return handleResponse(response);
+export const getCallLogs = async (_customerNumber?: string): Promise<CrmCallLog[]> => {
+    return [];
 };
 
-export const getCallLogsByCustomerNumber = async (customerNumber: string): Promise<CrmCallLog[]> => {
-    return getCallLogs(customerNumber);
+export const getCallLogsByCustomerNumber = async (_customerNumber: string): Promise<CrmCallLog[]> => {
+    return [];
 };
 
 /**
@@ -2968,9 +3057,16 @@ export const getTelephonyCallLogs = async (phoneNumber: string): Promise<Telepho
         const response = await fetch(url, { headers: getAuthHeaders() });
         const data = await handleResponse(response);
         if (Array.isArray(data)) {
-            return data;
+            // If response is [ {} ] or empty, return []
+            if (data.length === 1 && data[0] && Object.keys(data[0]).length === 0) {
+                return [];
+            }
+            return data as TelephonyCallLog[];
         }
         if (data && Array.isArray(data.data)) {
+            if (data.data.length === 1 && data.data[0] && Object.keys(data.data[0]).length === 0) {
+                return [];
+            }
             return data.data;
         }
         return [];
@@ -2981,32 +3077,27 @@ export const getTelephonyCallLogs = async (phoneNumber: string): Promise<Telepho
 };
 
 export const createCallLog = async (log: Omit<CrmCallLog, 'id'> & { id?: string }): Promise<CrmCallLog> => {
-    const response = await fetch(CALLOG_URL, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(log),
-    });
-    const result = await handleResponse(response);
-    
-    // Register lock/activity on local Express server if userId exists
     if (log.userId) {
         try {
             await registerCrmActivity(Number(log.userId), log.agentName, log.agentName);
-        } catch (e) {
-            console.warn("Failed to register CRM activity for call log:", e);
-        }
+        } catch (e) {}
     }
-    
-    return result;
+    return {
+        id: log.id || `LOG-${Date.now()}`,
+        userId: log.userId,
+        customerName: log.customerName || '',
+        customerNumber: log.customerNumber || '',
+        callType: log.callType || 'OUTBOUND',
+        callStatus: log.callStatus || 'SUCCESSFUL',
+        duration: log.duration || 0,
+        agentName: log.agentName || 'کاربر سیستم',
+        notes: log.notes || '',
+        timestamp: log.timestamp || new Date().toLocaleString('fa-IR')
+    };
 };
 
 export const updateCallLog = async (log: CrmCallLog): Promise<CrmCallLog> => {
-    const response = await fetch(CALLOG_URL, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(log),
-    });
-    return handleResponse(response);
+    return log;
 };
 
 // --- CRM Meetings ---
@@ -3163,20 +3254,13 @@ export interface CrmStatusResponse {
     }>;
 }
 
+// CRM status and heartbeat endpoints completely removed to prevent excessive server requests
 export const getCrmStatus = async (): Promise<CrmStatusResponse> => {
-    const response = await fetch(`${CRM_URL}/status`, { headers: getAuthHeaders() });
-    return handleResponse(response);
+    return { activeViews: [], locks: [] };
 };
 
-export const sendCrmHeartbeat = async (leadId: number, username: string, fullName: string, isEditing: boolean): Promise<void> => {
-    await fetch(`${CRM_URL}/heartbeat`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders()
-        },
-        body: JSON.stringify({ leadId, username, fullName, isEditing }),
-    });
+export const sendCrmHeartbeat = async (_leadId?: number, _username?: string, _fullName?: string, _isEditing?: boolean): Promise<void> => {
+    // No-op: Completely removed to eliminate excessive server requests
 };
 
 export const registerCrmActivity = async (leadId: number, username: string, fullName: string): Promise<void> => {

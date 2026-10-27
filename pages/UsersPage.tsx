@@ -151,13 +151,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                 lastEditedBy: filters.lastEditedBy && filters.lastEditedBy !== 'all' ? filters.lastEditedBy : undefined,
             };
 
-            const [usersData, statusData] = await Promise.all([
-                getUsers(usersParams),
-                getCrmStatus().catch(() => ({ activeViews: [], locks: [] }))
-            ]);
-            
+            const usersData = await getUsers(usersParams);
             setUsers(usersData);
-            setCrmStatus(statusData);
+            setCrmStatus({ activeViews: [], locks: [] });
         } catch (err) {
             setError('خطا در دریافت اطلاعات');
             showToast('خطا در دریافت اطلاعات', 'error');
@@ -357,8 +353,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                     };
 
                     const refreshPromises: Promise<any>[] = [
-                        getUsers(usersParams),
-                        getCrmStatus().catch(() => ({ activeViews: [], locks: [] }))
+                        getUsers(usersParams)
                     ];
                     if (hasRequestedActivityData.current) {
                         refreshPromises.push(getCallLogs().catch(() => []));
@@ -368,9 +363,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
                         refreshPromises.push(getCrmMeetings().catch(() => []));
                     }
 
-                    Promise.all(refreshPromises).then(([usersData, statusData, callsData, journalsData, meetingsData]) => {
+                    Promise.all(refreshPromises).then(([usersData, callsData, journalsData, meetingsData]) => {
                         setUsers(usersData);
-                        setCrmStatus(statusData);
+                        setCrmStatus({ activeViews: [], locks: [] });
                         if (callsData) {
                             cachedCallLogs = callsData;
                             setCallLogs(callsData);
@@ -414,8 +409,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
             };
 
             const promises: Promise<any>[] = [
-                getUsers(usersParams),
-                getCrmStatus().catch(() => ({ activeViews: [], locks: [] }))
+                getUsers(usersParams)
             ];
 
             if (hasRequestedFilterOptions.current) {
@@ -432,9 +426,9 @@ const UsersPage: React.FC<UsersPageProps> = ({ initialFilters, onFiltersCleared,
 
             const results = await Promise.all(promises);
             setUsers(results[0]);
-            setCrmStatus(results[1]);
+            setCrmStatus({ activeViews: [], locks: [] });
 
-            let curIdx = 2;
+            let curIdx = 1;
             if (hasRequestedFilterOptions.current) {
                 const refs = results[curIdx++];
                 const staff = results[curIdx++];

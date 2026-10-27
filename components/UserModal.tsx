@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, LeadStatus, MyProfile, TelephonyCallLog } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
-import { sendCrmHeartbeat, getTelephonyCallLogs, normalizeToTelephonyNumber } from '../services/api';
+import { getTelephonyCallLogs, normalizeToTelephonyNumber } from '../services/api';
 import { UserCheck, PlusCircle, AlertCircle, Headphones, PhoneCall, Clock, RefreshCw, PhoneIncoming, PhoneOutgoing, Phone } from 'lucide-react';
 
 interface UserModalProps {
@@ -118,29 +118,6 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
         }
     };
 
-    // Send heartbeat when editing a lead
-    useEffect(() => {
-        if (!isOpen || !user || !loggedInUser) return;
-
-        const username = loggedInUser.username || 'ناشناس';
-        const fullName = loggedInUser.full_name || (loggedInUser as any)?.FullName || 'کاربر سیستم';
-        const leadId = Number(user.id);
-
-        const sendHeartbeat = async () => {
-            try {
-                await sendCrmHeartbeat(leadId, username, fullName, true);
-            } catch (err) {
-                console.warn("CRM Edit Heartbeat failed:", err);
-            }
-        };
-
-        sendHeartbeat();
-        const timer = setInterval(sendHeartbeat, 3000);
-
-        return () => {
-            clearInterval(timer);
-        };
-    }, [isOpen, user, loggedInUser]);
 
     useEffect(() => {
         if (user) {
