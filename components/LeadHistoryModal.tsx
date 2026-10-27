@@ -1282,22 +1282,27 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
         });
 
         const processTelephonyGroup = (primary: TelephonyCallLog, allLogsForCid: TelephonyCallLog[]) => {
-            const destinations = Array.from(new Set(allLogsForCid.map(l => l.destination || l.operator).filter(Boolean)));
-            const destinationsStr = destinations.length > 0 ? destinations.join('، ') : (primary.destination || primary.operator || '-');
+            const answeredLogs = allLogsForCid.filter(l => (Number(l.callDuration) || 0) > 5);
+            const isAnswered = answeredLogs.length > 0;
             
-            // Check if any attempt was answered (strictly callDuration > 5 seconds)
-            const isAnswered = allLogsForCid.some(l => (Number(l.callDuration) || 0) > 5);
-            const isInbound = primary.direction === 'enterprise_did' || primary.direction?.toLowerCase().includes('in');
+            // If answered, make the *first successful log* the primary one for display
+            const activePrimary = isAnswered ? answeredLogs[0] : primary;
+            // Only show successful operators if answered
+            const logsToUse = isAnswered ? answeredLogs : allLogsForCid;
+            const destinations = Array.from(new Set(logsToUse.map(l => l.destination || l.operator).filter(Boolean)));
+            const destinationsStr = destinations.length > 0 ? destinations.join('، ') : (activePrimary.destination || activePrimary.operator || '-');
+            
+            const isInbound = activePrimary.direction === 'enterprise_did' || activePrimary.direction?.toLowerCase().includes('in');
 
             list.push({
-                id: `telephony-${primary.id || primary.cid || Math.random()}`,
+                id: `telephony-${activePrimary.id || activePrimary.cid || Math.random()}`,
                 type: 'TELEPHONY_CALL',
-                content: `تماس ${isInbound ? 'ورودی' : 'خروجی'} سانترال تلفنی (VoIP)${primary.queueName ? ` - صف: ${primary.queueName}` : ''}${destinations.length > 1 ? ` [پاسخگویان: ${destinationsStr}]` : ` [پاسخگو: ${destinationsStr}]`}${primary.cid ? ` (CID: ${primary.cid})` : ''}`,
-                createdAt: primary.callTime || primary.created_at || '',
-                parsedDate: parseDateSafely(primary.callTime || primary.created_at || ''),
+                content: `تماس ${isInbound ? 'ورودی' : 'خروجی'} سانترال تلفنی (VoIP)${activePrimary.queueName ? ` - صف: ${activePrimary.queueName}` : ''}${destinations.length > 1 ? ` [پاسخگویان: ${destinationsStr}]` : ` [پاسخگو: ${destinationsStr}]`}${activePrimary.cid ? ` (CID: ${activePrimary.cid})` : ''}`,
+                createdAt: activePrimary.callTime || activePrimary.created_at || '',
+                parsedDate: parseDateSafely(activePrimary.callTime || activePrimary.created_at || ''),
                 author: destinationsStr,
                 telephonyLog: {
-                    ...primary,
+                    ...activePrimary,
                     destination: destinationsStr
                 }
             });
@@ -1335,8 +1340,11 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
 
         const groups: Array<{ primary: TelephonyCallLog; logs: TelephonyCallLog[]; isAnswered: boolean }> = [];
         cidMap.forEach(({ logs, primary }) => {
-            const isAnswered = logs.some(l => (Number(l.callDuration) || 0) > 5);
-            groups.push({ primary, logs, isAnswered });
+            const answeredLogs = logs.filter(l => (Number(l.callDuration) || 0) > 5);
+            const isAnswered = answeredLogs.length > 0;
+            // Use the first answered log as primary if answered
+            const primaryToUse = isAnswered ? answeredLogs[0] : primary;
+            groups.push({ primary: primaryToUse, logs, isAnswered });
         });
         noCidLogs.forEach(tLog => {
             const isAnswered = (Number(tLog.callDuration) || 0) > 5;
