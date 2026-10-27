@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { LeadStatus } from '../types';
 import type { User, LeadMessage, Car, CarSaleCondition, CustomerJournal, MyProfile, CrmCallLog, CrmMeeting, TelephonyCallLog } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
@@ -45,7 +45,8 @@ import {
     CheckCheck,
     PlusCircle,
     Headphones,
-    PhoneCall
+    PhoneCall,
+    RefreshCw
 } from 'lucide-react';
 
 interface LeadDetailHistoryModalProps {
@@ -106,6 +107,9 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
     const [timelineFilter, setTimelineFilter] = useState<'ALL' | 'NEW_CALLS' | 'ANSWERED_CALLS' | 'TELEPHONY' | 'MESSAGES' | 'JOURNALS' | 'MEETINGS'>('ALL');
+    const lastFetchedKeyRef = useRef<string | null>(null);
+    const [hasFetchError, setHasFetchError] = useState(false);
+    const [fetchErrorMessage, setFetchErrorMessage] = useState<string | null>(null);
 
     const formatDisconnectionCause = (cause?: string) => {
         if (!cause) return 'پایان مکالمه';
@@ -611,7 +615,7 @@ ${changes.join('\n')}`,
             }
 
             // Fetch journals to immediately show on history timeline
-            fetchJournals();
+            fetchJournals(true);
 
             setToastType('success');
             setToastMessage('مشخصات مشتری با موفقیت ذخیره شد.');
@@ -627,15 +631,24 @@ ${changes.join('\n')}`,
         }
     };
 
-    const fetchJournals = useCallback(async () => {
+    const fetchJournals = useCallback(async (force = false) => {
         const userId = fullUserDetails?.id || lead?.id || targetUser?.id;
         const userNumber = fullUserDetails?.Number || lead?.Number || targetUser?.Number || '';
         const leadName = fullUserDetails?.FullName || lead?.FullName || targetUser?.FullName || '';
         if (!userId && !userNumber) return;
+
+        const currentLeadKey = `${userId || ''}_${userNumber || ''}`;
+        if (!force && lastFetchedKeyRef.current === currentLeadKey && !hasFetchError) {
+            return;
+        }
+
         setIsJournalLoading(true);
         setIsCallLogsLoading(true);
         setIsCrmMeetingsLoading(true);
         setIsTelephonyLoading(true);
+        setHasFetchError(false);
+        setFetchErrorMessage(null);
+
         try {
             // Priority: use userId if available, otherwise userNumber
             const primaryParam = userId ? Number(userId) : userNumber;
@@ -651,10 +664,10 @@ ${changes.join('\n')}`,
                     return [] as TelephonyCallLog[];
                 })
             ]);
-            setJournals(journalData);
+            setJournals(journalData || []);
             setTelephonyLogs(telephonyData || []);
             
-            const filteredMeetings = meetingData.filter(m => {
+            const filteredMeetings = (meetingData || []).filter(m => {
                 if (userId && Number(m.userId) === Number(userId)) return true;
                 
                 const normalizedMeetingNum = String(m.customerNumber || '').trim().replace(/[\s\-\+]/g, '');
@@ -673,7 +686,7 @@ ${changes.join('\n')}`,
             });
             setCrmMeetings(filteredMeetings);
             
-            const filteredLogs = callLogData.filter(log => {
+            const filteredLogs = (callLogData || []).filter(log => {
                 if (userId && Number(log.userId) === Number(userId)) return true;
                 
                 const normalizedLogNum = String(log.customerNumber || '').trim().replace(/[\s\-\+]/g, '');
@@ -687,15 +700,18 @@ ${changes.join('\n')}`,
                 return false;
             });
             setCallLogs(filteredLogs);
-        } catch (e) {
+            lastFetchedKeyRef.current = currentLeadKey;
+        } catch (e: any) {
             console.error("Failed to fetch journals, call logs, meetings or VoIP logs", e);
+            setHasFetchError(true);
+            setFetchErrorMessage(e?.message || 'خطا در دریافت اطلاعات از سرور. لطفاً مجدداً تلاش نمایید.');
         } finally {
             setIsJournalLoading(false);
             setIsCallLogsLoading(false);
             setIsCrmMeetingsLoading(false);
             setIsTelephonyLoading(false);
         }
-    }, [fullUserDetails, lead]);
+    }, [fullUserDetails, lead, targetUser, hasFetchError]);
 
     useEffect(() => {
         if (isOpen && activeTab === 'COMBINED_HISTORY') {
@@ -739,7 +755,7 @@ ${changes.join('\n')}`,
                 author: currentUser?.full_name || currentUser?.username || 'کاربر سیستم'
             });
             setNewJournalContent('');
-            fetchJournals();
+            fetchJournals(true);
         } catch (e) {
             console.error("Failed to add journal", e);
             setValidationError('خطا در ثبت گزارش جدید.');
@@ -822,7 +838,7 @@ ${changes.join('\n')}`,
             setLogFormTab('NOTE'); // Go back to note tab
 
             window.dispatchEvent(new Event('crm_call_logs_updated'));
-            fetchJournals();
+            fetchJournals(true);
         } catch (e) {
             console.error("Failed to save manual call log", e);
             setValidationError('خطا در ثبت لاگ تماس تلفنی جدید.');
@@ -907,7 +923,7 @@ ${changes.join('\n')}`,
             setMeetingResult('');
             setLogFormTab('NOTE');
 
-            fetchJournals();
+            fetchJournals(true);
         } catch (e) {
             console.error("Failed to save meeting log", e);
             setValidationError('خطا در ثبت ملاقات حضوری جدید.');
@@ -1248,22 +1264,85 @@ ${delComment ? `توضیحات تکمیلی: ${delComment}` : ''}`;
             });
         });
 
-        // Add Telephony VoIP Call Logs
+        // Add Telephony VoIP Call Logs grouped by CID (collecting all operators/destinations)
+        const cidMap = new Map<string, { logs: TelephonyCallLog[]; primary: TelephonyCallLog }>();
+        const noCidLogs: TelephonyCallLog[] = [];
+
         telephonyLogs.forEach(tLog => {
-            const isInbound = tLog.direction === 'enterprise_did' || tLog.direction?.toLowerCase().includes('in');
+            const cidKey = tLog.cid ? String(tLog.cid).trim() : '';
+            if (cidKey) {
+                if (!cidMap.has(cidKey)) {
+                    cidMap.set(cidKey, { logs: [tLog], primary: tLog });
+                } else {
+                    cidMap.get(cidKey)!.logs.push(tLog);
+                }
+            } else {
+                noCidLogs.push(tLog);
+            }
+        });
+
+        const processTelephonyGroup = (primary: TelephonyCallLog, allLogsForCid: TelephonyCallLog[]) => {
+            const destinations = Array.from(new Set(allLogsForCid.map(l => l.destination || l.operator).filter(Boolean)));
+            const destinationsStr = destinations.length > 0 ? destinations.join('، ') : (primary.destination || primary.operator || '-');
+            
+            // Check if any attempt was answered (strictly callDuration > 5 seconds)
+            const isAnswered = allLogsForCid.some(l => (Number(l.callDuration) || 0) > 5);
+            const isInbound = primary.direction === 'enterprise_did' || primary.direction?.toLowerCase().includes('in');
+
             list.push({
-                id: `telephony-${tLog.id}`,
+                id: `telephony-${primary.id || primary.cid || Math.random()}`,
                 type: 'TELEPHONY_CALL',
-                content: `تماس ${isInbound ? 'ورودی' : 'خروجی'} سانترال تلفنی (VoIP)${tLog.queueName ? ` - صف: ${tLog.queueName}` : ''}`,
-                createdAt: tLog.callTime || tLog.created_at || '',
-                parsedDate: parseDateSafely(tLog.callTime || tLog.created_at || ''),
-                author: tLog.destination,
-                telephonyLog: tLog
+                content: `تماس ${isInbound ? 'ورودی' : 'خروجی'} سانترال تلفنی (VoIP)${primary.queueName ? ` - صف: ${primary.queueName}` : ''}${destinations.length > 1 ? ` [پاسخگویان: ${destinationsStr}]` : ` [پاسخگو: ${destinationsStr}]`}${primary.cid ? ` (CID: ${primary.cid})` : ''}`,
+                createdAt: primary.callTime || primary.created_at || '',
+                parsedDate: parseDateSafely(primary.callTime || primary.created_at || ''),
+                author: destinationsStr,
+                telephonyLog: {
+                    ...primary,
+                    destination: destinationsStr
+                }
             });
+        };
+
+        cidMap.forEach(({ logs, primary }) => {
+            processTelephonyGroup(primary, logs);
+        });
+
+        noCidLogs.forEach(tLog => {
+            processTelephonyGroup(tLog, [tLog]);
         });
 
         // Sort descending: newest first
         return list.sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime());
+    };
+
+    // Helper to get unique telephony groups by CID
+    const getUniqueTelephonyGroups = () => {
+        const cidMap = new Map<string, { logs: TelephonyCallLog[]; primary: TelephonyCallLog }>();
+        const noCidLogs: TelephonyCallLog[] = [];
+
+        telephonyLogs.forEach(tLog => {
+            const cidKey = tLog.cid ? String(tLog.cid).trim() : '';
+            if (cidKey) {
+                if (!cidMap.has(cidKey)) {
+                    cidMap.set(cidKey, { logs: [tLog], primary: tLog });
+                } else {
+                    cidMap.get(cidKey)!.logs.push(tLog);
+                }
+            } else {
+                noCidLogs.push(tLog);
+            }
+        });
+
+        const groups: Array<{ primary: TelephonyCallLog; logs: TelephonyCallLog[]; isAnswered: boolean }> = [];
+        cidMap.forEach(({ logs, primary }) => {
+            const isAnswered = logs.some(l => (Number(l.callDuration) || 0) > 5);
+            groups.push({ primary, logs, isAnswered });
+        });
+        noCidLogs.forEach(tLog => {
+            const isAnswered = (Number(tLog.callDuration) || 0) > 5;
+            groups.push({ primary: tLog, logs: [tLog], isAnswered });
+        });
+        return groups;
     };
 
     if (!isOpen || !lead) return null;
@@ -1733,7 +1812,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                         <span className="inline-flex items-center gap-1 font-bold font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/80 dark:border-emerald-800/80">
                                             <PhoneCall className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                                             {(() => {
-                                                const voipSuccessCount = telephonyLogs.filter(t => (t.callDuration > 0) || t.disconnectionCause === 'NORMAL_CLEARING').length;
+                                                const voipSuccessCount = getUniqueTelephonyGroups().filter(g => g.isAnswered).length;
                                                 const count = (targetUser.successful_calls !== null && targetUser.successful_calls !== undefined && targetUser.successful_calls > 0)
                                                     ? targetUser.successful_calls
                                                     : (voipSuccessCount > 0 ? voipSuccessCount : (targetUser.successful_calls ?? 0));
@@ -1743,7 +1822,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                     } />
                                     <DetailItem label="آخرین تماس موفق" value={(() => {
                                         if (targetUser.last_successful_call) return formatDate(targetUser.last_successful_call);
-                                        const latestVoip = telephonyLogs.find(t => (t.callDuration > 0) || t.disconnectionCause === 'NORMAL_CLEARING');
+                                        const latestVoip = getUniqueTelephonyGroups().find(g => g.isAnswered)?.primary;
                                         if (latestVoip?.callTime) return formatDate(latestVoip.callTime);
                                         return '-';
                                     })()} />
@@ -2236,14 +2315,46 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                 {/* Combined Activity Timeline */}
                                 <div className="space-y-3.5">
                                     <div className="flex items-center justify-between px-1 flex-wrap gap-2">
-                                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400">جدول زمانی ارتباطات و فعالیت‌های مشتری:</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400">جدول زمانی ارتباطات و فعالیت‌های مشتری:</h3>
+                                            <button
+                                                type="button"
+                                                onClick={() => fetchJournals(true)}
+                                                disabled={isJournalLoading || isTelephonyLoading}
+                                                title="فراخوانی مجدد اطلاعات از سرور"
+                                                className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+                                            >
+                                                <RefreshCw className={`w-3 h-3 ${isJournalLoading || isTelephonyLoading ? 'animate-spin' : ''}`} />
+                                                <span>فراخوانی مجدد</span>
+                                            </button>
+                                        </div>
                                         {telephonyLogs.length > 0 && (
                                             <span className="text-[10px] font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2.5 py-1 rounded-full border border-sky-200/80 dark:border-sky-800/80 flex items-center gap-1.5 shadow-xs">
                                                 <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                                                <span>{telephonyLogs.length.toLocaleString('fa-IR')} تماس ثبت‌شده در سانترال VoIP</span>
+                                                <span>{getUniqueTelephonyGroups().length.toLocaleString('fa-IR')} تماس یکتا در سانترال VoIP (از {telephonyLogs.length} رکورد تلاش)</span>
                                             </span>
                                         )}
                                     </div>
+
+                                    {hasFetchError && (
+                                        <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300 shadow-xs">
+                                            <div className="flex items-center gap-2">
+                                                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                                                <div>
+                                                    <p className="font-bold">خطا در دریافت اطلاعات از سرور</p>
+                                                    <p className="text-[11px] opacity-80">{fetchErrorMessage || 'زمان پاسخگویی به پایان رسید یا بازخوانی با خطا مواجه شد (تایم‌اوت ۳۰ ثانیه‌ای)'}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => fetchJournals(true)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-xs shrink-0"
+                                            >
+                                                <RefreshCw className="w-3.5 h-3.5" />
+                                                <span>فراخوانی مجدد</span>
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Timeline Filter Pills */}
                                     <div className="flex items-center gap-1.5 flex-wrap px-1 pt-0.5">
@@ -2268,7 +2379,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             }`}
                                         >
                                             <PhoneIncoming className="w-3 h-3" />
-                                            <span>تماس‌های جدید (بی‌پاسخ) ({telephonyLogs.filter(l => !(l.callDuration && l.callDuration > 0) && l.disconnectionCause !== 'NORMAL_CLEARING').length})</span>
+                                            <span>تماس‌های جدید (بی‌پاسخ) ({getUniqueTelephonyGroups().filter(g => !g.isAnswered).length})</span>
                                         </button>
                                         <button
                                             type="button"
@@ -2280,7 +2391,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             }`}
                                         >
                                             <Headphones className="w-3 h-3" />
-                                            <span>پاسخ داده شده ({telephonyLogs.filter(l => (l.callDuration && l.callDuration > 0) || l.disconnectionCause === 'NORMAL_CLEARING').length})</span>
+                                            <span>پاسخ داده شده ({getUniqueTelephonyGroups().filter(g => g.isAnswered).length})</span>
                                         </button>
                                         <button
                                             type="button"
@@ -2292,7 +2403,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             }`}
                                         >
                                             <Phone className="w-3 h-3" />
-                                            <span>کل تماس‌های سانترال ({telephonyLogs.length})</span>
+                                            <span>کل تماس‌های سانترال ({getUniqueTelephonyGroups().length})</span>
                                         </button>
                                         <button
                                             type="button"
@@ -2340,7 +2451,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             if (timelineFilter === 'NEW_CALLS') {
                                                 if (item.type === 'TELEPHONY_CALL' && item.telephonyLog) {
                                                     const dur = item.telephonyLog.callDuration || 0;
-                                                    return !(dur > 0 || item.telephonyLog.disconnectionCause === 'NORMAL_CLEARING');
+                                                    return !((Number(item.telephonyLog.callDuration) || 0) > 5);
                                                 }
                                                 if (item.type === 'CALL_LOG' && item.callLog) {
                                                     return item.callLog.callStatus === 'MISSED' || item.callLog.callStatus === 'NO_ANSWER' || item.callLog.callStatus === 'REJECTED';
@@ -2350,10 +2461,10 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             if (timelineFilter === 'ANSWERED_CALLS') {
                                                 if (item.type === 'TELEPHONY_CALL' && item.telephonyLog) {
                                                     const dur = item.telephonyLog.callDuration || 0;
-                                                    return dur > 0 || item.telephonyLog.disconnectionCause === 'NORMAL_CLEARING';
+                                                    return (Number(item.telephonyLog.callDuration) || 0) > 5;
                                                 }
                                                 if (item.type === 'CALL_LOG' && item.callLog) {
-                                                    return item.callLog.callStatus === 'SUCCESSFUL' || (item.callLog.duration && item.callLog.duration > 0);
+                                                    return item.callLog.callStatus === 'SUCCESSFUL' || ((Number(item.callLog.duration) || 0) > 5);
                                                 }
                                                 return false;
                                             }
@@ -2514,7 +2625,7 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                             } else if (item.type === 'TELEPHONY_CALL') {
                                                 const tLog = item.telephonyLog!;
                                                 const isInbound = tLog.direction === 'enterprise_did' || tLog.direction?.toLowerCase().includes('in');
-                                                const isSuccessful = (tLog.callDuration && tLog.callDuration > 0) || tLog.disconnectionCause === 'NORMAL_CLEARING';
+                                                const isSuccessful = (Number(tLog.callDuration) || 0) > 5;
                                                 
                                                 const dur = tLog.callDuration || 0;
                                                 const formattedDuration = dur > 0

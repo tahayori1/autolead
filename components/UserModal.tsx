@@ -82,8 +82,8 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
 
             // If we have telephony logs, sync statistics if not already populated
             if (logs && logs.length > 0) {
-                const successfulCount = logs.filter(l => (l.callDuration > 0) || l.disconnectionCause === 'NORMAL_CLEARING').length;
-                const latestSuccess = logs.find(l => (l.callDuration > 0) || l.disconnectionCause === 'NORMAL_CLEARING');
+                const successfulCount = logs.filter(l => (Number(l.callDuration) || 0) > 5).length;
+                const latestSuccess = logs.find(l => (Number(l.callDuration) || 0) > 5);
                 
                 setFormState(prev => ({
                     ...prev,
@@ -458,7 +458,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                         <PhoneIncoming className="w-3 h-3" />
                                         <span>تماس‌های جدید (بی‌پاسخ)</span>
                                         <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-full ${callFilterTab === 'new' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300'}`}>
-                                            {telephonyLogs.filter(c => !(c.callDuration && c.callDuration > 0) && c.disconnectionCause !== 'NORMAL_CLEARING').length}
+                                            {telephonyLogs.filter(c => !((Number(c.callDuration) || 0) > 5)).length}
                                         </span>
                                     </button>
                                     <button
@@ -473,7 +473,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                         <Headphones className="w-3 h-3" />
                                         <span>پاسخ داده شده</span>
                                         <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-full ${callFilterTab === 'answered' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'}`}>
-                                            {telephonyLogs.filter(c => (c.callDuration && c.callDuration > 0) || c.disconnectionCause === 'NORMAL_CLEARING').length}
+                                            {telephonyLogs.filter(c => (Number(c.callDuration) || 0) > 5).length}
                                         </span>
                                     </button>
                                 </div>
@@ -511,14 +511,14 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, lo
                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                                     {telephonyLogs
                                         .filter(c => {
-                                            const isAnswered = (c.callDuration && c.callDuration > 0) || c.disconnectionCause === 'NORMAL_CLEARING';
+                                            const isAnswered = (Number(c.callDuration) || 0) > 5;
                                             if (callFilterTab === 'new') return !isAnswered;
                                             if (callFilterTab === 'answered') return isAnswered;
                                             return true;
                                         })
                                         .map((call, idx) => {
                                         const isInbound = call.direction === 'enterprise_did' || call.direction?.toLowerCase().includes('in');
-                                        const isAnswered = (call.callDuration && call.callDuration > 0) || call.disconnectionCause === 'NORMAL_CLEARING';
+                                        const isAnswered = (Number(call.callDuration) || 0) > 5;
                                         const dur = call.callDuration || 0;
                                         const formattedDuration = dur > 0
                                             ? (dur >= 60 ? `${Math.floor(dur / 60)} دقیقه و ${dur % 60} ثانیه` : `${dur} ثانیه`)

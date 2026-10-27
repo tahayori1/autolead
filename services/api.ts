@@ -95,6 +95,25 @@ const getAuthHeaders = (): HeadersInit => {
     return headers;
 };
 
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 30000): Promise<Response> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        return response;
+    } catch (e: any) {
+        if (e.name === 'AbortError') {
+            throw new Error('عدم دریافت پاسخ پس از ۳۰ ثانیه (تایم‌اوت)');
+        }
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
 const ensureOnline = () => {
     if (!navigator.onLine) {
         throw new Error('این عملیات در حالت آفلاین امکان‌پذیر نیست.');
@@ -1542,10 +1561,10 @@ export const getCustomerJournals = async (userNumberOrId: number | string): Prom
         targetUrl = `${JOURNALS_URL}?number=${encodeURIComponent(queryNumber)}`;
     }
 
-    const response = await fetch(targetUrl, {
+    const response = await fetchWithTimeout(targetUrl, {
         method: 'GET',
         headers: getAuthHeaders()
-    });
+    }, 30000);
     const data = await handleResponse(response);
     
     let list: CustomerJournal[] = [];
@@ -1573,7 +1592,7 @@ export const createCustomerJournal = async (journal: Omit<CustomerJournal, 'id' 
 
     const rawId = journal.userId ?? journal.customerId ?? journal.customer_id;
     let numId: number | undefined = undefined;
-    if (rawId !== undefined && rawId !== null && rawId !== '') {
+    if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
         const parsed = Number(rawId);
         if (!isNaN(parsed) && parsed > 0) {
             numId = parsed;
@@ -3054,7 +3073,7 @@ export const getTelephonyCallLogs = async (phoneNumber: string): Promise<Telepho
     
     try {
         const url = `${API_BASE_URL}/callLogs?number=${encodeURIComponent(normalized)}`;
-        const response = await fetch(url, { headers: getAuthHeaders() });
+        const response = await fetchWithTimeout(url, { headers: getAuthHeaders() }, 30000);
         const data = await handleResponse(response);
         if (Array.isArray(data)) {
             // If response is [ {} ] or empty, return []
@@ -3108,7 +3127,7 @@ export const getCrmMeetings = async (customerId?: string | number): Promise<CrmM
     if (customerId !== undefined && customerId !== null && customerId !== '' && customerId !== 0) {
         url += `?customer_id=${encodeURIComponent(String(customerId).trim())}`;
     }
-    const response = await fetch(url, { headers: getAuthHeaders() });
+    const response = await fetchWithTimeout(url, { headers: getAuthHeaders() }, 30000);
     const data = await handleResponse(response);
     if (!Array.isArray(data)) return [];
     return data.map((item: any) => ({
