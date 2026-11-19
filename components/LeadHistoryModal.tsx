@@ -107,6 +107,73 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     const [validationError, setValidationError] = useState<string | null>(null);
     const [crmStatus, setCrmStatus] = useState<any>({ activeViews: [], locks: [] });
     const [timelineFilter, setTimelineFilter] = useState<'ALL' | 'NEW_CALLS' | 'ANSWERED_CALLS' | 'TELEPHONY' | 'MESSAGES' | 'JOURNALS' | 'MEETINGS'>('ALL');
+    const [operatorFilter, setOperatorFilter] = useState<string>('ALL');
+
+    const uniqueOperators = useMemo(() => {
+        const ops = new Set<string>();
+        telephonyLogs.forEach(tLog => {
+            if (tLog.operator) ops.add(tLog.operator);
+            if (tLog.destination) ops.add(tLog.destination);
+        });
+        return Array.from(ops).sort();
+    }, [telephonyLogs]);
+
+    const exportToCSV = () => {
+        
+                                        const filteredItems = timelineItems.filter(item => {
+                                            if (timelineFilter !== 'ALL') {
+                                                if (timelineFilter === 'NEW_CALLS') {
+                                                    if (item.type === 'TELEPHONY_CALL' && item.telephonyLog) {
+                                                        const dur = Number(item.telephonyLog.callDuration) || 0;
+                                                        return !(dur > 5);
+                                                    }
+                                                    if (item.type === 'CALL_LOG' && item.callLog) {
+                                                        return item.callLog.callStatus === 'MISSED' || item.callLog.callStatus === 'NO_ANSWER' || item.callLog.callStatus === 'REJECTED';
+                                                    }
+                                                    return false;
+                                                }
+                                                if (timelineFilter === 'ANSWERED_CALLS') {
+                                                    if (item.type === 'TELEPHONY_CALL' && item.telephonyLog) {
+                                                        const dur = Number(item.telephonyLog.callDuration) || 0;
+                                                        return dur > 5;
+                                                    }
+                                                    if (item.type === 'CALL_LOG' && item.callLog) {
+                                                        return item.callLog.callStatus === 'SUCCESSFUL' || ((Number(item.callLog.duration) || 0) > 5);
+                                                    }
+                                                    return false;
+                                                }
+                                                if (timelineFilter === 'TELEPHONY') return item.type === 'TELEPHONY_CALL' || item.type === 'CALL_LOG';
+                                                if (timelineFilter === 'MESSAGES') return item.type === 'MESSAGE';
+                                                if (timelineFilter === 'JOURNALS') return item.type === 'JOURNAL';
+                                                if (timelineFilter === 'MEETINGS') return item.type === 'MEETING';
+                                            }
+                                            if (operatorFilter !== 'ALL' && (item.type === 'TELEPHONY_CALL' || item.type === 'CALL_LOG')) {
+                                                const author = item.author || '';
+                                                if (!author.includes(operatorFilter)) return false;
+                                            }
+                                            return true;
+                                        });
+
+
+        const headers = ['نوع', 'محتوا', 'تاریخ', 'پاسخگو/نویسنده'];
+        const csvContent = [
+            headers.join(','),
+            ...filteredItems.map(item => [
+                item.type,
+                `"${item.content.replace(/"/g, '""')}"`,
+                item.createdAt,
+                item.author || '-'
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `customer_logs_${lead?.id || 'export'}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
     const lastFetchedKeyRef = useRef<string | null>(null);
     const [hasFetchError, setHasFetchError] = useState(false);
     const [fetchErrorMessage, setFetchErrorMessage] = useState<string | null>(null);
@@ -631,13 +698,15 @@ ${changes.join('\n')}`,
         }
     };
 
+    // Operator Filter defined above at line 110
+
     const fetchJournals = useCallback(async (force = false) => {
         const userId = fullUserDetails?.id || lead?.id || targetUser?.id;
         const userNumber = fullUserDetails?.Number || lead?.Number || targetUser?.Number || '';
         const leadName = fullUserDetails?.FullName || lead?.FullName || targetUser?.FullName || '';
         if (!userId && !userNumber) return;
 
-        const currentLeadKey = `${userId || ''}_${userNumber || ''}`;
+        const currentLeadKey = `${userId || ''}_${userNumber || ''}_${operatorFilter}`;
         if (!force && lastFetchedKeyRef.current === currentLeadKey && !hasFetchError) {
             return;
         }
@@ -654,7 +723,10 @@ ${changes.join('\n')}`,
             const primaryParam = userId ? Number(userId) : userNumber;
             const [journalData, callLogData, meetingData, telephonyData] = await Promise.all([
                 getCustomerJournals(primaryParam),
-                Promise.resolve([]),
+                getCallLogs(operatorFilter || undefined).catch(err => {
+                    console.error("Failed to fetch CRM call logs:", err);
+                    return [] as CrmCallLog[];
+                }),
                 getCrmMeetings(userId).catch(err => {
                     console.error("Failed to fetch CRM meetings:", err);
                     return [] as CrmMeeting[];
@@ -2325,6 +2397,21 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                     <div className="flex items-center justify-between px-1 flex-wrap gap-2">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400">جدول زمانی ارتباطات و فعالیت‌های مشتری:</h3>
+                                            <input
+                                                type="text"
+                                                placeholder="شماره پاسخگو..."
+                                                value={operatorFilter}
+                                                onChange={(e) => setOperatorFilter(e.target.value)}
+                                                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 outline-none w-32"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={exportToCSV}
+                                                className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/50 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-300 transition border border-emerald-200 dark:border-emerald-800"
+                                            >
+                                                <Share2 className="w-3 h-3" />
+                                                <span>خروجی CSV</span>
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => fetchJournals(true)}

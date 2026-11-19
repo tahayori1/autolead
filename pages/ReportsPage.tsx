@@ -407,6 +407,7 @@ const ReportsPage: React.FC = () => {
     const [selectedMonth, setSelectedMonth] = useState<string>('all');
     const [selectedDay, setSelectedDay] = useState<string>('all');
     const [timeRange, setTimeRange] = useState<TimeRange>('all');
+    const [operatorFilter, setOperatorFilter] = useState<string>('');
 
     const fetchData = React.useCallback(async () => {
         setLoading(true);
@@ -416,7 +417,7 @@ const ReportsPage: React.FC = () => {
                 getUsers({ items: 'all' }),
                 getCars(),
                 carOrdersService.getAll(),
-                getCallLogs().catch(() => []),
+                getCallLogs(operatorFilter || undefined).catch(() => []),
                 getCrmMeetings().catch(() => []),
                 getStaffUsers().catch(() => []),
                 getAllCustomerJournals().catch(() => [])
@@ -433,7 +434,7 @@ const ReportsPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [operatorFilter]);
 
     useEffect(() => {
         fetchData();
@@ -1624,7 +1625,7 @@ const ReportsPage: React.FC = () => {
             {activeSubTab === 'analytics' && (
                 <div className="space-y-8">
                     {/* Filters for Manual Analytics */}
-                    <div className="flex flex-col lg:flex-row gap-4 items-end lg:items-center bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 self-end justify-end">
+                    <div className="hidden flex flex-col lg:flex-row gap-4 items-end lg:items-center bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 self-end justify-end">
                         <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 rounded-xl">
                             {[
                                 { id: 'all', label: 'کل' },
@@ -1643,6 +1644,14 @@ const ReportsPage: React.FC = () => {
                         </div>
 
                         <div className="flex gap-2 w-full sm:w-auto">
+                            <select
+                                value={operatorFilter}
+                                onChange={(e) => setOperatorFilter(e.target.value)}
+                                className="w-full sm:w-32 px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 outline-none text-xs font-bold"
+                            >
+                                <option value="">همه پاسخگویان</option>
+                                <option value="989002955551">989002955551</option>
+                            </select>
                             <select
                                 value={selectedMonth}
                                 onChange={(e) => handleManualFilterChange('month', e.target.value)}

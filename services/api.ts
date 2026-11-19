@@ -3027,8 +3027,19 @@ export const deleteMessageTemplate = async (id: string): Promise<void> => {
 };
 
 // --- CRM Call Logs Server Endpoints ---
-export const getCallLogs = async (_customerNumber?: string): Promise<CrmCallLog[]> => {
-    return [];
+export const getCallLogs = async (operatorNumber?: string): Promise<CrmCallLog[]> => {
+    ensureOnline();
+    try {
+        const url = operatorNumber 
+            ? `${API_BASE_URL}/callLogs?operator=${encodeURIComponent(operatorNumber)}`
+            : `${API_BASE_URL}/callLogs`;
+        const response = await fetchWithTimeout(url, { headers: getAuthHeaders() }, 30000);
+        const data = await handleResponse(response);
+        return Array.isArray(data) ? data : (data?.data || []);
+    } catch (e) {
+        console.warn("Failed to fetch CRM call logs:", e);
+        return [];
+    }
 };
 
 export const getCallLogsByCustomerNumber = async (_customerNumber: string): Promise<CrmCallLog[]> => {
