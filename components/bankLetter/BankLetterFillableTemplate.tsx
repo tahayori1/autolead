@@ -255,6 +255,7 @@ export const BankLetterFillableTemplate: React.FC<BankLetterFillableTemplateProp
                             <input
                                 type="text"
                                 maxLength={26}
+                                dir="ltr"
                                 value={letter.shebaNumber}
                                 onChange={(e) => {
                                     const val = e.target.value.replace(/[^0-9a-zA-Z]/g, '');
@@ -265,7 +266,7 @@ export const BankLetterFillableTemplate: React.FC<BankLetterFillableTemplateProp
                                     });
                                 }}
                                 placeholder="شماره شبا ۲۴ رقمی (مثال: 590130100000000358157511)"
-                                className={`bg-emerald-50/50 dark:bg-emerald-950/30 border rounded-xl px-3 py-1 text-sm font-mono font-bold tracking-wider text-emerald-900 dark:text-emerald-200 w-64 direction-ltr focus:outline-hidden ${
+                                className={`bg-emerald-50/50 dark:bg-emerald-950/30 border rounded-xl px-3 py-1 text-sm font-mono font-bold tracking-wider text-emerald-900 dark:text-emerald-200 w-64 focus:outline-hidden ${
                                     letter.shebaNumber 
                                         ? (shebaVal.isValid ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-rose-400 ring-2 ring-rose-500/20')
                                         : 'border-slate-300 dark:border-slate-700'
@@ -350,6 +351,19 @@ export const BankLetterFillableTemplate: React.FC<BankLetterFillableTemplateProp
 
                 <div className="font-medium text-slate-700 dark:text-slate-300">
                     خواهشمند است بذل لطف نموده همکاری های لازم با نامبرده را مبذول فرمایید.
+                </div>
+
+                <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                    <label className="block font-bold text-slate-700 dark:text-slate-300">
+                        توضیحات یا بندهای تکمیلی نامه (اختیاری):
+                    </label>
+                    <textarea
+                        rows={2}
+                        value={letter.notes || ''}
+                        onChange={(e) => onChange({ notes: e.target.value })}
+                        placeholder="در صورت نیاز به درج توضیحات تکمیلی برای شعبه بانک اینجا بنویسید..."
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:border-blue-500 leading-relaxed"
+                    />
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">

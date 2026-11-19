@@ -1,23 +1,37 @@
-import React, { useRef, useState } from 'react';
-import type { BankLetter } from '../../types/bankLetter';
-import { formatCurrencyWithCommas, numberToPersianWords, toPersianDigits, formatShebaBlocks } from '../../services/bankLetterValidation';
+import React, { useState } from 'react';
+import type { BankLetter, DocumentPaperSize } from '../../types/bankLetter';
+import { formatCurrencyWithCommas, numberToPersianWords, toPersianDigits } from '../../services/bankLetterValidation';
 import { exportBankLetterToWord } from '../../services/wordExportService';
-import { printDocumentElement } from '../../services/documentPrintService';
-import { Printer, Copy, Check, ShieldCheck, Building2, Car, QrCode, FileDown, Loader2 } from 'lucide-react';
+import { printOfficialDocument } from '../../services/documentPrintService';
+import { PaginatedDocumentSheet, PaperSizeSelector } from './PaginatedDocumentSheet';
+import { HtmlPrintPreviewModal } from './HtmlPrintPreviewModal';
+import { Printer, Copy, Check, ShieldCheck, QrCode, FileDown, Loader2, Eye } from 'lucide-react';
 
 interface BankLetterOfficialViewProps {
     letter: BankLetter;
     onCopyText?: () => void;
     isCopied?: boolean;
+    paperSize?: DocumentPaperSize;
+    onPaperSizeChange?: (size: DocumentPaperSize) => void;
 }
 
 export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
     letter,
     onCopyText,
-    isCopied = false
+    isCopied = false,
+    paperSize: controlledPaperSize,
+    onPaperSizeChange
 }) => {
-    const printRef = useRef<HTMLDivElement>(null);
+    const [internalPaperSize, setInternalPaperSize] = useState<DocumentPaperSize>('A4');
+    const [pageCount, setPageCount] = useState(1);
     const [isExportingWord, setIsExportingWord] = useState(false);
+    const [isHtmlPreviewOpen, setIsHtmlPreviewOpen] = useState(false);
+
+    const paperSize = controlledPaperSize ?? internalPaperSize;
+    const handlePaperSizeChange = (next: DocumentPaperSize) => {
+        setInternalPaperSize(next);
+        onPaperSizeChange?.(next);
+    };
 
     const formattedAmount = formatCurrencyWithCommas(letter.amountRials);
     const amountInWords = letter.amountWords || (numberToPersianWords(letter.amountRials) + ' ریال');
@@ -26,16 +40,20 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
     const yearText = letter.carModelYear ? ` مدل ${letter.carModelYear}` : '';
 
     const handlePrint = async () => {
-        await printDocumentElement('printable-bank-letter', {
-            title: `نامه بانک - ${letter.customerName || 'مشتری'} - ${letter.letterNumber || ''}`,
-            documentType: 'BANK_LETTER'
-        });
+        await printOfficialDocument(
+            { type: 'BANK_LETTER', data: letter },
+            {
+                title: `نامه بانک - ${letter.customerName || 'مشتری'}`,
+                documentType: 'BANK_LETTER',
+                paperSize
+            }
+        );
     };
 
     const handleExportWord = async () => {
         try {
             setIsExportingWord(true);
-            await exportBankLetterToWord(letter);
+            await exportBankLetterToWord(letter, paperSize);
         } catch (error) {
             console.error('Error generating Word document for bank letter:', error);
         } finally {
@@ -44,17 +62,19 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
     };
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4" dir="rtl">
             {/* Action Bar */}
             <div className="no-print flex flex-wrap items-center justify-between gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl">
                         <ShieldCheck className="w-3.5 h-3.5" />
                         قالب رسمی نامه بانک
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                        نوع: {letter.letterType === 'CORPORATE' ? 'حقوقی / شرکتی' : 'شخصی / حقیقی'}
-                    </span>
+                    <PaperSizeSelector
+                        paperSize={paperSize}
+                        onChange={handlePaperSizeChange}
+                        pageCount={pageCount}
+                    />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -75,51 +95,58 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                         onClick={handleExportWord}
                         disabled={isExportingWord}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-60"
-                        title="دانلود فایل Word رسمی با فونت Arial و سربرگ"
+                        title="دانلود فایل Word رسمی با قطع کاغذ انتخابی"
                     >
-                        {isExportingWord ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                            <FileDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                        )}
-                        <span>خروجی Word (.docx)</span>
+                        {isExportingWord ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
+                        <span>خروجی Word ({paperSize})</span>
+                    </button>
+
+                    <button
+                        onClick={() => setIsHtmlPreviewOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                        title="باز کردن پیش‌نمایش دقیق HTML + CSS راست‌به‌چپ برای چاپ"
+                    >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>پیش‌نمایش چاپ (HTML)</span>
                     </button>
 
                     <button
                         onClick={handlePrint}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        title="چاپ مستقیم یا ذخیره تمیز به صورت PDF (بدون منوها)"
+                        title="چاپ مستقیم یا ذخیره تمیز به صورت PDF"
                     >
                         <Printer className="w-3.5 h-3.5" />
-                        <span>چاپ / PDF</span>
+                        <span>چاپ ({paperSize}) / PDF</span>
                     </button>
                 </div>
             </div>
 
-            {/* Official Letter Paper Layout (A4 Style) */}
-            <div 
+            {/* Paginated Official Letter Sheet */}
+            <PaginatedDocumentSheet
                 id="printable-bank-letter"
-                ref={printRef}
-                className="bank-letter-print-area relative bg-white text-slate-900 p-8 sm:p-12 md:p-14 rounded-3xl border border-slate-200 shadow-xl max-w-4xl mx-auto font-vazir leading-loose select-text overflow-hidden"
-                style={{ minHeight: '800px' }}
-            >
-                {/* Background Watermark */}
-                <div className="watermark-container absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] select-none">
+                paperSize={paperSize}
+                onPageCountChange={setPageCount}
+                watermark={
                     <div className="text-center transform -rotate-12">
-                        <div className="text-8xl font-black tracking-widest text-slate-900">HOSEINI KHODRO</div>
-                        <div className="text-4xl font-bold mt-2 text-slate-700">KERMAN MOTOR 2606</div>
+                        <div className="text-7xl font-black tracking-widest text-slate-900">HOSEINI KHODRO</div>
+                        <div className="text-3xl font-bold mt-2 text-slate-700">KERMAN MOTOR 2606</div>
                     </div>
-                </div>
-
-                {/* Letterhead Header Table */}
-                <div className="relative border-b-2 border-blue-600 pb-5 mb-8 flex items-start justify-between">
-                    {/* Right: Company Logo & Identity */}
+                }
+                footer={
+                    <>
+                        <span>شیراز، چهارراه بنفشه، روبروی کوچه ۱۸ استقلال - نمایندگی ۲۶۰۶ کرمان موتور (حسینی خودرو)</span>
+                        <span>تلفن تماس: ۰۷۱۹۱۶۹۰۹۰۶ | سامانه فروش اتولید</span>
+                    </>
+                }
+            >
+                {/* Letterhead Header */}
+                <div className="relative border-b-2 border-blue-600 pb-4 mb-6 flex items-start justify-between gap-2 avoid-break">
                     <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-900 text-white flex items-center justify-center font-black text-xl shadow-md border-2 border-white">
+                        <div className={`${paperSize === 'A5' ? 'w-11 h-11 text-base' : 'w-14 h-14 text-xl'} rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-900 text-white flex items-center justify-center font-black shadow-md border-2 border-white shrink-0`}>
                             <span>۲۶۰۶</span>
                         </div>
                         <div>
-                            <h2 className="text-xl sm:text-2xl font-black text-blue-950 tracking-tight">
+                            <h2 className={`${paperSize === 'A5' ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'} font-black text-blue-950 tracking-tight`}>
                                 شرکت حسینی خودرو شیراز
                             </h2>
                             <p className="text-xs sm:text-sm font-bold text-slate-600 mt-0.5">
@@ -128,42 +155,41 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Left: Administrative Metadata */}
                     <div className="text-left text-xs sm:text-sm space-y-1 text-slate-700 font-medium">
                         <div className="flex items-center justify-end gap-1.5">
+                            <span className="text-slate-500">تاریخ:</span>
                             <span className="font-bold text-slate-900">{toPersianDigits(letter.letterDate || '1405/06/22')}</span>
-                            <span className="text-slate-500">:تاریخ</span>
                         </div>
                         <div className="flex items-center justify-end gap-1.5">
-                            <span className="font-bold font-mono text-slate-900">{letter.letterNumber || '1405/KM2606/---'}</span>
-                            <span className="text-slate-500">:شماره</span>
+                            <span className="text-slate-500">شماره:</span>
+                            <span className="font-bold font-mono text-slate-900" dir="ltr">{letter.letterNumber || '1405/KM2606/---'}</span>
                         </div>
                         <div className="flex items-center justify-end gap-1.5">
+                            <span className="text-slate-500">پیوست:</span>
                             <span className="font-bold text-slate-900">ندارد</span>
-                            <span className="text-slate-500">:پیوست</span>
                         </div>
                     </div>
                 </div>
 
                 {/* "بنام خدا" */}
-                <div className="text-center my-6">
-                    <span className="text-lg font-black text-slate-800 tracking-wider font-vazir">
+                <div className="text-center my-4">
+                    <span className="text-base sm:text-lg font-black text-slate-800 tracking-wider">
                         بنام خدا
                     </span>
                 </div>
 
                 {/* Addressee */}
-                <div className="my-6">
-                    <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                <div className="my-5 avoid-break">
+                    <h3 className={`${paperSize === 'A5' ? 'text-base' : 'text-lg sm:text-xl'} font-black text-slate-900`}>
                         ریاست محترم {letter.destinationBankName || 'بانک ...'}{branchText}
                     </h3>
-                    <div className="text-base font-bold text-slate-700 mt-1">
+                    <div className="text-sm sm:text-base font-bold text-slate-700 mt-1">
                         با سلام
                     </div>
                 </div>
 
                 {/* Letter Body */}
-                <div className="text-base sm:text-lg leading-[2.6] text-justify text-slate-800 my-8">
+                <p className={`${paperSize === 'A5' ? 'text-xs sm:text-sm leading-[2.2]' : 'text-base sm:text-lg leading-[2.6]'} text-justify text-slate-800 my-6 doc-body-text`}>
                     احتراماً{' '}
                     <strong className="font-bold text-slate-950">{letter.customerTitle || 'خانم/آقای'}</strong>{' '}
                     <span className="font-bold text-blue-900 bg-blue-50/70 px-1.5 py-0.5 rounded-md border border-blue-100">
@@ -180,7 +206,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                     <span className="text-slate-700 font-medium">({amountInWords})</span>{' '}
                     <strong className="font-bold text-slate-950">{letter.paymentMethod || 'بصورت حواله ساتنا'}</strong>{' '}
                     به شماره شبا{' '}
-                    <span className="font-bold font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 direction-ltr inline-block tracking-wider">
+                    <span dir="ltr" className="font-bold font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 inline-block tracking-wider">
                         {letter.shebaNumber || '........................'}
                     </span>{' '}
                     <strong className="font-bold text-slate-950">{letter.beneficiaryBankName || 'بانک ...'}</strong>{' '}
@@ -195,16 +221,23 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                     {yearText && <span className="font-bold text-slate-950">{yearText}</span>}
                     {colorText && <span className="font-bold text-slate-950">{colorText}</span>}{' '}
                     به خدمت حضورتان معرفی می گردند.
-                </div>
+                </p>
 
                 {/* Closing formal sentence */}
-                <div className="text-base sm:text-lg leading-loose text-justify text-slate-800 my-6 font-medium">
+                <p className={`${paperSize === 'A5' ? 'text-xs sm:text-sm' : 'text-base sm:text-lg'} leading-loose text-justify text-slate-800 my-5 font-medium`}>
                     خواهشمند است بذل لطف نموده همکاری های لازم با نامبرده را مبذول فرمایید.
-                </div>
+                </p>
+
+                {/* Optional Notes */}
+                {letter.notes && letter.notes.trim() && (
+                    <div className="my-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                        <span className="font-bold text-slate-900 block mb-1">توضیحات تکمیلی:</span>
+                        {letter.notes.trim()}
+                    </div>
+                )}
 
                 {/* Footer Signature & Stamp Box */}
-                <div className="avoid-break mt-16 pt-8 flex items-end justify-between">
-                    {/* Security Verification & QR */}
+                <div className="avoid-break signature-box mt-12 pt-6 flex flex-wrap items-end justify-between gap-4">
                     <div className="flex items-center gap-3 text-slate-500 text-[11px] bg-slate-50 p-3 rounded-2xl border border-slate-200">
                         <QrCode className="w-10 h-10 text-slate-700 shrink-0" />
                         <div>
@@ -214,8 +247,7 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Signature Block */}
-                    <div className="text-center min-w-[220px]">
+                    <div className="text-center min-w-[200px]">
                         <div className="text-sm font-bold text-slate-700 mb-1">با تشکر و احترام</div>
                         <div className="text-base font-black text-blue-950">
                             {letter.dealershipName || 'نمایندگی ۲۶۰۶ کرمان موتور'}
@@ -223,18 +255,21 @@ export const BankLetterOfficialView: React.FC<BankLetterOfficialViewProps> = ({
                         <div className="text-xs text-slate-500 mt-0.5">
                             (شرکت حسینی خودرو شیراز)
                         </div>
-                        <div className="h-16 flex items-center justify-center opacity-40">
+                        <div className="h-14 flex items-center justify-center opacity-40">
                             <span className="text-xs text-slate-400 italic">[محل امضا و مهر نمایندگی]</span>
                         </div>
                     </div>
                 </div>
+            </PaginatedDocumentSheet>
 
-                {/* Print Footer */}
-                <div className="mt-12 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 flex items-center justify-between">
-                    <span>شیراز - نمایندگی ۲۶۰۶ کرمان موتور (حسینی خودرو)</span>
-                    <span>تلفن تماس: ۰۷۱-۳۷۲۶۰۰۰۰ | سامانه فروش اتولید</span>
-                </div>
-            </div>
+            <HtmlPrintPreviewModal
+                isOpen={isHtmlPreviewOpen}
+                onClose={() => setIsHtmlPreviewOpen(false)}
+                payload={{ type: 'BANK_LETTER', data: letter }}
+                paperSize={paperSize}
+                onPaperSizeChange={handlePaperSizeChange}
+                documentTitle={`نامه معرفی به بانک - ${letter.customerName || 'مشتری'}`}
+            />
         </div>
     );
 };

@@ -1,6 +1,7 @@
 export type BankLetterType = 'CORPORATE' | 'PERSONAL';
 export type BankAccountType = 'COMPANY' | 'INDIVIDUAL';
 export type BankLetterStatus = 'DRAFT' | 'ISSUED' | 'PRINTED';
+export type DocumentPaperSize = 'A4' | 'A5';
 
 export interface SavedBankAccount {
     id: string;
@@ -162,3 +163,97 @@ export interface CarPeaceContract {
     updatedAt?: string;
 }
 
+// --- 1. فرم پیش قرارداد (Pre-Contract Form) ---
+export interface PreContractForm {
+    id: string;
+    contractNumber: string;
+    contractDate: string;
+    buyerTitle: string; // خانم / آقای
+    buyerName: string;
+    buyerFatherName: string;
+    buyerNationalCode: string;
+    carModel: string;
+    modelYear: string;
+    color: string;
+    totalPriceRials: number;
+    prepaymentRials: number;
+    remainingPaymentDate: string;
+    status: 'DRAFT' | 'SIGNED';
+    createdAt: string;
+    updatedAt?: string;
+}
+
+// --- 2. فرم تایید نهایی حواله (Remittance Final Approval Form) ---
+export interface RemittanceApprovalForm {
+    id: string;
+    formNumber: string;
+    formDate: string;
+    // 1. مشخصات خودرو
+    carModel: string;
+    color: string;
+    deliveryTime: string;
+    // 2. اطلاعات مشتری
+    customerName: string;
+    customerNationalCode: string;
+    customerPhone: string;
+    // 3. کنترل وضعیت مالی (حسابداری)
+    accCheckNoDebt: boolean;
+    accCheckMatched: boolean;
+    accCheckClear: boolean;
+    totalAmountRials: number;
+    paidAmountRials: number;
+    remainingAmountRials: number;
+    accountingManagerName: string;
+    accountingDate: string;
+    // 4. کنترل وضعیت فروش
+    salesCheckCorrect: boolean;
+    salesCheckInvoice: boolean;
+    salesManagerName: string;
+    salesDate: string;
+    salesNotes: string;
+    // 5. تایید مدیریت
+    mgmtCheckSignatures: boolean;
+    salesResponsibilityWith: string;
+    status: 'DRAFT' | 'APPROVED';
+    createdAt: string;
+    updatedAt?: string;
+}
+
+// --- 3. قولنامه آزاد (Free-market Bill of Sale) ---
+export interface FreeBillOfSale {
+    id: string;
+    contractNumber: string;
+    contractDate: string;
+    transactionTime: string;
+    // فروشنده
+    sellerTitle: string; // خانم / آقای
+    sellerName: string;
+    sellerFatherName: string;
+    sellerIdNumber: string;
+    sellerIssuePlace: string;
+    sellerNationalCode: string;
+    sellerAddress: string;
+    sellerPostalCode: string;
+    sellerPhone: string;
+    // خریدار
+    buyerTitle: string; // خانم / آقای
+    buyerName: string;
+    buyerFatherName: string;
+    buyerIdNumber: string;
+    buyerIssuePlace: string;
+    buyerNationalCode: string;
+    buyerAddress: string;
+    buyerPostalCode: string;
+    buyerPhone: string;
+    // مورد معامله
+    carModel: string;
+    chassisNumber: string; // شماره بدنه
+    color: string;
+    plateNumber: string; // شماره شهربانی
+    totalAmountRials: number;
+    totalAmountDescription: string;
+    deliveredDocuments: string;
+    status: 'DRAFT' | 'SIGNED';
+    createdAt: string;
+    updatedAt?: string;
+}

@@ -240,13 +240,14 @@ export function formatOfficialLetterText(letter: BankLetter): string {
     const branchText = letter.destinationBranchName ? ` ${letter.destinationBranchName}` : '';
     const colorText = letter.carColor ? ` به رنگ ${letter.carColor}` : '';
     const yearText = letter.carModelYear ? ` مدل ${letter.carModelYear}` : '';
+    const notesText = letter.notes && letter.notes.trim() ? `\nتوضیحات: ${letter.notes.trim()}` : '';
     
     return `بنام خدا
 
 ریاست محترم ${letter.destinationBankName}${branchText}
 با سلام
 احتراماً ${letter.customerTitle} ${letter.customerName} به کدملی ${letter.customerNationalCode} جهت امور بانکی و واریز وجه به مبلغ ${formattedAmount} ریال (${wordsAmount}) ${letter.paymentMethod || 'بصورت حواله ساتنا'} به شماره شبا ${letter.shebaNumber} ${letter.beneficiaryBankName} بنام ${letter.accountHolderName} جهت خرید یک دستگاه ${letter.carModel}${yearText}${colorText} به خدمت حضورتان معرفی می گردند.
-خواهشمند است بذل لطف نموده همکاری های لازم با نامبرده را مبذول فرمایید.
+خواهشمند است بذل لطف نموده همکاری های لازم با نامبرده را مبذول فرمایید.${notesText}
 
 با تشکر
 ${letter.dealershipName || 'نمایندگی کرمان موتور ۲۶۰۶'}

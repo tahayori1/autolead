@@ -55,6 +55,7 @@ export const MENU_GROUPS_REGISTRY: MenuGroupDefinition[] = [
             { id: 'car-orders', label: 'ثبت سفارش فروش', description: 'فرم ثبت سفارش و فرایند بررسی مالی خرید خودرو' },
             { id: 'zero-car-delivery', label: 'ورود و خروج خودروها', description: 'ثبت پلاک، شاسی و ورود خودروهای صفر' },
             { id: 'bank-letter', label: 'قرارداد صلح و نامه بانک', description: 'صدور معرفی‌نامه بانک (ساتنا/پایا) و صلح‌نامه' },
+            { id: 'leasing', label: 'بخش لیزینگ (واسپاری کرمان موتور)', description: 'پرونده واحد لیزینگ شامل ۸ فرم پیش‌ثبت‌نام، قرارداد اقساطی، اقرارنامه، صلح‌نامه، متمم و احراز هویت' },
             { id: 'cars', label: 'کاتالوگ و مشخصات خودروها', description: 'مشخصات فنی و آپشن‌های تمامی مدل‌های خودرو' },
             { id: 'collaboration', label: 'نمایشگاه‌های همکار', description: 'اطلاعات و شبکه نمایشگاه‌های همکار' },
             { id: 'collaboration-cars', label: 'موجودی همکاران', description: 'فهرست خودروهای به اشتراک گذاشته شده توسط همکاران' },

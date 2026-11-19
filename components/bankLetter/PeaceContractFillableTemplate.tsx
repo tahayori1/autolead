@@ -115,6 +115,39 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                 </div>
             </div>
 
+            {/* Contract Number, Date & Time */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+                <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">شماره قرارداد صلح:</label>
+                    <input
+                        type="text"
+                        value={contract.contractNumber}
+                        onChange={(e) => onChange({ contractNumber: e.target.value })}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold font-mono text-slate-800 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">تاریخ تنظیم معامله:</label>
+                    <input
+                        type="text"
+                        value={contract.contractDate}
+                        onChange={(e) => onChange({ contractDate: e.target.value })}
+                        placeholder="1405/06/22"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold font-mono text-slate-800 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">ساعت تنظیم معامله:</label>
+                    <input
+                        type="text"
+                        value={contract.transactionTime}
+                        onChange={(e) => onChange({ transactionTime: e.target.value })}
+                        placeholder="11:00"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold font-mono text-slate-800 dark:text-white"
+                    />
+                </div>
+            </div>
+
             {/* Real-time Validation Summary Dashboard (5 Key Pillars) */}
             <div className="bg-gradient-to-r from-slate-50 to-slate-100/60 dark:from-slate-800/40 dark:to-slate-900/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3">
                 <div className="flex items-center justify-between">
@@ -328,7 +361,7 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                         <div><span className="font-bold">مصالح:</span> {contract.releasorName}</div>
                         <div><span className="font-bold">شناسه ملی:</span> {toPersianDigits(contract.releasorNationalId)}</div>
                         <div><span className="font-bold">آدرس:</span> {contract.releasorAddress}</div>
-                        <div><span className="font-bold">کد پستی:</span> {toPersianDigits(contract.releasorPostalCode)} | <span className="font-bold">تلفن:</span> {toPersianDigits(contract.releasorPhone)}</div>
+                        <div><span className="font-bold">کد پستی:</span> {toPersianDigits(contract.releasorPostalCode)} | <span className="font-bold">تلفن:</span> {toPersianDigits((!contract.releasorPhone || contract.releasorPhone === '09370518538') ? '07191690906' : contract.releasorPhone)}</div>
                     </div>
                 </div>
 
@@ -687,6 +720,20 @@ export const PeaceContractFillableTemplate: React.FC<PeaceContractFillableTempla
                     <p className="bg-slate-100/70 dark:bg-slate-900/50 p-3 rounded-xl leading-relaxed text-justify">
                         کلیه مخارج انتقال سند و عوارض شهرداری و مالیات نقل و انتقال به عهده متصالح میباشد که طبق تعرفه دفترخانه اسناد رسمی باید پرداخت نماید. سند خودرو فوق پس از به نام خوردن به نام مصالح، در دفتر خانه اسناد رسمی به صورت وکالت تعویض پلاک به نام متصالح انتقال می یابد. داور مرضی‌الطرفین: <strong className="text-slate-900 dark:text-white">آقای محمد شکرشکن</strong> با شناسه داوری ۹۸۱۸۸ عضو کانون داوران استان فارس.
                     </p>
+                </div>
+
+                {/* Optional Extra Clauses / Notes (supports automatic multi-page expansion) */}
+                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                    <label className="block font-bold text-slate-800 dark:text-slate-200">
+                        بندهای الحاقی / توضیحات تکمیلی قرارداد (اختیاری — در صورت طولانی بودن به صفحات بعدی منتقل می‌شود):
+                    </label>
+                    <textarea
+                        rows={3}
+                        value={contract.notes || ''}
+                        onChange={(e) => onChange({ notes: e.target.value })}
+                        placeholder="در صورت نیاز به درج شروط اختصاصی، چک‌های پرداختی یا تعهدات تکمیلی اینجا بنویسید..."
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:border-amber-500 leading-relaxed"
+                    />
                 </div>
             </div>
         </div>

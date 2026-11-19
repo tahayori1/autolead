@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getHiddenMenuItems, MANDATORY_MENU_ITEMS } from './utils/menuConfig';
 
-import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone, Landmark, Bot, Store, Car } from 'lucide-react';
+import { Wallet, Clock, Sparkles, Layers, Phone, Info, Boxes, RefreshCw, FileText, Megaphone, Landmark, Bot, Store, Car, FileSpreadsheet } from 'lucide-react';
 import HomePage from './pages/HomePage';
 import AiAssistantPage from './pages/AiAssistantPage';
 import ConditionsPage from './pages/ConditionsPage';
@@ -34,6 +34,7 @@ import MarketingReportManager from './components/MarketingReportManager';
 import AboutPage from './pages/AboutPage';
 import AttendancePage from './pages/AttendancePage';
 import BankLetterPage from './pages/BankLetterPage';
+import LeasingPage from './pages/LeasingPage';
 import StorageCenterPage from './pages/StorageCenterPage';
 import RequestsHubPage from './pages/RequestsHubPage';
 import OperatorCallScoresPage from './pages/OperatorCallScoresPage';
@@ -66,7 +67,7 @@ import { getMyProfile, recordUserActivity, sendLiveHeartbeatPulse } from './serv
 import type { MyProfile } from './types';
 import AutoRefreshWidget, { REFRESH_OPTIONS, formatRemainingTime } from './components/AutoRefreshWidget';
 
-export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'operator-scores' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
+export type ActiveView = 'home' | 'ai-assistant' | 'announcements' | 'conditions' | 'inventory' | 'users' | 'cars' | 'car-prices' | 'vehicle-exit' | 'settings' | 'access-control' | 'poll' | 'reports' | 'operator-scores' | 'commission' | 'corrective-actions' | 'meeting-minutes' | 'leave-requests' | 'attendance' | 'requests' | 'anonymous-feedback' | 'zero-car-delivery' | 'my-profile' | 'customer-club' | 'notification-center' | 'used-cars' | 'car-orders' | 'bank-letter' | 'leasing' | 'salary-advance' | 'overtime' | 'advertising-report' | 'advertising-campaigns' | 'advertising-writer' | 'advertising-titles' | 'advertising-hooks' | 'advertising-ctas' | 'advertising-contact' | 'collaboration' | 'collaboration-cars' | 'storage-center' | 'about';
 
 interface MenuItemProps {
     label: string;
@@ -289,6 +290,7 @@ const App: React.FC = () => {
         { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
         { view: 'zero-car-delivery' as ActiveView, label: 'ورود و خروج خودروها', icon: <TruckIcon className="w-5 h-5" /> },
         { view: 'bank-letter' as ActiveView, label: 'صدور نامه بانک (ساتنا)', icon: <Landmark className="w-5 h-5 text-blue-500" /> },
+        { view: 'leasing' as ActiveView, label: 'بخش لیزینگ (واسپاری)', icon: <FileSpreadsheet className="w-5 h-5 text-rose-500" /> },
         { view: 'announcements' as ActiveView, label: 'اطلاعیه‌های داخلی', icon: <SpeakerphoneIcon className="w-5 h-5" /> },
         { view: 'conditions' as ActiveView, label: 'بخشنامه‌ها فروش', icon: <ConditionsIcon className="w-5 h-5" /> },
         { view: 'inventory' as ActiveView, label: 'لیست موجودی', icon: <Boxes className="w-5 h-5 text-indigo-500" /> },
@@ -344,6 +346,7 @@ const App: React.FC = () => {
                 { view: 'car-orders' as ActiveView, label: 'ثبت سفارش فروش', icon: <ClipboardListIcon className="w-5 h-5" /> },
                 { view: 'zero-car-delivery' as ActiveView, label: 'ورود و خروج خودروها', icon: <TruckIcon className="w-5 h-5" /> },
                 { view: 'bank-letter' as ActiveView, label: 'قرارداد صلح و نامه بانک', icon: <Landmark className="w-5 h-5 text-amber-500" /> },
+                { view: 'leasing' as ActiveView, label: 'بخش لیزینگ (واسپاری)', icon: <FileSpreadsheet className="w-5 h-5 text-rose-500" /> },
                 { view: 'cars' as ActiveView, label: 'کاتالوگ خودروها', icon: <CarIcon className="w-5 h-5" /> },
                 { view: 'collaboration' as ActiveView, label: 'نمایشگاه‌های همکار', icon: <Store className="w-5 h-5 text-rose-500" /> },
                 { view: 'collaboration-cars' as ActiveView, label: 'موجودی همکار', icon: <Car className="w-5 h-5 text-indigo-400" /> },
@@ -718,6 +721,7 @@ const App: React.FC = () => {
                 {activeView === 'advertising-contact' && <AdvertisingPage loggedInUser={currentUser} initialTab="contact" />}
                 {activeView === 'car-orders' && <CarOrderPage isAdmin={currentUser?.isAdmin === 1} />}
                 {activeView === 'bank-letter' && <BankLetterPage isAdmin={currentUser?.isAdmin === 1} loggedInUser={currentUser} />}
+                {activeView === 'leasing' && <LeasingPage isAdmin={currentUser?.isAdmin === 1} loggedInUser={currentUser} />}
                 {activeView === 'collaboration' && <CollabShowroomsPage loggedInUser={currentUser} />}
                 {activeView === 'collaboration-cars' && <CollabCarsPage />}
                 {activeView === 'storage-center' && <StorageCenterPage />}

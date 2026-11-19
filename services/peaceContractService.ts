@@ -17,7 +17,7 @@ export const DEFAULT_PEACE_CONTRACT: CarPeaceContract = {
     releasorNationalId: '14012274787',
     releasorAddress: 'شیراز، چهارراه بنفشه، روبروی کوچه 18 استقلال',
     releasorPostalCode: '7173714734',
-    releasorPhone: '09370518538',
+    releasorPhone: '07191690906',
     releaseeTitle: 'آقای',
     releaseeName: '',
     releaseeFatherName: '',
@@ -125,12 +125,14 @@ export function deletePeaceContract(id: string): CarPeaceContract[] {
 export function formatPeaceContractText(c: CarPeaceContract): string {
     const totalAmountStr = c.totalAmountRials > 0 ? `${toPersianDigits(formatCurrencyWithCommas(c.totalAmountRials))} ریال (${numberToPersianWords(c.totalAmountRials)} ریال)` : '........................ ریال';
     const paidAmountStr = c.paidAmountRials > 0 ? `${toPersianDigits(formatCurrencyWithCommas(c.paidAmountRials))} ریال` : (c.totalAmountRials > 0 ? `${toPersianDigits(formatCurrencyWithCommas(c.totalAmountRials))} ریال` : '........................');
+    const companyPhone = (!c.releasorPhone || c.releasorPhone === '09370518538') ? '07191690906' : c.releasorPhone;
+    const notesBlock = c.notes && c.notes.trim() ? `\nبندهای الحاقی / توضیحات تکمیلی:\n${c.notes.trim()}\n` : '';
 
     return `بسمه تعالی
 قرارداد صلح خودرو
 مصالح: ${c.releasorName || 'شرکت تضامنی حسینی خودرو شیراز به نمایندگی خانم حسینی'}
 شناسه ملی: ${toPersianDigits(c.releasorNationalId || '14012274787')}        آدرس: ${c.releasorAddress || 'شیراز، چهارراه بنفشه، روبروی کوچه 18 استقلال'}
-کد پستی:     ${toPersianDigits(c.releasorPostalCode || '7173714734')}  تلفن:  ${toPersianDigits(c.releasorPhone || '09370518538')}
+کد پستی:     ${toPersianDigits(c.releasorPostalCode || '7173714734')}  تلفن:  ${toPersianDigits(companyPhone)}
 متصالح: ${c.releaseeTitle || 'آقای/خانم'} ${c.releaseeName || '....................'}    فرزند : ${c.releaseeFatherName || '..........'}    به شماره شناسنامه : ${toPersianDigits(c.releaseeIdNumber) || '..........'}    صادره از : ${c.releaseeIssuePlace || '..........'}
 کد ملی: ${toPersianDigits(c.releaseeNationalCode) || '..........'}    آدرس: ${c.releaseeAddress || '..................................................'}
 کدپستی: ${toPersianDigits(c.releaseePostalCode) || '..........'}    تلفن: ${toPersianDigits(c.releaseePhone) || '..........'}
@@ -148,7 +150,7 @@ export function formatPeaceContractText(c: CarPeaceContract): string {
 6- تمامی مکاتبات و تماس و پیامک ها به آدرس و شماره همراه مذکور ابلاغ و اعلام می گردد.بدیهی است در صورت هرگونه تغییر در آدرس یا شماره تلفن همراه و اطلاعات حساب بانکی فوق الذکر متصالح موظف است ظرف مدت3 روز مراتب را کتبا به مصالح اعلام نماید.در غیر اینصورت مسئولیت آن متوجه متصالح می باشد.
 7-تنظیم صورتجلسه تحویل خودرو به منزله تایید صحت و سلامت خودروی تحویل گرفته شده از سوی مصالح میباشد.با این وجود مسئولیت رفع هرگونه ایراد و یا نقص فنی خودرو و جبران خسارات به عهده مراجع و نمایندگی های مجاز خدمات پس از فروش شرکت کرمان موتور است و از این حیث هیچ مسئولیتی متوجه مصالح نیست.
 8-این صلحنامه در تاریخ ${toPersianDigits(c.contractDate) || '....................'} طبق ماده10 قانون مدنی در دو نسخه  با متن و حکم و اعتبار واحد فی مابین  طرفین و امضا و مبادله شد و مفاد آن برای طرفین لازم الاتباع است.
-
+${notesBlock}
 اينجانب ${c.releaseeTitle || 'آقای/خانم'} ${c.releaseeName || '....................'} با مطالعه دقيق قرارداد فوق و علم و آگاهي كامل از مفاد آن با رضايت آنرا امضاء نمودم.
 
 

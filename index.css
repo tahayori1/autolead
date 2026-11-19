@@ -142,13 +142,16 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     display: none !important;
   }
 
-  /* Expand the printable document to full page without mockup borders or shadows */
+  /* Expand the printable document to full page without mockup borders, shadows, or flex-pagination traps */
   .bank-letter-print-area,
   .bank-letter-print-container,
   .print-paper-root {
+    display: block !important;
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
     margin: 0 auto !important;
     padding: 0 !important;
     border: none !important;
@@ -189,8 +192,14 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a, 
     background-color: #f1f5f9 !important;
   }
 
-  /* Avoid page breaks inside paragraphs, signature boxes and tables */
-  p, table, tr, td, .avoid-break, .signature-box, .contract-clause {
+  /* Allow long paragraphs to paginate across pages cleanly while keeping short blocks intact */
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Avoid page breaks inside signature boxes, clauses, and table rows */
+  tr, .avoid-break, .signature-box, .contract-clause {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
