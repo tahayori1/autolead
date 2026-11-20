@@ -3,7 +3,9 @@ import type { MyProfile } from '../types';
 import type { DocumentPaperSize } from '../types/bankLetter';
 import type { LeasingCase, LeasingFormId } from '../types/leasing';
 import {
+    LEASING_FORM_CATEGORIES,
     LEASING_FORMS_LIST,
+    type LeasingFormCategory,
     createDefaultLeasingCase,
     deleteLeasingCase,
     formatLeasingFormText,
@@ -40,12 +42,12 @@ interface LeasingPageProps {
 const LeasingPage: React.FC<LeasingPageProps> = () => {
     const [leasingCase, setLeasingCase] = useState<LeasingCase>(() => createDefaultLeasingCase());
     const [activeForm, setActiveForm] = useState<LeasingFormId>('PRE_REGISTRATION');
+    const [activeCategoryFilter, setActiveCategoryFilter] = useState<LeasingFormCategory | 'all'>('all');
     const [paperSize, setPaperSize] = useState<DocumentPaperSize>('A4');
     const [viewMode, setViewMode] = useState<'workspace' | 'archive'>('workspace');
     const [savedCases, setSavedCases] = useState<LeasingCase[]>(() => getSavedLeasingCases());
     const [archiveSearch, setArchiveSearch] = useState('');
 
-    // Modal state for full HTML+CSS print preview (single or batch)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [previewInitialForms, setPreviewInitialForms] = useState<LeasingFormId[]>(['PRE_REGISTRATION']);
 
@@ -57,6 +59,11 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
         () => LEASING_FORMS_LIST.find((f) => f.id === activeForm) || LEASING_FORMS_LIST[0],
         [activeForm]
     );
+
+    const visibleFormsList = useMemo(() => {
+        if (activeCategoryFilter === 'all') return LEASING_FORMS_LIST;
+        return LEASING_FORMS_LIST.filter((f) => f.category === activeCategoryFilter);
+    }, [activeCategoryFilter]);
 
     const livePreviewHtml = useMemo(() => {
         const html = buildLeasingHtmlDocument(leasingCase, [activeForm], {
@@ -92,9 +99,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
             await navigator.clipboard.writeText(txt);
             setCopiedText(true);
             setTimeout(() => setCopiedText(false), 2000);
-        } catch {
-            // Ignore clipboard errors gracefully
-        }
+        } catch {}
     };
 
     const handleDirectPrintSingle = async () => {
@@ -117,7 +122,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
     };
 
     const openBatchPreview = () => {
-        setPreviewInitialForms(LEASING_FORMS_LIST.map((f) => f.id));
+        setPreviewInitialForms(['PRE_REGISTRATION', 'INSTALLMENT_CONTRACT', 'ARTICLE_36_FORM', 'POA_PLATE_MORTGAGE', 'CUSTOMER_FINAL_INFO', 'GUARANTOR_FINAL_INFO']);
         setIsPreviewOpen(true);
     };
 
@@ -161,26 +166,23 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                         <h1 className="text-base sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
                             <span>بخش لیزینگ (شرکت واسپاری کرمان موتور)</span>
                             <span className="px-2 py-0.5 text-[10px] rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                ۸ فرم یکپارچه
+                                ۱۶ فرم کامل kmc-leasing.ir
                             </span>
                         </h1>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            ورود یک‌باره اطلاعات پرونده — تکمیل خودکار پیش‌ثبت‌نام، قرارداد اقساطی، اقرارنامه، صلح‌نامه، متمم و فرم‌های احراز هویت
+                            ورود یک‌باره اطلاعات پرونده — تکمیل خودکار تمامی ۱۶ فرم رسمی شامل قرارداد ۸ صفحه‌ای (۲۸ ماده)، ماده ۳۶، اقرارنامه‌ها، صلح‌نامه، وکالت، احراز هویت و فرم‌های پلاک و فک رهن
                         </p>
                     </div>
                 </div>
 
                 {/* Action Toolbar */}
                 <div className="flex flex-wrap items-center gap-2">
-                    {/* View Switcher */}
                     <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
                         <button
                             type="button"
                             onClick={() => setViewMode('workspace')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                                viewMode === 'workspace'
-                                    ? 'bg-white dark:bg-slate-700 text-sky-700 dark:text-white shadow-xs'
-                                    : 'text-slate-500'
+                                viewMode === 'workspace' ? 'bg-white dark:bg-slate-700 text-sky-700 dark:text-white shadow-xs' : 'text-slate-500'
                             }`}
                         >
                             تدوین و صدور فرم‌ها
@@ -189,9 +191,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                             type="button"
                             onClick={() => setViewMode('archive')}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                                viewMode === 'archive'
-                                    ? 'bg-white dark:bg-slate-700 text-sky-700 dark:text-white shadow-xs'
-                                    : 'text-slate-500'
+                                viewMode === 'archive' ? 'bg-white dark:bg-slate-700 text-sky-700 dark:text-white shadow-xs' : 'text-slate-500'
                             }`}
                         >
                             <Archive className="w-3.5 h-3.5" />
@@ -199,7 +199,6 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                         </button>
                     </div>
 
-                    {/* Paper Size Toggle */}
                     <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
                         {(['A4', 'A5'] as DocumentPaperSize[]).map((sz) => (
                             <button
@@ -207,9 +206,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                                 type="button"
                                 onClick={() => setPaperSize(sz)}
                                 className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                                    paperSize === sz
-                                        ? 'bg-sky-600 text-white shadow-xs'
-                                        : 'text-slate-500 hover:text-slate-800'
+                                    paperSize === sz ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
                                 }`}
                             >
                                 {sz}
@@ -217,30 +214,17 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                         ))}
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={handleSaveDossier}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-xs cursor-pointer"
-                    >
+                    <button type="button" onClick={handleSaveDossier} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-xs cursor-pointer">
                         <Save className="w-4 h-4" />
                         <span>ذخیره پرونده</span>
                     </button>
 
-                    <button
-                        type="button"
-                        onClick={openBatchPreview}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-xs cursor-pointer"
-                    >
+                    <button type="button" onClick={openBatchPreview} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-xs cursor-pointer">
                         <Layers className="w-4 h-4" />
-                        <span>چاپ دسته‌ای همه فرم‌ها</span>
+                        <span>چاپ دسته‌ای چند فرم</span>
                     </button>
 
-                    <button
-                        type="button"
-                        onClick={handleNewDossier}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer"
-                        title="شروع پرونده جدید"
-                    >
+                    <button type="button" onClick={handleNewDossier} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer">
                         <RotateCcw className="w-4 h-4" />
                         <span>جدید</span>
                     </button>
@@ -279,47 +263,22 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {filteredArchive.map((item) => (
-                                <div
-                                    key={item.id}
-                                    className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col justify-between gap-3"
-                                >
+                                <div key={item.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col justify-between gap-3">
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-sm font-black text-slate-900 dark:text-white">
-                                                {getPersonFullName(item.buyer) || 'بدون نام'}
-                                            </span>
-                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-100 text-sky-800">
-                                                {item.carModel}
-                                            </span>
+                                            <span className="text-sm font-black text-slate-900 dark:text-white">{getPersonFullName(item.buyer) || 'بدون نام'}</span>
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-100 text-sky-800">{item.carModel}</span>
                                         </div>
-                                        <div className="text-xs text-slate-600 dark:text-slate-300">
-                                            کد ملی: <span className="font-mono">{toPersianDigits(item.buyer.nationalCode || '-')}</span>
-                                        </div>
-                                        <div className="text-xs text-slate-600 dark:text-slate-300">
-                                            قرارداد: <span className="font-mono">{item.contractNumber || '-'}</span> | تاریخ: {toPersianDigits(item.contractDate)}
-                                        </div>
-                                        {item.cashPriceRials > 0 && (
-                                            <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
-                                                ثمن معامله: {toPersianDigits(formatCurrencyWithCommas(item.cashPriceRials))} ریال
-                                            </div>
-                                        )}
+                                        <div className="text-xs text-slate-600 dark:text-slate-300">کد ملی: <span className="font-mono">{toPersianDigits(item.buyer.nationalCode || '-')}</span></div>
+                                        <div className="text-xs text-slate-600 dark:text-slate-300">قرارداد: <span className="font-mono">{item.contractNumber || '-'}</span> | تاریخ: {toPersianDigits(item.contractDate)}</div>
+                                        {item.cashPriceRials > 0 && <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">ثمن معامله: {toPersianDigits(formatCurrencyWithCommas(item.cashPriceRials))} ریال</div>}
                                     </div>
-
                                     <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleLoadArchiveCase(item)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold cursor-pointer"
-                                        >
+                                        <button type="button" onClick={() => handleLoadArchiveCase(item)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold cursor-pointer">
                                             <FolderOpen className="w-3.5 h-3.5" />
                                             <span>باز کردن پرونده</span>
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleDeleteArchiveCase(item.id)}
-                                            className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 cursor-pointer"
-                                            title="حذف پرونده"
-                                        >
+                                        <button type="button" onClick={() => handleDeleteArchiveCase(item.id)} className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 cursor-pointer" title="حذف پرونده">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
@@ -330,30 +289,48 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                 </div>
             ) : (
                 <>
-                    {/* 8-Form Switcher Bar */}
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-3 shadow-xs">
+                    {/* Category Filter + 16-Form Switcher Bar */}
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-3 shadow-xs space-y-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setActiveCategoryFilter('all')}
+                                className={`px-3 py-1 rounded-xl text-xs font-black cursor-pointer transition-all ${
+                                    activeCategoryFilter === 'all' ? 'bg-slate-900 text-white dark:bg-sky-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                                }`}
+                            >
+                                همه فرم‌ها (۱۶)
+                            </button>
+                            {LEASING_FORM_CATEGORIES.map((cat) => (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => setActiveCategoryFilter(cat.id)}
+                                    className={`px-3 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+                                        activeCategoryFilter === cat.id ? 'bg-slate-900 text-white dark:bg-sky-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                                    }`}
+                                >
+                                    {cat.label}
+                                </button>
+                            ))}
+                        </div>
+
                         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-                            {LEASING_FORMS_LIST.map((f) => {
+                            {visibleFormsList.map((f) => {
                                 const active = activeForm === f.id;
                                 return (
                                     <button
                                         key={f.id}
                                         type="button"
                                         onClick={() => setActiveForm(f.id)}
-                                        className={`p-2.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                                        className={`p-2 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                                             active
                                                 ? 'bg-gradient-to-br from-sky-600 to-indigo-700 text-white border-sky-600 shadow-md shadow-sky-500/20'
                                                 : 'bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-sky-400'
                                         }`}
                                     >
-                                        <div className="text-xs font-black leading-snug">{f.shortTitle}</div>
-                                        <div
-                                            className={`text-[10px] font-bold ${
-                                                active ? 'text-sky-100' : 'text-slate-400'
-                                            }`}
-                                        >
-                                            {f.badge}
-                                        </div>
+                                        <div className="text-[11px] font-black leading-snug">{f.shortTitle}</div>
+                                        <div className={`text-[9.5px] font-bold ${active ? 'text-sky-100' : 'text-slate-400'}`}>{f.badge}</div>
                                     </button>
                                 );
                             })}
@@ -361,11 +338,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                     </div>
 
                     {/* Unified Single-Entry Editor */}
-                    <LeasingCaseEditor
-                        leasingCase={leasingCase}
-                        onChange={setLeasingCase}
-                        activeForm={activeForm}
-                    />
+                    <LeasingCaseEditor leasingCase={leasingCase} onChange={setLeasingCase} activeForm={activeForm} />
 
                     {/* Live RTL HTML + CSS WYSIWYG Preview Box */}
                     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
@@ -373,42 +346,23 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                             <div>
                                 <div className="text-xs sm:text-sm font-black flex items-center gap-2">
                                     <span>پیش‌نمایش زنده فرم انتخابی: {activeFormMeta.title}</span>
-                                    {buyerName && (
-                                        <span className="px-2 py-0.5 rounded-lg bg-sky-500/20 text-sky-300 text-[11px]">
-                                            {buyerName}
-                                        </span>
-                                    )}
+                                    {buyerName && <span className="px-2 py-0.5 rounded-lg bg-sky-500/20 text-sky-300 text-[11px]">{buyerName}</span>}
                                 </div>
-                                <div className="text-[11px] text-slate-400 mt-0.5">
-                                    {activeFormMeta.description}
-                                </div>
+                                <div className="text-[11px] text-slate-400 mt-0.5">{activeFormMeta.description}</div>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={handleCopyFormText}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer"
-                                >
+                                <button type="button" onClick={handleCopyFormText} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer">
                                     {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                                     <span>{copiedText ? 'کپی شد' : 'کپی متن'}</span>
                                 </button>
 
-                                <button
-                                    type="button"
-                                    onClick={openSinglePreview}
-                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black cursor-pointer"
-                                >
+                                <button type="button" onClick={openSinglePreview} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black cursor-pointer">
                                     <Eye className="w-4 h-4" />
                                     <span>پیش‌نمایش کامل / انتخاب فرم‌ها</span>
                                 </button>
 
-                                <button
-                                    type="button"
-                                    onClick={handleDirectPrintSingle}
-                                    disabled={isDirectPrinting}
-                                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer disabled:opacity-60"
-                                >
+                                <button type="button" onClick={handleDirectPrintSingle} disabled={isDirectPrinting} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer disabled:opacity-60">
                                     <Printer className="w-4 h-4" />
                                     <span>{isDirectPrinting ? 'در حال چاپ...' : `چاپ همین فرم (${paperSize})`}</span>
                                 </button>
@@ -426,7 +380,6 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                 </>
             )}
 
-            {/* Full HTML + CSS Print Preview Modal (Single or Multi-Form Batch) */}
             <LeasingPrintPreviewModal
                 isOpen={isPreviewOpen}
                 onClose={() => setIsPreviewOpen(false)}

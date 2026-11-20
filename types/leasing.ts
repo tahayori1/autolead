@@ -1,12 +1,20 @@
 export type LeasingFormId =
-    | 'PRE_REGISTRATION'       // 1. فرم پیش ثبت نام
-    | 'INSTALLMENT_CONTRACT'   // 2. قرارداد فروش اقساطی خودرو (۲ صفحه)
-    | 'NATURAL_AFFIDAVIT'      // 3. اقرارنامه اشخاص حقیقی
-    | 'LEGAL_AFFIDAVIT'        // 4. اقرارنامه اشخاص حقوقی
-    | 'LEASING_PEACE_CONTRACT' // 5. صلحنامه واسپاری
-    | 'PEACE_ADDENDUM'         // 6. متمم صلحنامه
-    | 'CUSTOMER_FINAL_INFO'    // 7. آخرین اطلاعات مشتری (سند و پلاک)
-    | 'GUARANTOR_FINAL_INFO';  // 8. آخرین اطلاعات ضامن یا صادرکننده چک
+    | 'PRE_REGISTRATION'          // 1. فرم پیش ثبت نام
+    | 'INSTALLMENT_CONTRACT'      // 2. قرارداد فروش اقساطی خودرو (۸ صفحه کامل - ۲۸ ماده)
+    | 'ARTICLE_36_FORM'           // 3. فرم ماده ۳۶ دستورالعمل اجرایی
+    | 'NATURAL_AFFIDAVIT'         // 4. اقرارنامه اشخاص حقیقی
+    | 'LEGAL_AFFIDAVIT'           // 5. اقرارنامه اشخاص حقوقی
+    | 'LEASING_PEACE_CONTRACT'    // 6. صلحنامه واسپاری
+    | 'PEACE_ADDENDUM'            // 7. متمم صلحنامه
+    | 'POA_PLATE_MORTGAGE'        // 8. وکالت فک پلاک و تنظیم سند رهنی
+    | 'CUSTOMER_FINAL_INFO'       // 9. آخرین اطلاعات مشتری حقیقی (سند و پلاک)
+    | 'LEGAL_CUSTOMER_FINAL_INFO' // 10. آخرین اطلاعات مشتری حقوقی (سند و پلاک)
+    | 'GUARANTOR_FINAL_INFO'      // 11. آخرین اطلاعات ضامن یا صادرکننده چک
+    | 'PLATE_CHANGE_COMMITMENT'   // 12. فرم تعهد تعویض پلاک
+    | 'PLATE_CHANGE_ADDENDUM'     // 13. الحاقیه تعهد به تعویض پلاک
+    | 'PLATE_CHECK_RETURN_REQUEST'// 14. فرم ۱۵ درخواست عودت چک تعهد به تعویض پلاک
+    | 'PLATE_LETTER_RECEIPT'      // 15. فرم رسید دریافت نامه تعویض پلاک
+    | 'MORTGAGE_RELEASE_REQUEST'; // 16. فرم فک رهن و استرداد اسناد
 
 export type LeasingMaritalStatus = 'مجرد' | 'متاهل';
 
@@ -65,6 +73,38 @@ export interface LeasingLegalEntity {
     phone: string;
 }
 
+export interface LeasingLegalCustomerExtra {
+    companyType: 'خصوصی' | 'دولتی';
+    ceoName: string;
+    brokerName: string;
+    establishmentProvince: string;
+    establishmentCounty: string;
+    establishmentCity: string;
+    officeProvince: string;
+    officeCounty: string;
+    officeCity: string;
+    registrationDate: string;
+    activityStartDate: string;
+    municipalityZone: string;
+    mainStreet: string;
+    subStreet: string;
+    mainAlley: string;
+    subAlley: string;
+    block: string;
+    plaque: string;
+    floor: string;
+    unit: string;
+    areaCode: string;
+    fax: string;
+    repFullName: string;
+    repIdNumber: string;
+    repLandline: string;
+    repMobile: string;
+    repNationalCode: string;
+    repAddress: string;
+    repPostalCode: string;
+}
+
 export interface LeasingCheckRow {
     id: string;
     amountRials: number;
@@ -100,41 +140,52 @@ export interface LeasingCase {
     // --- 1. اطلاعات پایه پرونده، قرارداد و نمایندگی ---
     dealershipName: string;
     dealershipCode: string;
-    formDate: string;               // تاریخ عمومی فرم پیش‌ثبت‌نام و تکمیل فرم
-    contractNumber: string;         // شماره قرارداد
-    contractDate: string;           // تاریخ قرارداد
+    dealershipManagerName: string;
+    formDate: string;                  // تاریخ عمومی فرم پیش‌ثبت‌نام و تکمیل فرم
+    contractNumber: string;            // شماره قرارداد
+    contractDate: string;              // تاریخ قرارداد
     registrationRequestNumber: string; // شماره فرم درخواست ثبت نام
     registrationRequestDate: string;   // تاریخ فرم درخواست ثبت نام
 
     // --- 2. مشخصات خودرو و تحویل ---
-    carModel: string;               // نوع / مدل خودرو
-    modelYear: string;              // سال ساخت (مدل)
+    vehicleQuantity: number;           // تعداد دستگاه خودرو (پیش‌فرض ۱)
+    carModel: string;                  // نوع / مدل خودرو
+    modelYear: string;                 // سال ساخت (مدل)
     color: string;
     chassisNumber: string;
     engineNumber: string;
-    invoiceOrBillRef: string;       // طبق فاکتور / مبایعه‌نامه
-    deliveryProvince: string;       // استان محل تحویل
-    deliveryCounty: string;         // شهرستان محل تحویل
-    deliveryCity: string;           // شهر محل تحویل
+    invoiceOrBillRef: string;          // طبق فاکتور / مبایعه‌نامه
+    deliveryProvince: string;          // استان محل تحویل
+    deliveryCounty: string;            // شهرستان محل تحویل
+    deliveryCity: string;              // شهر محل تحویل
 
     // --- 3. شرایط مالی و اقساط ---
-    cashPriceRials: number;         // قیمت فروش نقدی / ثمن مورد معامله
-    installmentTotalPriceRials: number; // قیمت فروش اقساطی با احتساب سود
-    prepaymentRials: number;        // پیش پرداخت
-    remainingAmountRials: number;   // الباقی ثمن معامله
-    installmentsCount: number;      // تعداد قسط
+    cashPriceRials: number;            // قیمت فروش نقدی / ثمن مورد معامله
+    installmentTotalPriceRials: number;// قیمت فروش اقساطی با احتساب سود
+    prepaymentRials: number;           // پیش پرداخت
+    remainingAmountRials: number;      // الباقی ثمن معامله (اصل تسهیلات)
+    installmentsCount: number;         // تعداد قسط
     installmentIntervalMonths: number; // تناوب ماهانه (مثلا ۱ یا ۳ ماهه)
-    annualProfitPercent: number;    // نرخ سود سالانه درصد
-    contractDurationMonths: number; // مدت قرارداد (ماه شمسی)
-    contractStartDate: string;      // از تاریخ
-    contractEndDate: string;        // لغایت تاریخ
-    checks: LeasingCheckRow[];      // جدول چک‌ها
+    annualProfitPercent: number;       // نرخ سود سالانه درصد
+    contractDurationMonths: number;    // مدت قرارداد (ماه شمسی)
+    contractStartDate: string;         // از تاریخ
+    contractEndDate: string;           // لغایت تاریخ
+    checks: LeasingCheckRow[];         // جدول چک‌های اقساط (ماده ۵)
+
+    // --- تضامین ماده ۷ و ماده ۳۶ ---
+    guarantee120PercentRials: number;  // مبلغ تضمین ۱۲۰٪ تسهیلات (اصل + سود)
+    guaranteeChecks: LeasingCheckRow[];// جدول چک/سفته تضمین (ماده ۷ صفحه ۳)
+    article36FacilityTotalRials: number;   // مبلغ اصل و فرع تسهیلات (ماده ۳۶)
+    article36ObligationCheckRials: number; // مبلغ چک تعهدات (بند ۱۰ ماده ۳۶)
 
     // --- 4. طرفین قرارداد: خریدار (حقیقی و حقوقی) و ضامن‌ها ---
     buyer: LeasingPersonInfo;
     legalBuyer: LeasingLegalEntity;
+    legalCustomerExtra: LeasingLegalCustomerExtra;
+    guarantorMode: 'natural' | 'corporate'; // ضامن حقیقی (۲ نفر) یا نسخه جدید ضامن شرکتی
     guarantor1: LeasingPersonInfo;
     guarantor2: LeasingPersonInfo;
+    corporateGuarantor: LeasingLegalEntity;
     activeGuarantorTabForFinalForm: 'guarantor1' | 'guarantor2' | 'buyer';
 
     // --- 5. اقرارنامه (حقیقی و حقوقی) ---
@@ -162,5 +213,29 @@ export interface LeasingCase {
         name: string;
         fatherName: string;
         address: string;
+    };
+
+    // --- 7. تعویض پلاک، الحاقیه، عودت چک تعویض پلاک و فک رهن ---
+    plateChangeCheck: {
+        amountRials: number;
+        checkDate: string;
+        checkNumber: string;
+        issuerName: string;
+        issuerNationalCode: string;
+        bankName: string;
+    };
+    plateReturnRequest: {
+        letterNumber: string;
+        letterDate: string;
+        attachment: string;
+        receiptReferralDate: string;
+    };
+    mortgageReleaseOptions: {
+        guaranteeDocs: boolean;          // الف - عودت اسناد ضمانت قرارداد
+        earlySettlementChecks: boolean;  // ب - استرداد چک‌های اقساط تسویه زودتر از موعد
+        mortgageReleaseLetter: boolean;  // ج - ارائه نامه فک رهن خودرو
+        bouncedCheck: boolean;           // د - استرداد چک برگشتی
+        bankDepositChecks: boolean;      // ه - استرداد چک‌های تسهیلات بابت واریز بانکی
+        presenterName: string;           // نام ارائه‌دهنده اسناد
     };
 }
