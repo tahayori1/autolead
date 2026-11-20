@@ -17,6 +17,11 @@ import {
     numberToPersianWords,
     toPersianDigits
 } from './bankLetterValidation';
+import type { DocumentPrintDesignSettings } from '../types/printDesign';
+import {
+    formatFooterTemplateText,
+    getDefaultPrintDesign
+} from './printDesignService';
 import {
     buildAutoPaginationScript,
     buildPaginationSheetCss
@@ -33,10 +38,10 @@ export interface HtmlPrintBuildOptions {
     paperSize?: DocumentPaperSize;
     showWatermark?: boolean;
     forStandaloneDownload?: boolean;
+    design?: DocumentPrintDesignSettings;
 }
 
 const COMPANY_PHONE_PERSIAN = '۰۷۱۹۱۶۹۰۹۰۶';
-const COMPANY_ADDRESS = 'شیراز، چهارراه بنفشه، روبروی کوچه ۱۸ استقلال - نمایندگی ۲۶۰۶ کرمان موتور (حسینی خودرو)';
 
 function escapeHtml(value: unknown): string {
     if (value === null || value === undefined) return '';
@@ -105,10 +110,20 @@ function collectVazirmatnFontCss(forStandaloneDownload = false): string {
     `;
 }
 
-function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean): string {
+function buildDocumentCss(
+    paperSize: DocumentPaperSize,
+    showWatermark: boolean,
+    design: DocumentPrintDesignSettings
+): string {
     const isA5 = paperSize === 'A5';
-    const baseFont = isA5 ? '10pt' : '11.2pt';
-    const lineHeight = isA5 ? '1.85' : '2.02';
+    const baseFont = `${design.bodyFontSizePt}pt`;
+    const lineHeight = `${design.bodyLineHeight}`;
+    const hdrFontPt = design.headerFontSizePt;
+    const hdrTitlePt = design.headerTitleFontSizePt;
+    const hdrPadPx = design.headerPaddingPx;
+    const ftrFontPt = design.footerFontSizePt;
+    const ftrPadPx = design.footerPaddingPx;
+    const badgeSizePx = Math.max(28, Math.round(hdrFontPt * 4.6));
 
     return `
     <style>
@@ -163,15 +178,18 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
             z-index: 1;
         }
 
-        /* Header Letterhead (repeats on every page via thead) */
+        /* Header Letterhead (repeats on every page) */
         .doc-header {
-            display: flex;
+            ${design.showHeader ? 'display: flex;' : 'display: none !important;'}
             align-items: stretch;
             justify-content: space-between;
             gap: ${isA5 ? '8px' : '14px'};
             border-bottom: 2.5px solid #1e3a8a;
-            padding-bottom: ${isA5 ? '8px' : '10px'};
+            padding-top: ${Math.max(0, Math.round(hdrPadPx * 0.35))}px;
+            padding-bottom: ${hdrPadPx}px;
             margin-bottom: 0;
+            font-size: ${hdrFontPt}pt;
+            line-height: 1.45;
             background: #ffffff;
             break-inside: avoid;
             page-break-inside: avoid;
@@ -186,8 +204,8 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
         }
 
         .brand-badge {
-            width: ${isA5 ? '34px' : '44px'};
-            height: ${isA5 ? '34px' : '44px'};
+            width: ${badgeSizePx}px;
+            height: ${badgeSizePx}px;
             border-radius: 10px;
             background: linear-gradient(135deg, #1d4ed8, #0f172a);
             color: #ffffff;
@@ -195,21 +213,21 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
             align-items: center;
             justify-content: center;
             font-weight: 900;
-            font-size: ${isA5 ? '10pt' : '12.5pt'};
+            font-size: 1.25em;
             flex-shrink: 0;
             border: 1.5px solid #dbeafe;
         }
 
         .brand-title {
             font-weight: 900;
-            font-size: ${isA5 ? '9pt' : '10.5pt'};
+            font-size: 1.15em;
             color: #0f172a;
             line-height: 1.35;
         }
 
         .brand-sub {
             font-weight: 700;
-            font-size: ${isA5 ? '7.4pt' : '8.5pt'};
+            font-size: 0.92em;
             color: #475569;
             margin-top: 2px;
         }
@@ -224,7 +242,7 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
         }
 
         .basmala {
-            font-size: ${isA5 ? '8.5pt' : '10pt'};
+            font-size: 1.08em;
             font-weight: 700;
             color: #334155;
             margin-bottom: 2px;
@@ -232,7 +250,7 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
 
         .doc-title {
             margin: 0;
-            font-size: ${isA5 ? '12.5pt' : '15.5pt'};
+            font-size: ${hdrTitlePt}pt;
             font-weight: 900;
             color: #0f172a;
             border-bottom: 2.5px solid #d97706;
@@ -246,7 +264,7 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
         .doc-title.theme-teal { border-bottom-color: #0d9488; }
 
         .doc-subtitle {
-            font-size: ${isA5 ? '7pt' : '8pt'};
+            font-size: 0.88em;
             color: #64748b;
             font-weight: 600;
             margin-top: 3px;
@@ -255,7 +273,7 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
         .meta-block {
             flex: 1 1 30%;
             text-align: left;
-            font-size: ${isA5 ? '7.8pt' : '8.8pt'};
+            font-size: 0.96em;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -315,7 +333,7 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
 
         .section-heading {
             font-weight: 900;
-            font-size: ${isA5 ? '9.8pt' : '11pt'};
+            font-size: 1.04em;
             color: #1e3a8a;
             margin: ${isA5 ? '7px 0 4px' : '10px 0 5px'};
         }
@@ -507,17 +525,19 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
             min-width: ${isA5 ? '180px' : '230px'};
         }
 
-        /* Repeating document footer (repeats on every page via tfoot) */
+        /* Repeating document footer */
         .doc-footer {
             margin-top: 0;
-            padding-top: 7px;
+            padding-top: ${ftrPadPx}px;
+            padding-bottom: ${Math.max(0, Math.round(ftrPadPx * 0.25))}px;
             border-top: 1.5px solid #94a3b8;
-            display: flex;
+            ${design.showFooter ? 'display: flex;' : 'display: none !important;'}
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            font-size: ${isA5 ? '7.2pt' : '8pt'};
+            font-size: ${ftrFontPt}pt;
+            line-height: 1.45;
             color: #475569;
             background: #ffffff;
             break-inside: avoid;
@@ -541,31 +561,44 @@ function buildDocumentCss(paperSize: DocumentPaperSize, showWatermark: boolean):
     `;
 }
 
-function buildHeaderHtml(opts: {
-    title: string;
-    subtitle?: string;
-    themeClass?: string;
-    basmala?: string;
-    docNumber: string;
-    docDate: string;
-    attachment?: string;
-    showPhoneInHeader?: boolean;
-}): string {
+function buildHeaderHtml(
+    opts: {
+        title: string;
+        subtitle?: string;
+        themeClass?: string;
+        basmala?: string;
+        docNumber: string;
+        docDate: string;
+        attachment?: string;
+        showPhoneInHeader?: boolean;
+    },
+    design: DocumentPrintDesignSettings
+): string {
+    if (!design.showHeader) return '';
+
+    const badgeText = design.headerBadgeText.trim() || '۲۶۰۶';
+    const companyName = design.headerCompanyName.trim();
+    const companySub = design.headerCompanySub.trim();
+    const extraLine = design.headerExtraLine.trim();
+    const basmala = design.headerBasmala.trim() || opts.basmala || '';
+    const finalTitle = design.headerCustomTitle.trim() || opts.title;
+    const finalSubtitle = design.headerCustomSubtitle.trim() || opts.subtitle || '';
+
     return `
         <header class="doc-header">
             <div class="brand-block">
-                <div class="brand-badge">۲۶۰۶</div>
+                <div class="brand-badge">${escapeHtml(badgeText)}</div>
                 <div>
-                    <div class="brand-title">شرکت تضامنی حسینی خودرو شیراز</div>
-                    <div class="brand-sub">نمایندگی رسمی کرمان موتور - کد ۲۶۰۶</div>
-                    ${opts.showPhoneInHeader ? `<div class="brand-sub">تلفن: ${COMPANY_PHONE_PERSIAN}</div>` : ''}
+                    ${companyName ? `<div class="brand-title">${escapeHtml(companyName)}</div>` : ''}
+                    ${companySub ? `<div class="brand-sub">${escapeHtml(companySub)}</div>` : ''}
+                    ${extraLine ? `<div class="brand-sub">${escapeHtml(extraLine)}</div>` : ''}
                 </div>
             </div>
 
             <div class="title-block">
-                ${opts.basmala ? `<div class="basmala">${escapeHtml(opts.basmala)}</div>` : ''}
-                <h1 class="doc-title ${opts.themeClass || ''}">${escapeHtml(opts.title)}</h1>
-                ${opts.subtitle ? `<div class="doc-subtitle">${escapeHtml(opts.subtitle)}</div>` : ''}
+                ${basmala ? `<div class="basmala">${escapeHtml(basmala)}</div>` : ''}
+                <h1 class="doc-title ${opts.themeClass || ''}">${escapeHtml(finalTitle)}</h1>
+                ${finalSubtitle ? `<div class="doc-subtitle">${escapeHtml(finalSubtitle)}</div>` : ''}
             </div>
 
             <div class="meta-block">
@@ -595,16 +628,45 @@ interface RenderedDocParts {
     bodyHtml: string;
 }
 
-function buildFooterHtml(docTitle: string, docNumber: string, docDate: string): string {
+function buildFooterHtml(
+    docTitle: string,
+    docNumber: string,
+    docDate: string,
+    design: DocumentPrintDesignSettings
+): string {
+    if (!design.showFooter) return '';
+
+    const effectiveTitle = design.headerCustomTitle.trim() || docTitle;
+    const vars = {
+        docTitle: effectiveTitle,
+        docNumber: toPersianDigits(docNumber || '-'),
+        docDate: toPersianDigits(docDate || '-')
+    };
+    const rightText = formatFooterTemplateText(design.footerRightText, vars).trim();
+    const leftText = formatFooterTemplateText(design.footerLeftText, vars).trim();
+    const pageBadge = design.showPageNumbers
+        ? '<span class="sheet-page-num-badge">صفحه {{DOC_PAGE}} از {{DOC_PAGES}}</span>'
+        : '';
+
+    const leftCombined =
+        leftText && pageBadge
+            ? `${escapeHtml(leftText)} | ${pageBadge}`
+            : leftText
+            ? escapeHtml(leftText)
+            : pageBadge;
+
     return `
         <footer class="doc-footer">
-            <span>${COMPANY_ADDRESS} | تلفن: <strong>${COMPANY_PHONE_PERSIAN}</strong></span>
-            <span>${escapeHtml(docTitle)} — شماره: <span class="ltr">${escapeHtml(toPersianDigits(docNumber || '-'))}</span> | تاریخ: <span class="ltr">${escapeHtml(toPersianDigits(docDate || '-'))}</span> | <span class="sheet-page-num-badge">صفحه {{DOC_PAGE}} از {{DOC_PAGES}}</span></span>
+            <span>${escapeHtml(rightText)}</span>
+            <span>${leftCombined}</span>
         </footer>
     `;
 }
 
-function renderPeaceContractBody(c: CarPeaceContract): RenderedDocParts {
+function renderPeaceContractBody(
+    c: CarPeaceContract,
+    design: DocumentPrintDesignSettings
+): RenderedDocParts {
     const contractNo = c.contractNumber || '1405/PC-1001';
     const contractDate = c.contractDate || '1405/06/22';
     const companyPhone = (!c.releasorPhone || c.releasorPhone === '09370518538') ? '07191690906' : c.releasorPhone;
@@ -615,16 +677,19 @@ function renderPeaceContractBody(c: CarPeaceContract): RenderedDocParts {
         : (c.totalAmountRials > 0 ? formatCurrencyWithCommas(c.totalAmountRials) : '........................');
     const shebaFormatted = c.releaseeShebaNumber ? ('IR' + c.releaseeShebaNumber.replace(/^IR/i, '')) : '........................';
 
-    const headerHtml = buildHeaderHtml({
-        title: 'قرارداد صلح خودرو',
-        subtitle: '(مشمول ماده ۱۰ قانون مدنی)',
-        basmala: 'بسمه تعالی',
-        docNumber: contractNo,
-        docDate: contractDate,
-        attachment: 'چک‌لیست تحویل',
-        showPhoneInHeader: true
-    });
-    const footerHtml = buildFooterHtml('قرارداد صلح خودرو', contractNo, contractDate);
+    const headerHtml = buildHeaderHtml(
+        {
+            title: 'قرارداد صلح خودرو',
+            subtitle: '(مشمول ماده ۱۰ قانون مدنی)',
+            basmala: 'بسمه تعالی',
+            docNumber: contractNo,
+            docDate: contractDate,
+            attachment: 'چک‌لیست تحویل',
+            showPhoneInHeader: true
+        },
+        design
+    );
+    const footerHtml = buildFooterHtml('قرارداد صلح خودرو', contractNo, contractDate, design);
 
     const notesSection = c.notes && c.notes.trim()
         ? `
@@ -746,7 +811,10 @@ function renderPeaceContractBody(c: CarPeaceContract): RenderedDocParts {
     return { title: `قرارداد صلح خودرو - ${c.releaseeName || 'مشتری'} (${contractNo})`, headerHtml, footerHtml, bodyHtml };
 }
 
-function renderBankLetterBody(l: BankLetter): RenderedDocParts {
+function renderBankLetterBody(
+    l: BankLetter,
+    design: DocumentPrintDesignSettings
+): RenderedDocParts {
     const letterNo = l.letterNumber || '1405/KM2606/---';
     const letterDate = l.letterDate || '1405/06/22';
     const formattedAmount = formatCurrencyWithCommas(l.amountRials);
@@ -755,17 +823,20 @@ function renderBankLetterBody(l: BankLetter): RenderedDocParts {
     const colorText = l.carColor ? ` به رنگ ${l.carColor}` : '';
     const yearText = l.carModelYear ? ` مدل ${l.carModelYear}` : '';
 
-    const headerHtml = buildHeaderHtml({
-        title: 'نامه معرفی به بانک',
-        subtitle: 'حواله بانکی و انتقال وجه',
-        themeClass: 'theme-blue',
-        basmala: 'بنام خدا',
-        docNumber: letterNo,
-        docDate: letterDate,
-        attachment: 'ندارد',
-        showPhoneInHeader: true
-    });
-    const footerHtml = buildFooterHtml('نامه معرفی به بانک', letterNo, letterDate);
+    const headerHtml = buildHeaderHtml(
+        {
+            title: 'نامه معرفی به بانک',
+            subtitle: 'حواله بانکی و انتقال وجه',
+            themeClass: 'theme-blue',
+            basmala: 'بنام خدا',
+            docNumber: letterNo,
+            docDate: letterDate,
+            attachment: 'ندارد',
+            showPhoneInHeader: true
+        },
+        design
+    );
+    const footerHtml = buildFooterHtml('نامه معرفی به بانک', letterNo, letterDate, design);
 
     const notesSection = l.notes && l.notes.trim()
         ? `
@@ -832,7 +903,10 @@ function renderBankLetterBody(l: BankLetter): RenderedDocParts {
     return { title: `نامه معرفی به بانک - ${l.customerName || 'مشتری'} (${letterNo})`, headerHtml, footerHtml, bodyHtml };
 }
 
-function renderPreContractBody(f: PreContractForm): RenderedDocParts {
+function renderPreContractBody(
+    f: PreContractForm,
+    design: DocumentPrintDesignSettings
+): RenderedDocParts {
     const docNo = f.contractNumber || '1405/PRE-1001';
     const docDate = f.contractDate || '1405/06/22';
     const totalFmt = f.totalPriceRials > 0 ? formatCurrencyWithCommas(f.totalPriceRials) : '...............................';
@@ -840,16 +914,19 @@ function renderPreContractBody(f: PreContractForm): RenderedDocParts {
     const prepayFmt = f.prepaymentRials > 0 ? formatCurrencyWithCommas(f.prepaymentRials) : '................................';
     const prepayWords = f.prepaymentRials > 0 ? numberToPersianWords(f.prepaymentRials) : '';
 
-    const headerHtml = buildHeaderHtml({
-        title: 'فرم پیش قرارداد',
-        subtitle: 'نمایندگی ۲۶۰۶ حسینی خودرو شیراز',
-        themeClass: 'theme-violet',
-        basmala: 'بسمه تعالی',
-        docNumber: docNo,
-        docDate: docDate,
-        showPhoneInHeader: true
-    });
-    const footerHtml = buildFooterHtml('فرم پیش قرارداد', docNo, docDate);
+    const headerHtml = buildHeaderHtml(
+        {
+            title: 'فرم پیش قرارداد',
+            subtitle: 'نمایندگی ۲۶۰۶ حسینی خودرو شیراز',
+            themeClass: 'theme-violet',
+            basmala: 'بسمه تعالی',
+            docNumber: docNo,
+            docDate: docDate,
+            showPhoneInHeader: true
+        },
+        design
+    );
+    const footerHtml = buildFooterHtml('فرم پیش قرارداد', docNo, docDate, design);
 
     const bodyHtml = `
 
@@ -910,7 +987,10 @@ function renderPreContractBody(f: PreContractForm): RenderedDocParts {
     return { title: `فرم پیش قرارداد - ${f.buyerName || 'خریدار'} (${docNo})`, headerHtml, footerHtml, bodyHtml };
 }
 
-function renderRemittanceBody(f: RemittanceApprovalForm): RenderedDocParts {
+function renderRemittanceBody(
+    f: RemittanceApprovalForm,
+    design: DocumentPrintDesignSettings
+): RenderedDocParts {
     const docNo = f.formNumber || '1405/REM-1001';
     const docDate = f.formDate || '1405/06/22';
     const totalStr = f.totalAmountRials > 0 ? `${toPersianDigits(formatCurrencyWithCommas(f.totalAmountRials))} ریال` : '......................................';
@@ -919,15 +999,18 @@ function renderRemittanceBody(f: RemittanceApprovalForm): RenderedDocParts {
         ? `${toPersianDigits(formatCurrencyWithCommas(f.remainingAmountRials))} ریال`
         : (f.totalAmountRials > 0 && f.paidAmountRials >= f.totalAmountRials ? '۰ ریال (تسویه کامل)' : '.................................');
 
-    const headerHtml = buildHeaderHtml({
-        title: 'فرم تایید نهایی حواله',
-        subtitle: 'نمایندگی حسینی خودرو شیراز (کد ۲۶۰۶)',
-        themeClass: 'theme-emerald',
-        docNumber: docNo,
-        docDate: docDate,
-        showPhoneInHeader: true
-    });
-    const footerHtml = buildFooterHtml('فرم تایید نهایی حواله', docNo, docDate);
+    const headerHtml = buildHeaderHtml(
+        {
+            title: 'فرم تایید نهایی حواله',
+            subtitle: 'نمایندگی حسینی خودرو شیراز (کد ۲۶۰۶)',
+            themeClass: 'theme-emerald',
+            docNumber: docNo,
+            docDate: docDate,
+            showPhoneInHeader: true
+        },
+        design
+    );
+    const footerHtml = buildFooterHtml('فرم تایید نهایی حواله', docNo, docDate, design);
 
     const chk = (checked: boolean) => `<span class="check-box">${checked ? '✓' : ''}</span>`;
 
@@ -993,22 +1076,28 @@ function renderRemittanceBody(f: RemittanceApprovalForm): RenderedDocParts {
     return { title: `فرم تایید نهایی حواله - ${f.customerName || 'مشتری'} (${docNo})`, headerHtml, footerHtml, bodyHtml };
 }
 
-function renderFreeBillBody(f: FreeBillOfSale): RenderedDocParts {
+function renderFreeBillBody(
+    f: FreeBillOfSale,
+    design: DocumentPrintDesignSettings
+): RenderedDocParts {
     const docNo = f.contractNumber || '1405/FB-1001';
     const docDate = f.contractDate || '1405/06/22';
     const amountFormatted = f.totalAmountRials > 0 ? formatCurrencyWithCommas(f.totalAmountRials) : '.................................';
     const amountWords = f.totalAmountRials > 0 ? numberToPersianWords(f.totalAmountRials) : '';
 
-    const headerHtml = buildHeaderHtml({
-        title: 'قولنامه آزاد',
-        subtitle: 'مبایعه‌نامه قطعی خودرو',
-        themeClass: 'theme-teal',
-        basmala: 'بسمه تعالی',
-        docNumber: docNo,
-        docDate: docDate,
-        showPhoneInHeader: true
-    });
-    const footerHtml = buildFooterHtml('قولنامه آزاد', docNo, docDate);
+    const headerHtml = buildHeaderHtml(
+        {
+            title: 'قولنامه آزاد',
+            subtitle: 'مبایعه‌نامه قطعی خودرو',
+            themeClass: 'theme-teal',
+            basmala: 'بسمه تعالی',
+            docNumber: docNo,
+            docDate: docDate,
+            showPhoneInHeader: true
+        },
+        design
+    );
+    const footerHtml = buildFooterHtml('قولنامه آزاد', docNo, docDate, design);
 
     const bodyHtml = `
 
@@ -1108,18 +1197,21 @@ function renderFreeBillBody(f: FreeBillOfSale): RenderedDocParts {
     return { title: `قولنامه آزاد - ${f.buyerName || f.sellerName || 'مشتری'} (${docNo})`, headerHtml, footerHtml, bodyHtml };
 }
 
-function renderPayloadToParts(payload: OfficialDocPayload): RenderedDocParts {
+function renderPayloadToParts(
+    payload: OfficialDocPayload,
+    design: DocumentPrintDesignSettings
+): RenderedDocParts {
     switch (payload.type) {
         case 'PEACE_CONTRACT':
-            return renderPeaceContractBody(payload.data);
+            return renderPeaceContractBody(payload.data, design);
         case 'BANK_LETTER':
-            return renderBankLetterBody(payload.data);
+            return renderBankLetterBody(payload.data, design);
         case 'PRE_CONTRACT':
-            return renderPreContractBody(payload.data);
+            return renderPreContractBody(payload.data, design);
         case 'REMITTANCE_APPROVAL':
-            return renderRemittanceBody(payload.data);
+            return renderRemittanceBody(payload.data, design);
         case 'FREE_BILL_OF_SALE':
-            return renderFreeBillBody(payload.data);
+            return renderFreeBillBody(payload.data, design);
     }
 }
 
@@ -1139,14 +1231,15 @@ export function buildBatchOfficialDocumentsHtml(
 ): string {
     const paperSize: DocumentPaperSize = options.paperSize || 'A4';
     const showWatermark = options.showWatermark ?? true;
+    const design = options.design || getDefaultPrintDesign('official', paperSize);
     const list = payloads.length > 0 ? payloads : [];
-    const renderedList = list.map(renderPayloadToParts);
+    const renderedList = list.map((p) => renderPayloadToParts(p, design));
     const title = renderedList.length === 1
         ? renderedList[0].title
         : `پکیج اسناد و قراردادها (${toPersianDigits(renderedList.length)} سند)`;
 
     const fontHead = collectVazirmatnFontCss(options.forStandaloneDownload);
-    const docCss = buildDocumentCss(paperSize, showWatermark);
+    const docCss = buildDocumentCss(paperSize, showWatermark, design);
     const sourceUnitsHtml = renderedList
         .map((parts) => wrapSourceUnitHtml(parts))
         .join('\n');

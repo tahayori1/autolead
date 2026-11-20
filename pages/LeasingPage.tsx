@@ -14,10 +14,13 @@ import {
     saveOrUpdateLeasingCase
 } from '../services/leasingService';
 import { buildLeasingHtmlDocument } from '../services/leasingHtmlPrintBuilder';
+import type { DocumentPrintDesignSettings } from '../types/printDesign';
+import { loadPrintDesign, savePrintDesign } from '../services/printDesignService';
 import { printHtmlString } from '../services/documentPrintService';
 import { toPersianDigits, formatCurrencyWithCommas } from '../services/bankLetterValidation';
 import { LeasingCaseEditor } from '../components/leasing/LeasingCaseEditor';
 import { LeasingPrintPreviewModal } from '../components/leasing/LeasingPrintPreviewModal';
+import { PrintDesignPanel } from '../components/common/PrintDesignPanel';
 import {
     FileSpreadsheet,
     Printer,
@@ -31,6 +34,7 @@ import {
     Trash2,
     FolderOpen,
     Search,
+    SlidersHorizontal,
     Sparkles
 } from 'lucide-react';
 
@@ -50,10 +54,19 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
 
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [previewInitialForms, setPreviewInitialForms] = useState<LeasingFormId[]>(['PRE_REGISTRATION']);
+    const [printDesign, setPrintDesign] = useState<DocumentPrintDesignSettings>(() =>
+        loadPrintDesign('leasing', 'A4')
+    );
+    const [showDesignPanel, setShowDesignPanel] = useState(false);
 
     const [copiedText, setCopiedText] = useState(false);
     const [saveToast, setSaveToast] = useState<string | null>(null);
     const [isDirectPrinting, setIsDirectPrinting] = useState(false);
+
+    const handlePrintDesignChange = (next: DocumentPrintDesignSettings) => {
+        setPrintDesign(next);
+        savePrintDesign('leasing', next);
+    };
 
     const activeFormMeta = useMemo(
         () => LEASING_FORMS_LIST.find((f) => f.id === activeForm) || LEASING_FORMS_LIST[0],
@@ -69,13 +82,14 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
         const html = buildLeasingHtmlDocument(leasingCase, [activeForm], {
             paperSize,
             showWatermark: true,
-            forStandaloneDownload: false
+            forStandaloneDownload: false,
+            design: printDesign
         });
         return html.replace(
             '</head>',
             `<style>@media screen { body { padding: 14px 8px; } #paginated-pages-root, #doc-sources-vault { zoom: 0.86; } .sheet-page, .doc-source-unit { margin-bottom: 12px; } }</style>\n</head>`
         );
-    }, [leasingCase, activeForm, paperSize]);
+    }, [leasingCase, activeForm, paperSize, printDesign]);
 
     const showToast = (msg: string) => {
         setSaveToast(msg);
@@ -108,7 +122,8 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
             const html = buildLeasingHtmlDocument(leasingCase, [activeForm], {
                 paperSize,
                 showWatermark: true,
-                forStandaloneDownload: false
+                forStandaloneDownload: false,
+                design: printDesign
             });
             await printHtmlString(html);
         } finally {
@@ -352,6 +367,19 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDesignPanel((s) => !s)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                        showDesignPanel
+                                            ? 'bg-sky-600 text-white border-sky-500 shadow-xs'
+                                            : 'bg-slate-800 hover:bg-slate-700 text-sky-200 border-slate-700'
+                                    }`}
+                                >
+                                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                                    <span>فونت، هدر و فوتر</span>
+                                </button>
+
                                 <button type="button" onClick={handleCopyFormText} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer">
                                     {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                                     <span>{copiedText ? 'کپی شد' : 'کپی متن'}</span>
@@ -368,6 +396,16 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                                 </button>
                             </div>
                         </div>
+
+                        {showDesignPanel && (
+                            <PrintDesignPanel
+                                variant="leasing"
+                                paperSize={paperSize}
+                                value={printDesign}
+                                onChange={handlePrintDesignChange}
+                                onClose={() => setShowDesignPanel(false)}
+                            />
+                        )}
 
                         <div className="bg-slate-200 dark:bg-slate-950 p-2 sm:p-4">
                             <iframe
@@ -387,6 +425,8 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                 initialForms={previewInitialForms}
                 paperSize={paperSize}
                 onPaperSizeChange={setPaperSize}
+                design={printDesign}
+                onDesignChange={handlePrintDesignChange}
             />
         </div>
     );

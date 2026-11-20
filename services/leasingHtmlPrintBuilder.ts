@@ -27,6 +27,11 @@ import {
     numberToPersianWords,
     toPersianDigits
 } from './bankLetterValidation';
+import type { DocumentPrintDesignSettings } from '../types/printDesign';
+import {
+    formatFooterTemplateText,
+    getDefaultPrintDesign
+} from './printDesignService';
 import {
     buildAutoPaginationScript,
     buildPaginationSheetCss
@@ -37,6 +42,7 @@ export interface LeasingHtmlPrintOptions {
     showWatermark?: boolean;
     forStandaloneDownload?: boolean;
     forms?: LeasingFormId[];
+    design?: DocumentPrintDesignSettings;
 }
 
 const COMPANY_PHONE_PERSIAN = '۰۷۱۹۱۶۹۰۹۰۶';
@@ -90,10 +96,20 @@ function collectVazirmatnFontCss(forStandaloneDownload = false): string {
     `;
 }
 
-function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): string {
+function buildLeasingCss(
+    paperSize: DocumentPaperSize,
+    showWatermark: boolean,
+    design: DocumentPrintDesignSettings
+): string {
     const isA5 = paperSize === 'A5';
-    const baseFont = isA5 ? '8.9pt' : '10.1pt';
-    const lineHeight = isA5 ? '1.74' : '1.86';
+    const baseFont = `${design.bodyFontSizePt}pt`;
+    const lineHeight = `${design.bodyLineHeight}`;
+    const hdrFontPt = design.headerFontSizePt;
+    const hdrTitlePt = design.headerTitleFontSizePt;
+    const hdrPadPx = design.headerPaddingPx;
+    const ftrFontPt = design.footerFontSizePt;
+    const ftrPadPx = design.footerPaddingPx;
+    const badgeSizePx = Math.max(26, Math.round(hdrFontPt * 4.2));
 
     return `
     <style>
@@ -147,26 +163,31 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
 
         .l-footer {
             border-top: 1.5px solid #94a3b8;
-            padding-top: 5px;
-            display: flex;
+            padding-top: ${ftrPadPx}px;
+            padding-bottom: ${Math.max(0, Math.round(ftrPadPx * 0.25))}px;
+            ${design.showFooter ? 'display: flex;' : 'display: none !important;'}
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            font-size: ${isA5 ? '6.8pt' : '7.7pt'};
+            font-size: ${ftrFontPt}pt;
+            line-height: 1.45;
             color: #475569;
             background: #ffffff;
         }
 
         /* Top Header */
         .l-header {
-            display: flex;
+            ${design.showHeader ? 'display: flex;' : 'display: none !important;'}
             align-items: center;
             justify-content: space-between;
             gap: 10px;
             border-bottom: 2px solid #0f172a;
-            padding-bottom: 6px;
+            padding-top: ${Math.max(0, Math.round(hdrPadPx * 0.35))}px;
+            padding-bottom: ${hdrPadPx}px;
             margin-bottom: 8px;
+            font-size: ${hdrFontPt}pt;
+            line-height: 1.42;
             break-inside: avoid;
         }
         .l-logo-box {
@@ -176,8 +197,8 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             flex: 1 1 32%;
         }
         .l-badge {
-            width: ${isA5 ? '30px' : '38px'};
-            height: ${isA5 ? '30px' : '38px'};
+            width: ${badgeSizePx}px;
+            height: ${badgeSizePx}px;
             border-radius: 8px;
             background: linear-gradient(135deg, #b91c1c, #1e293b);
             color: #fff;
@@ -185,7 +206,7 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             align-items: center;
             justify-content: center;
             font-weight: 900;
-            font-size: ${isA5 ? '8.5pt' : '10.5pt'};
+            font-size: 1.15em;
             flex-shrink: 0;
         }
         .l-title-box {
@@ -193,25 +214,26 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             text-align: center;
         }
         .l-basmala {
-            font-size: ${isA5 ? '7.8pt' : '9.2pt'};
+            font-size: 1.02em;
             font-weight: 800;
             color: #334155;
         }
         .l-title {
             margin: 0;
-            font-size: ${isA5 ? '10.5pt' : '13pt'};
+            font-size: ${hdrTitlePt}pt;
             font-weight: 900;
             color: #0f172a;
+            line-height: 1.35;
         }
         .l-subtitle {
-            font-size: ${isA5 ? '6.8pt' : '7.8pt'};
+            font-size: 0.87em;
             color: #475569;
             font-weight: 700;
         }
         .l-meta-box {
             flex: 1 1 26%;
             text-align: left;
-            font-size: ${isA5 ? '7.4pt' : '8.4pt'};
+            font-size: 0.93em;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
@@ -226,7 +248,7 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             border-right: 3.5px solid #1e3a8a;
             padding: 3px 8px;
             font-weight: 900;
-            font-size: ${isA5 ? '8.5pt' : '9.5pt'};
+            font-size: 0.94em;
             color: #0f172a;
             margin: 6px 0 4px;
             border-radius: 4px;
@@ -271,7 +293,7 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             width: 100%;
             border-collapse: collapse;
             margin: 4px 0 7px;
-            font-size: ${isA5 ? '7.4pt' : '8.4pt'};
+            font-size: 0.83em;
         }
         table.data-table th, table.data-table td {
             border: 1px solid #94a3b8;
@@ -330,7 +352,7 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            font-size: ${isA5 ? '7.2pt' : '8.2pt'};
+            font-size: 0.82em;
         }
         .sig-head { font-weight: 900; color: #0f172a; }
         .sig-sub { font-size: 0.9em; color: #475569; }
@@ -349,7 +371,7 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
     `;
 }
 
-function headerBlock(opts: {
+interface LeasingHeaderOpts {
     basmala?: string;
     title: string;
     subtitle?: string;
@@ -357,20 +379,39 @@ function headerBlock(opts: {
     docDate?: string;
     attachment?: string;
     dealershipCode?: string;
-}): string {
+}
+
+function renderCustomizedLeasingHeaderHtml(
+    opts: LeasingHeaderOpts,
+    design?: DocumentPrintDesignSettings
+): string {
+    if (design && !design.showHeader) return '';
+
+    const badgeText = design?.headerBadgeText.trim() || 'KMC';
+    const companyName = design ? design.headerCompanyName.trim() : 'شرکت واسپاری کرمان موتور';
+    const companySub = design
+        ? design.headerCompanySub.trim()
+        : `نمایندگی ${toPersianDigits(opts.dealershipCode || '2606')} حسینی خودرو شیراز`;
+    const extraLine = design ? design.headerExtraLine.trim() : '';
+    const basmala = design?.headerBasmala.trim() || opts.basmala || '';
+    const finalTitle = design?.headerCustomTitle.trim() || opts.title;
+    const finalSubtitle = design?.headerCustomSubtitle.trim() || opts.subtitle || '';
+    const encodedOpts = !design ? ` data-hdr-opts="${encodeURIComponent(JSON.stringify(opts))}"` : '';
+
     return `
-        <header class="l-header">
+        <header class="l-header"${encodedOpts}>
             <div class="l-logo-box">
-                <div class="l-badge">KMC</div>
+                <div class="l-badge">${esc(badgeText)}</div>
                 <div>
-                    <div style="font-weight:900; font-size:0.95em; color:#0f172a;">شرکت واسپاری کرمان موتور</div>
-                    <div style="font-size:0.78em; color:#475569; font-weight:700;">نمایندگی ${esc(toPersianDigits(opts.dealershipCode || '2606'))} حسینی خودرو شیراز</div>
+                    ${companyName ? `<div style="font-weight:900; font-size:0.95em; color:#0f172a;">${esc(companyName)}</div>` : ''}
+                    ${companySub ? `<div style="font-size:0.78em; color:#475569; font-weight:700;">${esc(companySub)}</div>` : ''}
+                    ${extraLine ? `<div style="font-size:0.75em; color:#475569; font-weight:600;">${esc(extraLine)}</div>` : ''}
                 </div>
             </div>
             <div class="l-title-box">
-                ${opts.basmala ? `<div class="l-basmala">${esc(opts.basmala)}</div>` : ''}
-                <h1 class="l-title">${esc(opts.title)}</h1>
-                ${opts.subtitle ? `<div class="l-subtitle">${esc(opts.subtitle)}</div>` : ''}
+                ${basmala ? `<div class="l-basmala">${esc(basmala)}</div>` : ''}
+                <h1 class="l-title">${esc(finalTitle)}</h1>
+                ${finalSubtitle ? `<div class="l-subtitle">${esc(finalSubtitle)}</div>` : ''}
             </div>
             <div class="l-meta-box">
                 ${opts.docNumber ? `<div class="l-meta-row"><span class="l-meta-lbl">شماره:</span><span class="l-meta-val ltr">${esc(toPersianDigits(opts.docNumber))}</span></div>` : ''}
@@ -379,6 +420,10 @@ function headerBlock(opts: {
             </div>
         </header>
     `;
+}
+
+function headerBlock(opts: LeasingHeaderOpts): string {
+    return renderCustomizedLeasingHeaderHtml(opts);
 }
 
 function personSummaryParagraph(label: string, p: LeasingPersonInfo): string {
@@ -2015,16 +2060,44 @@ function renderSingleFormHtml(c: LeasingCase, formId: LeasingFormId): string {
     }
 }
 
-function buildLeasingFooterHtml(docTitle: string, c: LeasingCase): string {
+function buildLeasingFooterHtml(
+    docTitle: string,
+    c: LeasingCase,
+    design: DocumentPrintDesignSettings
+): string {
+    if (!design.showFooter) return '';
+
+    const vars = {
+        docTitle,
+        docNumber: toPersianDigits(c.contractNumber || '-'),
+        docDate: toPersianDigits(c.contractDate || c.formDate || '-')
+    };
+    const rightText = formatFooterTemplateText(design.footerRightText, vars).trim();
+    const leftText = formatFooterTemplateText(design.footerLeftText, vars).trim();
+    const pageBadge = design.showPageNumbers
+        ? '<span class="sheet-page-num-badge">صفحه {{DOC_PAGE}} از {{DOC_PAGES}}</span>'
+        : '';
+
+    const leftCombined =
+        leftText && pageBadge
+            ? `${esc(leftText)} | ${pageBadge}`
+            : leftText
+            ? esc(leftText)
+            : pageBadge;
+
     return `
         <footer class="l-footer">
-            <span>شرکت واسپاری کرمان موتور — نمایندگی ${esc(toPersianDigits(c.dealershipCode || '2606'))} حسینی خودرو شیراز (تلفن: <strong>${COMPANY_PHONE_PERSIAN}</strong>)</span>
-            <span>${esc(docTitle)} | قرارداد: <span class="ltr">${esc(toPersianDigits(c.contractNumber || '-'))}</span> | <span class="sheet-page-num-badge">صفحه {{DOC_PAGE}} از {{DOC_PAGES}}</span></span>
+            <span>${esc(rightText)}</span>
+            <span>${leftCombined}</span>
         </footer>
     `;
 }
 
-function convertFormSheetsToSourceUnits(rawHtml: string, c: LeasingCase): string {
+function convertFormSheetsToSourceUnits(
+    rawHtml: string,
+    c: LeasingCase,
+    design: DocumentPrintDesignSettings
+): string {
     const units: string[] = [];
     const sectionRegex = /<section class="form-sheet(?:\s+page-break-after)?">([\s\S]*?)<\/section>/g;
     let match: RegExpExecArray | null;
@@ -2036,17 +2109,33 @@ function convertFormSheetsToSourceUnits(rawHtml: string, c: LeasingCase): string
             inner = inner.slice('<div class="doc-content">'.length, -'</div>'.length).trim();
         }
 
-        // Extract <header class="l-header">...</header>
+        // Extract <header class="l-header"...>...</header>
         let headerHtml = '';
-        const hdrMatch = inner.match(/<header class="l-header">[\s\S]*?<\/header>/);
+        let rawTitle = 'فرم لیزینگ کرمان موتور';
+        const hdrMatch = inner.match(/<header class="l-header"([^>]*)>[\s\S]*?<\/header>/);
         if (hdrMatch) {
-            headerHtml = hdrMatch[0];
-            inner = inner.replace(hdrMatch[0], '').trim();
-        }
+            const fullHeaderTag = hdrMatch[0];
+            const headerAttrs = hdrMatch[1] || '';
+            inner = inner.replace(fullHeaderTag, '').trim();
 
-        // Extract title from header for footer caption
-        const titleMatch = headerHtml.match(/<h1 class="l-title">([\s\S]*?)<\/h1>/);
-        const rawTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'فرم لیزینگ کرمان موتور';
+            const titleMatch = fullHeaderTag.match(/<h1 class="l-title">([\s\S]*?)<\/h1>/);
+            if (titleMatch) {
+                rawTitle = titleMatch[1].replace(/<[^>]+>/g, '').trim() || rawTitle;
+            }
+
+            const optsAttrMatch = headerAttrs.match(/data-hdr-opts="([^"]*)"/);
+            if (optsAttrMatch) {
+                try {
+                    const parsedOpts = JSON.parse(decodeURIComponent(optsAttrMatch[1])) as LeasingHeaderOpts;
+                    rawTitle = design.headerCustomTitle.trim() || parsedOpts.title || rawTitle;
+                    headerHtml = renderCustomizedLeasingHeaderHtml(parsedOpts, design);
+                } catch {
+                    headerHtml = design.showHeader ? fullHeaderTag : '';
+                }
+            } else {
+                headerHtml = design.showHeader ? fullHeaderTag : '';
+            }
+        }
 
         // Extract optional <div class="page-tag">...</div> into footer label instead of inline body
         let pageTagText = '';
@@ -2057,7 +2146,7 @@ function convertFormSheetsToSourceUnits(rawHtml: string, c: LeasingCase): string
         }
 
         const footerTitle = pageTagText ? `${rawTitle} (${pageTagText})` : rawTitle;
-        const footerHtml = buildLeasingFooterHtml(footerTitle, c);
+        const footerHtml = buildLeasingFooterHtml(footerTitle, c, design);
 
         units.push(`
             <article class="doc-source-unit">
@@ -2078,6 +2167,7 @@ export function buildLeasingHtmlDocument(
 ): string {
     const paperSize: DocumentPaperSize = options.paperSize || 'A4';
     const showWatermark = options.showWatermark ?? true;
+    const design = options.design || getDefaultPrintDesign('leasing', paperSize);
     const list = formsToRender.length > 0 ? formsToRender : (['PRE_REGISTRATION'] as LeasingFormId[]);
 
     const buyerName = getPersonFullName(leasingCase.buyer) || 'مشتری';
@@ -2089,7 +2179,7 @@ export function buildLeasingHtmlDocument(
         .map((fid) => renderSingleFormHtml(leasingCase, fid))
         .join('\n');
 
-    const sourceUnitsHtml = convertFormSheetsToSourceUnits(rawSectionsHtml, leasingCase);
+    const sourceUnitsHtml = convertFormSheetsToSourceUnits(rawSectionsHtml, leasingCase, design);
 
     const watermarkInnerHtml = `
         <div class="watermark-text">
@@ -2105,7 +2195,7 @@ export function buildLeasingHtmlDocument(
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${esc(docTitle)}</title>
     ${collectVazirmatnFontCss(options.forStandaloneDownload)}
-    ${buildLeasingCss(paperSize, showWatermark)}
+    ${buildLeasingCss(paperSize, showWatermark, design)}
 </head>
 <body>
     <div id="doc-sources-vault" aria-hidden="true">

@@ -11,6 +11,7 @@
 
 import type { DocumentPaperSize } from '../types/bankLetter';
 import { buildOfficialDocumentHtml, type OfficialDocPayload } from './officialHtmlPrintBuilder';
+import { loadPrintDesign } from './printDesignService';
 
 export interface PrintOptions {
     title?: string;
@@ -93,9 +94,12 @@ export async function printOfficialDocument(
     payload: OfficialDocPayload,
     options: PrintOptions = {}
 ): Promise<void> {
+    const paperSize = options.paperSize || 'A4';
+    const design = loadPrintDesign('official', paperSize);
     const html = buildOfficialDocumentHtml(payload, {
-        paperSize: options.paperSize || 'A4',
-        showWatermark: options.showWatermark ?? true
+        paperSize,
+        showWatermark: options.showWatermark ?? true,
+        design
     });
     await printHtmlString(html);
 }

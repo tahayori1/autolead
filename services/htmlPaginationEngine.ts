@@ -183,6 +183,13 @@ export function buildPaginationSheetCss(
             padding-top: ${isA5 ? '6px' : '8px'};
         }
 
+        .sheet-header-slot:empty,
+        .sheet-footer-slot:empty {
+            display: none;
+            padding: 0;
+            margin: 0;
+        }
+
         .continued-box {
             margin-top: 2px !important;
         }
@@ -482,8 +489,8 @@ export function buildAutoPaginationScript(
             (parseFloat(calStyle.paddingTop) || 0) -
             (parseFloat(calStyle.paddingBottom) || 0);
         var innerSheetH = measuredInnerH >= 150 ? measuredInnerH : FALLBACK_PRINTABLE_PX;
-        var hdrH = calObj.hdr.offsetHeight || 86;
-        var ftrH = calObj.ftr.offsetHeight || 34;
+        var hdrH = headerHtml.trim() ? (calObj.hdr.offsetHeight || 86) : 0;
+        var ftrH = footerHtml.trim() ? (calObj.ftr.offsetHeight || 34) : 0;
         // body.scrollHeight / body.offsetHeight already include .sheet-body-slot padding
         var maxBodyH = Math.max(160, Math.floor(innerSheetH - hdrH - ftrH - 10));
         outputRoot.removeChild(calObj.sheet);

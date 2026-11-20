@@ -45,11 +45,14 @@ import {
     getSavedRemittanceApprovals
 } from '../services/additionalFormsService';
 import { buildOfficialDocumentHtml } from '../services/officialHtmlPrintBuilder';
+import type { DocumentPrintDesignSettings } from '../types/printDesign';
+import { loadPrintDesign, savePrintDesign } from '../services/printDesignService';
 import { printHtmlString } from '../services/documentPrintService';
 import { formatCurrencyWithCommas, toPersianDigits } from '../services/bankLetterValidation';
 import { DocumentDossierEditor } from '../components/bankLetter/DocumentDossierEditor';
 import { DocumentsBatchPreviewModal } from '../components/bankLetter/DocumentsBatchPreviewModal';
 import { SavedAccountsModal } from '../components/bankLetter/SavedAccountsModal';
+import { PrintDesignPanel } from '../components/common/PrintDesignPanel';
 import Toast from '../components/Toast';
 import {
     Archive,
@@ -67,6 +70,7 @@ import {
     RotateCcw,
     Save,
     Search,
+    SlidersHorizontal,
     Trash2
 } from 'lucide-react';
 
@@ -104,10 +108,19 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
     const [isAccountsModalOpen, setIsAccountsModalOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [previewInitialForms, setPreviewInitialForms] = useState<DocumentCaseFormId[]>(['PEACE_CONTRACT']);
+    const [printDesign, setPrintDesign] = useState<DocumentPrintDesignSettings>(() =>
+        loadPrintDesign('official', 'A4')
+    );
+    const [showDesignPanel, setShowDesignPanel] = useState(false);
     const [copiedText, setCopiedText] = useState(false);
     const [isDirectPrinting, setIsDirectPrinting] = useState(false);
     const [isExportingWord, setIsExportingWord] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+    const handlePrintDesignChange = (next: DocumentPrintDesignSettings) => {
+        setPrintDesign(next);
+        savePrintDesign('official', next);
+    };
 
     useEffect(() => {
         setLegacyContracts(getSavedPeaceContracts());
@@ -134,13 +147,14 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
         const html = buildOfficialDocumentHtml(payload, {
             paperSize,
             showWatermark: true,
-            forStandaloneDownload: false
+            forStandaloneDownload: false,
+            design: printDesign
         });
         return html.replace(
             '</head>',
             `<style>@media screen { body { padding: 14px 8px; } #paginated-pages-root, #doc-sources-vault { zoom: 0.88; } .sheet-page, .doc-source-unit { margin-bottom: 12px; } }</style>\n</head>`
         );
-    }, [dossier, activeForm, paperSize]);
+    }, [dossier, activeForm, paperSize, printDesign]);
 
     const handleSaveDossier = () => {
         if (!dossier.customerName.trim()) {
@@ -192,7 +206,8 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
             const html = buildOfficialDocumentHtml(payload, {
                 paperSize,
                 showWatermark: true,
-                forStandaloneDownload: false
+                forStandaloneDownload: false,
+                design: printDesign
             });
             await printHtmlString(html);
         } finally {
@@ -659,6 +674,19 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
                             <div className="flex flex-wrap items-center gap-2">
                                 <button
                                     type="button"
+                                    onClick={() => setShowDesignPanel((s) => !s)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                        showDesignPanel
+                                            ? 'bg-sky-600 text-white border-sky-500 shadow-xs'
+                                            : 'bg-slate-800 hover:bg-slate-700 text-sky-200 border-slate-700'
+                                    }`}
+                                >
+                                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                                    <span>فونت، هدر و فوتر</span>
+                                </button>
+
+                                <button
+                                    type="button"
                                     onClick={handleCopyFormText}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer"
                                 >
@@ -697,6 +725,16 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
                             </div>
                         </div>
 
+                        {showDesignPanel && (
+                            <PrintDesignPanel
+                                variant="official"
+                                paperSize={paperSize}
+                                value={printDesign}
+                                onChange={handlePrintDesignChange}
+                                onClose={() => setShowDesignPanel(false)}
+                            />
+                        )}
+
                         <div className="bg-slate-200 dark:bg-slate-950 p-2 sm:p-4">
                             <iframe
                                 title={`پیش‌نمایش ${activeFormMeta.title}`}
@@ -716,6 +754,8 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
                 initialForms={previewInitialForms}
                 paperSize={paperSize}
                 onPaperSizeChange={setPaperSize}
+                design={printDesign}
+                onDesignChange={handlePrintDesignChange}
             />
 
             <SavedAccountsModal

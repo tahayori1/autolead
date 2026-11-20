@@ -4,13 +4,16 @@ import type {
     DocumentDossier,
     DocumentPaperSize
 } from '../../types/bankLetter';
+import type { DocumentPrintDesignSettings } from '../../types/printDesign';
 import {
     DOCUMENT_FORMS_LIST,
     dossierToOfficialPayload
 } from '../../services/documentDossierService';
 import { buildBatchOfficialDocumentsHtml } from '../../services/officialHtmlPrintBuilder';
+import { loadPrintDesign, savePrintDesign } from '../../services/printDesignService';
 import { printHtmlString } from '../../services/documentPrintService';
 import { toPersianDigits } from '../../services/bankLetterValidation';
+import { PrintDesignPanel } from '../common/PrintDesignPanel';
 import {
     X,
     Printer,
@@ -21,7 +24,8 @@ import {
     ZoomOut,
     CheckSquare,
     Square,
-    Layers
+    Layers,
+    SlidersHorizontal
 } from 'lucide-react';
 
 interface DocumentsBatchPreviewModalProps {
@@ -31,6 +35,8 @@ interface DocumentsBatchPreviewModalProps {
     initialForms: DocumentCaseFormId[];
     paperSize: DocumentPaperSize;
     onPaperSizeChange: (size: DocumentPaperSize) => void;
+    design?: DocumentPrintDesignSettings;
+    onDesignChange?: (next: DocumentPrintDesignSettings) => void;
 }
 
 export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProps> = ({
@@ -39,7 +45,9 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
     dossier,
     initialForms,
     paperSize,
-    onPaperSizeChange
+    onPaperSizeChange,
+    design,
+    onDesignChange
 }) => {
     const [selectedForms, setSelectedForms] = useState<DocumentCaseFormId[]>(
         initialForms.length > 0 ? initialForms : ['PEACE_CONTRACT']
@@ -47,6 +55,20 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
     const [showWatermark, setShowWatermark] = useState(true);
     const [zoomPercent, setZoomPercent] = useState<number>(100);
     const [isPrinting, setIsPrinting] = useState(false);
+    const [showDesignPanel, setShowDesignPanel] = useState(false);
+    const [localDesign, setLocalDesign] = useState<DocumentPrintDesignSettings>(() =>
+        loadPrintDesign('official', paperSize)
+    );
+
+    const activeDesign = design || localDesign;
+    const handleDesignChange = (next: DocumentPrintDesignSettings) => {
+        savePrintDesign('official', next);
+        if (onDesignChange) {
+            onDesignChange(next);
+        } else {
+            setLocalDesign(next);
+        }
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -78,14 +100,15 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
         const base = buildBatchOfficialDocumentsHtml(payloads, {
             paperSize,
             showWatermark,
-            forStandaloneDownload: false
+            forStandaloneDownload: false,
+            design: activeDesign
         });
         if (zoomPercent === 100) return base;
         return base.replace(
             '</head>',
             `<style>@media screen { #paginated-pages-root, #doc-sources-vault { zoom: ${zoomPercent / 100}; } }</style>\n</head>`
         );
-    }, [isOpen, dossier, orderedSelectedForms, paperSize, showWatermark, zoomPercent]);
+    }, [isOpen, dossier, orderedSelectedForms, paperSize, showWatermark, zoomPercent, activeDesign]);
 
     if (!isOpen) return null;
 
@@ -112,7 +135,8 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
             const cleanHtml = buildBatchOfficialDocumentsHtml(payloads, {
                 paperSize,
                 showWatermark,
-                forStandaloneDownload: false
+                forStandaloneDownload: false,
+                design: activeDesign
             });
             await printHtmlString(cleanHtml);
         } finally {
@@ -129,7 +153,8 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
         const standaloneHtml = buildBatchOfficialDocumentsHtml(payloads, {
             paperSize,
             showWatermark,
-            forStandaloneDownload: true
+            forStandaloneDownload: true,
+            design: activeDesign
         });
         const blob = new Blob([standaloneHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -211,6 +236,19 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>واترمارک</span>
                     </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setShowDesignPanel((s) => !s)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            showDesignPanel
+                                ? 'bg-sky-600 text-white border-sky-500 shadow-xs'
+                                : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                        }`}
+                    >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        <span>فونت، هدر و فوتر</span>
+                    </button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -247,6 +285,19 @@ export const DocumentsBatchPreviewModal: React.FC<DocumentsBatchPreviewModalProp
                     </button>
                 </div>
             </div>
+
+            {showDesignPanel && (
+                <div className="max-h-[42vh] overflow-y-auto">
+                    <PrintDesignPanel
+                        variant="official"
+                        paperSize={paperSize}
+                        value={activeDesign}
+                        onChange={handleDesignChange}
+                        onClose={() => setShowDesignPanel(false)}
+                        darkMode
+                    />
+                </div>
+            )}
 
             {/* Batch Multi-Form Selector Bar */}
             <div className="bg-slate-900/95 border-b border-slate-800 px-4 sm:px-6 py-2 space-y-2 text-xs">
