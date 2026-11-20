@@ -57,6 +57,12 @@ export async function printHtmlString(html: string): Promise<void> {
     try {
         if (document.fonts) await document.fonts.ready;
     } catch {}
+    try {
+        const win = iframe.contentWindow as (Window & { __paginateAllDocuments?: () => void }) | null;
+        if (win && typeof win.__paginateAllDocuments === 'function') {
+            win.__paginateAllDocuments();
+        }
+    } catch {}
 
     await new Promise((resolve) => setTimeout(resolve, 350));
 

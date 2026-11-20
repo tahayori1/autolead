@@ -72,8 +72,8 @@ export const LeasingPrintPreviewModal: React.FC<LeasingPrintPreviewModalProps> =
         });
         if (zoomPercent === 100) return base;
         return base.replace(
-            '</style>',
-            `@media screen { .form-sheet { zoom: ${zoomPercent / 100}; } }\n</style>`
+            '</head>',
+            `<style>@media screen { #paginated-pages-root, #doc-sources-vault { zoom: ${zoomPercent / 100}; } }</style>\n</head>`
         );
     }, [isOpen, leasingCase, orderedSelectedForms, paperSize, showWatermark, zoomPercent]);
 

@@ -257,3 +257,109 @@ export interface FreeBillOfSale {
     createdAt: string;
     updatedAt?: string;
 }
+
+// --- پرونده یکپارچه اسناد و قراردادها (Unified Single-Entry Document Dossier) ---
+export type DocumentCaseFormId =
+    | 'PEACE_CONTRACT'
+    | 'BANK_LETTER'
+    | 'PRE_CONTRACT'
+    | 'REMITTANCE_APPROVAL'
+    | 'FREE_BILL_OF_SALE';
+
+export interface DocumentDossier {
+    id: string;
+    dossierNumber: string; // شماره پرونده یکپارچه
+    dossierDate: string; // تاریخ مشترک اسناد
+    transactionTime: string; // ساعت معامله
+
+    // شماره‌های اختصاصی هر فرم (به‌صورت خودکار تولید می‌شوند و قابل ویرایش‌اند)
+    peaceContractNumber: string;
+    bankLetterNumber: string;
+    preContractNumber: string;
+    remittanceFormNumber: string;
+    freeBillNumber: string;
+
+    // ۱. مشخصات مشترک مشتری / خریدار / متصالح
+    customerTitle: string; // آقای / خانم
+    customerName: string;
+    customerFatherName: string;
+    customerIdNumber: string; // شماره شناسنامه
+    customerIssuePlace: string; // صادره از
+    customerNationalCode: string;
+    customerAddress: string;
+    customerPostalCode: string;
+    customerPhone: string;
+
+    // اطلاعات بانکی مشتری (ماده ۵ قرارداد صلح)
+    customerAccountNumber: string;
+    customerShebaNumber: string;
+    customerBankName: string;
+
+    // ۲. مشخصات مشترک خودرو و تحویل
+    carModel: string;
+    modelYear: string;
+    color: string;
+    chassisNumber: string;
+    plateNumber: string;
+    deliveryTime: string;
+    deliveredDocuments: string;
+
+    // ۳. مشخصات مالی مشترک
+    totalAmountRials: number; // ثمن معامله / مبلغ کل
+    paidAmountRials: number; // مبلغ واریزی / پیش‌پرداخت
+    trackingNumber: string; // شماره پیگیری واریز
+    remainingPaymentDate: string; // موعد پرداخت الباقی (پیش‌قرارداد)
+    totalAmountDescription: string; // شرح پرداخت (قولنامه آزاد)
+
+    // ۴. اطلاعات اختصاصی نامه معرفی به بانک
+    letterType: BankLetterType;
+    destinationBankName: string;
+    destinationBranchName: string;
+    bankLetterAmountRials: number; // پیش‌فرض برابر مبلغ واریزی یا ثمن معامله، قابل تنظیم جداگانه
+    paymentMethod: string;
+    beneficiaryShebaNumber: string;
+    beneficiaryBankName: string;
+    beneficiaryAccountHolderName: string;
+    beneficiaryAccountHolderType: BankAccountType;
+    dealershipName: string;
+    signatoryTitle: string;
+
+    // ۵. اطلاعات مصالح (صلح‌نامه - شرکت تضامنی حسینی خودرو شیراز)
+    releasorName: string;
+    releasorNationalId: string;
+    releasorAddress: string;
+    releasorPostalCode: string;
+    releasorPhone: string;
+
+    // ۶. اطلاعات فروشنده (قولنامه آزاد)
+    sellerTitle: string;
+    sellerName: string;
+    sellerFatherName: string;
+    sellerIdNumber: string;
+    sellerIssuePlace: string;
+    sellerNationalCode: string;
+    sellerAddress: string;
+    sellerPostalCode: string;
+    sellerPhone: string;
+
+    // ۷. کنترل وضعیت حواله (حسابداری، فروش و مدیریت)
+    accCheckNoDebt: boolean;
+    accCheckMatched: boolean;
+    accCheckClear: boolean;
+    accountingManagerName: string;
+    accountingDate: string;
+    salesCheckCorrect: boolean;
+    salesCheckInvoice: boolean;
+    salesManagerName: string;
+    salesDate: string;
+    salesNotes: string;
+    mgmtCheckSignatures: boolean;
+    salesResponsibilityWith: string;
+
+    // ۸. توضیحات و بندهای الحاقی مشترک
+    notes: string;
+    status: 'DRAFT' | 'COMPLETED';
+    createdAt: string;
+    updatedAt?: string;
+}
+

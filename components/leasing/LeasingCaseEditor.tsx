@@ -37,8 +37,13 @@ import {
     Building2,
     CheckCircle2,
     AlertCircle,
-    Sparkles
+    Sparkles,
+    CloudUpload
 } from 'lucide-react';
+import { DocumentUploadsPanel } from '../common/DocumentUploadsPanel';
+import { IdentityQuickAutoFillBar } from '../common/IdentityQuickAutoFillBar';
+import { applyExtractedIdentityToLeasingPerson } from '../../services/documentAutoFillService';
+import type { ExtractedIdentityDocumentData } from '../../types/uploads';
 
 export type LeasingEditorTab =
     | 'buyer'
@@ -46,7 +51,8 @@ export type LeasingEditorTab =
     | 'finance'
     | 'guarantors'
     | 'affidavit_peace'
-    | 'plate_mortgage';
+    | 'plate_mortgage'
+    | 'uploads';
 
 interface LeasingCaseEditorProps {
     leasingCase: LeasingCase;
@@ -78,13 +84,19 @@ interface PersonFieldsProps {
     onUpdate: (next: LeasingPersonInfo) => void;
     roleTitle: string;
     onCopyAddressFromBuyer?: () => void;
+    autoFillConfig?: {
+        scopeId: string;
+        roleLabel: string;
+        onAutoFill: (extracted: ExtractedIdentityDocumentData) => string[];
+    };
 }
 
 const PersonIdentityAndAddressFields: React.FC<PersonFieldsProps> = ({
     person,
     onUpdate,
     roleTitle,
-    onCopyAddressFromBuyer
+    onCopyAddressFromBuyer,
+    autoFillConfig
 }) => {
     const ncCheck = person.nationalCode ? validateIranianNationalCode(person.nationalCode) : null;
     const postalCheck = person.address.postalCode ? validateIranianPostalCode(person.address.postalCode) : null;
@@ -132,6 +144,18 @@ const PersonIdentityAndAddressFields: React.FC<PersonFieldsProps> = ({
                     </button>
                 )}
             </div>
+
+            {autoFillConfig && (
+                <IdentityQuickAutoFillBar
+                    scopeType="LEASING"
+                    scopeId={autoFillConfig.scopeId}
+                    roleLabel={autoFillConfig.roleLabel}
+                    nationalCode={person.nationalCode}
+                    customerName={getPersonFullName(person)}
+                    phone={person.address.mobilePhone}
+                    onAutoFill={(extracted) => autoFillConfig.onAutoFill(extracted)}
+                />
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
@@ -448,6 +472,19 @@ export const LeasingCaseEditor: React.FC<LeasingCaseEditorProps> = ({
     const [activeGuarantorEdit, setActiveGuarantorEdit] = useState<'guarantor1' | 'guarantor2'>('guarantor1');
     const [checkIssuerSource, setCheckIssuerSource] = useState<'buyer' | 'guarantor1' | 'guarantor2'>('buyer');
     const [defaultCheckBank, setDefaultCheckBank] = useState<string>('ملت');
+    const [uploadAutoFillTarget, setUploadAutoFillTarget] = useState<'buyer' | 'guarantor1' | 'guarantor2'>('buyer');
+
+    const handleAutoFillPerson = (
+        target: 'buyer' | 'guarantor1' | 'guarantor2',
+        extracted: ExtractedIdentityDocumentData
+    ): string[] => {
+        const preview = applyExtractedIdentityToLeasingPerson(leasingCase[target], extracted);
+        onChange((prev) => ({
+            ...prev,
+            [target]: applyExtractedIdentityToLeasingPerson(prev[target], extracted).next
+        }));
+        return preview.filledFields;
+    };
 
     const tabs: { id: LeasingEditorTab; label: string; sub: string; icon: React.ReactNode }[] = [
         { id: 'buyer', label: '۱. مشخصات خریدار', sub: 'حقیقی و حقوقی', icon: <User className="w-4 h-4" /> },
@@ -455,7 +492,8 @@ export const LeasingCaseEditor: React.FC<LeasingCaseEditorProps> = ({
         { id: 'finance', label: '۳. مالی، اقساط و چک‌ها', sub: 'ماده ۵، ۷ و ۳۶', icon: <Calculator className="w-4 h-4" /> },
         { id: 'guarantors', label: '۴. ضامن‌ها (حقیقی/شرکتی)', sub: 'ضامن ۱، ۲ و شرکتی', icon: <Users className="w-4 h-4" /> },
         { id: 'affidavit_peace', label: '۵. اقرارنامه و صلح‌نامه', sub: 'واریز، صلح، متمم', icon: <FileSignature className="w-4 h-4" /> },
-        { id: 'plate_mortgage', label: '۶. تعویض پلاک و فک رهن', sub: 'فرم ۱۲ تا ۱۶', icon: <ShieldCheck className="w-4 h-4" /> }
+        { id: 'plate_mortgage', label: '۶. تعویض پلاک و فک رهن', sub: 'فرم ۱۲ تا ۱۶', icon: <ShieldCheck className="w-4 h-4" /> },
+        { id: 'uploads', label: '۷. مدارک هویتی و بانکی', sub: 'شناسنامه، کارت ملی، بانکی', icon: <CloudUpload className="w-4 h-4" /> }
     ];
 
     const computedRemaining = Math.max(
@@ -574,8 +612,8 @@ export const LeasingCaseEditor: React.FC<LeasingCaseEditorProps> = ({
                 </span>
             </div>
 
-            {/* 6 Sub-Tabs */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60">
+            {/* 7 Sub-Tabs */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60">
                 {tabs.map((tab) => {
                     const active = activeTab === tab.id;
                     return (
@@ -609,6 +647,11 @@ export const LeasingCaseEditor: React.FC<LeasingCaseEditorProps> = ({
                             person={leasingCase.buyer}
                             onUpdate={(next) => onChange((prev) => ({ ...prev, buyer: next }))}
                             roleTitle="مشخصات کامل خریدار / متقاضی (حقیقی)"
+                            autoFillConfig={{
+                                scopeId: leasingCase.id,
+                                roleLabel: 'خریدار / متقاضی',
+                                onAutoFill: (extracted) => handleAutoFillPerson('buyer', extracted)
+                            }}
                         />
 
                         {/* Legal Buyer Toggle + Extra fields for فرم ۱۰ (آخرین اطلاعات مشتری حقوقی) */}
@@ -1032,6 +1075,11 @@ export const LeasingCaseEditor: React.FC<LeasingCaseEditorProps> = ({
                             person={activeGuarantorEdit === 'guarantor1' ? leasingCase.guarantor1 : leasingCase.guarantor2}
                             onUpdate={(next) => onChange((prev) => ({ ...prev, [activeGuarantorEdit]: next }))}
                             roleTitle={activeGuarantorEdit === 'guarantor1' ? 'مشخصات کامل ضامن اول (ج-۱)' : 'مشخصات کامل ضامن دوم (ج-۲)'}
+                            autoFillConfig={{
+                                scopeId: leasingCase.id,
+                                roleLabel: activeGuarantorEdit === 'guarantor1' ? 'ضامن اول' : 'ضامن دوم',
+                                onAutoFill: (extracted) => handleAutoFillPerson(activeGuarantorEdit, extracted)
+                            }}
                             onCopyAddressFromBuyer={() =>
                                 onChange((prev) => ({
                                     ...prev,
@@ -1209,6 +1257,56 @@ export const LeasingCaseEditor: React.FC<LeasingCaseEditorProps> = ({
                                 />
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'uploads' && (
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-sky-50/70 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-800/60">
+                            <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+                                تکمیل خودکار مشخصات هنگام آپلود کارت ملی یا شناسنامه اعمال شود روی:
+                            </span>
+                            <div className="inline-flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
+                                {(
+                                    [
+                                        { id: 'buyer', label: 'خریدار / متقاضی' },
+                                        { id: 'guarantor1', label: 'ضامن اول' },
+                                        { id: 'guarantor2', label: 'ضامن دوم' }
+                                    ] as const
+                                ).map((opt) => (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => setUploadAutoFillTarget(opt.id)}
+                                        className={`px-3 py-1 rounded-lg text-xs font-black cursor-pointer transition-all ${
+                                            uploadAutoFillTarget === opt.id
+                                                ? 'bg-sky-600 text-white'
+                                                : 'text-slate-600 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <DocumentUploadsPanel
+                            scopeType="LEASING"
+                            scopeId={leasingCase.id}
+                            nationalCode={leasingCase.buyer?.nationalCode}
+                            customerName={getPersonFullName(leasingCase.buyer)}
+                            phone={leasingCase.buyer?.address?.mobilePhone}
+                            autoFillRoleLabel={
+                                uploadAutoFillTarget === 'guarantor1'
+                                    ? 'ضامن اول'
+                                    : uploadAutoFillTarget === 'guarantor2'
+                                    ? 'ضامن دوم'
+                                    : 'خریدار / متقاضی'
+                            }
+                            onAutoFillFromDocument={(extracted) =>
+                                handleAutoFillPerson(uploadAutoFillTarget, extracted)
+                            }
+                        />
                     </div>
                 )}
             </div>

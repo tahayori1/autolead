@@ -46,8 +46,10 @@ import {
     PlusCircle,
     Headphones,
     PhoneCall,
-    RefreshCw
+    RefreshCw,
+    CloudUpload
 } from 'lucide-react';
+import { DocumentUploadsPanel } from './common/DocumentUploadsPanel';
 
 interface LeadDetailHistoryModalProps {
     isOpen: boolean;
@@ -68,7 +70,7 @@ interface LeadDetailHistoryModalProps {
     hasPrevious?: boolean;
     hasNext?: boolean;
     onNavigate?: (direction: 'prev' | 'next') => void;
-    initialTab?: 'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS';
+    initialTab?: 'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS' | 'DOCUMENTS';
 }
 
 const DetailItem: React.FC<{ label: string; value: React.ReactNode; }> = ({ label, value }) => (
@@ -84,7 +86,7 @@ const LeadDetailHistoryModal: React.FC<LeadDetailHistoryModalProps> = ({
     onStatusChange, onUserUpdate, hasPrevious = false, hasNext = false, onNavigate,
     initialTab
 }) => {
-    const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS'>('COMBINED_HISTORY');
+    const [activeTab, setActiveTab] = useState<'COMBINED_HISTORY' | 'EDIT_LEAD' | 'BEHAVIOR_RATING' | 'SURVEYS' | 'DOCUMENTS'>('COMBINED_HISTORY');
     const [surveySubTab, setSurveySubTab] = useState<'REGISTRATION' | 'DELIVERY' | 'DELIVERY_STATS'>('REGISTRATION');
     const [copiedStats, setCopiedStats] = useState(false);
     
@@ -1802,6 +1804,17 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                 <Smile className="w-4 h-4" />
                                 <span>نظرسنجی</span>
                             </button>
+                            <button
+                                onClick={() => setActiveTab('DOCUMENTS')}
+                                className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                                    activeTab === 'DOCUMENTS' 
+                                        ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-sm' 
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                }`}
+                            >
+                                <CloudUpload className="w-4 h-4 text-sky-500" />
+                                <span>مدارک هویتی</span>
+                            </button>
                         </div>
                     </header>
 
@@ -1861,130 +1874,130 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                             );
                         })()}
 
-                        {/* Customer Header Info */}
-                        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-850 shadow-sm space-y-3">
-                            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                                <div className="flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse" />
-                                    <span className="text-xs font-black text-slate-800 dark:text-white">مشخصات و اطلاعات سرنخ مشتری</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab('EDIT_LEAD')}
-                                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1.5 rounded-xl border border-indigo-200/80 dark:border-indigo-850 transition hover:bg-indigo-100 dark:hover:bg-indigo-900"
-                                    title="ویرایش مشخصات، خودرو، شهر، استان، مرجع و توضیحات"
-                                >
-                                    <Edit className="w-3.5 h-3.5" />
-                                    <span>ویرایش مشخصات و توضیحات</span>
-                                </button>
-                            </div>
-
-                            {targetUser && (targetUser.FullName || targetUser.Number || targetUser.id) ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs">
-                                    <DetailItem label="خودروی درخواستی" value={targetUser.CarModel || (targetUser as any).carModel || '-'} />
-                                    <DetailItem label="پاسخگوی تماس" value={
-                                        <span className="inline-flex items-center gap-1 font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-200/80 dark:border-sky-800/80">
-                                            <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                                            {targetUser.crmPerson || 'ثبت نشده'}
-                                        </span>
-                                    } />
-                                    <DetailItem label="تماس‌های موفق" value={
-                                        <span className="inline-flex items-center gap-1 font-bold font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/80 dark:border-emerald-800/80">
-                                            <PhoneCall className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                            {(() => {
-                                                const voipSuccessCount = getUniqueTelephonyGroups().filter(g => g.isAnswered).length;
-                                                const count = (targetUser.successful_calls !== null && targetUser.successful_calls !== undefined && targetUser.successful_calls > 0)
-                                                    ? targetUser.successful_calls
-                                                    : (voipSuccessCount > 0 ? voipSuccessCount : (targetUser.successful_calls ?? 0));
-                                                return count.toLocaleString('fa-IR');
-                                            })()} تماس
-                                        </span>
-                                    } />
-                                    <DetailItem label="آخرین تماس موفق" value={(() => {
-                                        if (targetUser.last_successful_call) return formatDate(targetUser.last_successful_call);
-                                        const latestVoip = getUniqueTelephonyGroups().find(g => g.isAnswered)?.primary;
-                                        if (latestVoip?.callTime) return formatDate(latestVoip.callTime);
-                                        return '-';
-                                    })()} />
-                                    {telephonyLogs.length > 0 && (
-                                        <DetailItem label="سوابق سانترال VoIP" value={
-                                            <span className="inline-flex items-center gap-1 font-bold font-mono text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-200/80 dark:border-sky-800/80">
-                                                <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                                                {telephonyLogs.length.toLocaleString('fa-IR')} رکورد تماس
-                                            </span>
-                                        } />
-                                    )}
-                                    <DetailItem label="آخرین ویرایش توسط" value={
-                                        targetUser.lastEditedBy ? (
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                {targetUser.lastEditedBy}
-                                            </span>
-                                        ) : '-'
-                                    } />
-                                    <DetailItem label="استان" value={targetUser.Province || (targetUser as any).province || '-'} />
-                                    <DetailItem label="شهر" value={targetUser.City || (targetUser as any).city || '-'} />
-                                    <DetailItem label="مرجع" value={targetUser.reference || (targetUser as any).Reference || '-'} />
-                                    <DetailItem label="زمان ثبت" value={formatDate(targetUser.RegisterTime || targetUser.createdAt || (targetUser as any).crmDate)} />
-                                    <DetailItem label="آخرین فعالیت" value={formatDate(targetUser.LastAction || targetUser.updatedAt)} />
-                                    {targetUser.failReason && (
-                                        <DetailItem label="علت شکست معامله" value={
-                                            <span className="font-extrabold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded border border-red-100 dark:border-red-900/30">
-                                                {targetUser.failReason}
-                                            </span>
-                                        } />
-                                    )}
-                                    {targetUser.failExplanation && (
-                                        <div className="col-span-full border-t border-slate-100 dark:border-slate-850 pt-2 mt-1">
-                                            <DetailItem label="توضیحات تکمیلی شکست معامله" value={
-                                                <span className="whitespace-pre-wrap text-red-600 dark:text-red-400 font-medium">
-                                                    {targetUser.failExplanation}
-                                                </span>
-                                            } />
-                                        </div>
-                                    )}
-
-                                    {/* Descriptions Section */}
-                                    <div className="col-span-full border-t border-slate-100 dark:border-slate-800 pt-3 mt-1">
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                                <FileText className="w-3.5 h-3.5 text-indigo-500" />
-                                                <span>توضیحات و یادداشت‌های مشتری:</span>
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setActiveTab('EDIT_LEAD')}
-                                                className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50/70 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800 hover:bg-indigo-100 transition"
-                                            >
-                                                <Edit className="w-3 h-3" />
-                                                <span>{(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description) ? 'ویرایش توضیحات' : 'ثبت توضیحات'}</span>
-                                            </button>
-                                        </div>
-                                        {(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description) ? (
-                                            <div className="bg-slate-50/90 dark:bg-slate-850/90 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
-                                                {targetUser.Decription || (targetUser as any).Description || (targetUser as any).description}
-                                            </div>
-                                        ) : (
-                                            <div 
-                                                onClick={() => setActiveTab('EDIT_LEAD')}
-                                                className="p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50 text-slate-400 dark:text-slate-500 text-xs flex items-center justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50/20 transition-all"
-                                            >
-                                                <span>هنوز توضیحی برای این مشتری ثبت نشده است.</span>
-                                                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[11px] flex items-center gap-1">
-                                                    <PlusCircle className="w-3.5 h-3.5" />
-                                                    افزودن توضیحات
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ) : (
-                                <p className="text-slate-500 text-xs">جزئیات کامل کاربر یافت نشد.</p>
-                            )}
-                        </div>
-
                         {/* TAB 1: Unified History and Reports */}
                         {activeTab === 'COMBINED_HISTORY' && (
                             <div className="space-y-4">
+                                {/* Customer Header Info */}
+                                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-850 shadow-sm space-y-3">
+                                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse" />
+                                            <span className="text-xs font-black text-slate-800 dark:text-white">مشخصات و اطلاعات سرنخ مشتری</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('EDIT_LEAD')}
+                                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1.5 rounded-xl border border-indigo-200/80 dark:border-indigo-850 transition hover:bg-indigo-100 dark:hover:bg-indigo-900"
+                                            title="ویرایش مشخصات، خودرو، شهر، استان، مرجع و توضیحات"
+                                        >
+                                            <Edit className="w-3.5 h-3.5" />
+                                            <span>ویرایش مشخصات و توضیحات</span>
+                                        </button>
+                                    </div>
+
+                                    {targetUser && (targetUser.FullName || targetUser.Number || targetUser.id) ? (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs">
+                                            <DetailItem label="خودروی درخواستی" value={targetUser.CarModel || (targetUser as any).carModel || '-'} />
+                                            <DetailItem label="پاسخگوی تماس" value={
+                                                <span className="inline-flex items-center gap-1 font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-200/80 dark:border-sky-800/80">
+                                                    <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                                                    {targetUser.crmPerson || 'ثبت نشده'}
+                                                </span>
+                                            } />
+                                            <DetailItem label="تماس‌های موفق" value={
+                                                <span className="inline-flex items-center gap-1 font-bold font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/80 dark:border-emerald-800/80">
+                                                    <PhoneCall className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                                    {(() => {
+                                                        const voipSuccessCount = getUniqueTelephonyGroups().filter(g => g.isAnswered).length;
+                                                        const count = (targetUser.successful_calls !== null && targetUser.successful_calls !== undefined && targetUser.successful_calls > 0)
+                                                            ? targetUser.successful_calls
+                                                            : (voipSuccessCount > 0 ? voipSuccessCount : (targetUser.successful_calls ?? 0));
+                                                        return count.toLocaleString('fa-IR');
+                                                    })()} تماس
+                                                </span>
+                                            } />
+                                            <DetailItem label="آخرین تماس موفق" value={(() => {
+                                                if (targetUser.last_successful_call) return formatDate(targetUser.last_successful_call);
+                                                const latestVoip = getUniqueTelephonyGroups().find(g => g.isAnswered)?.primary;
+                                                if (latestVoip?.callTime) return formatDate(latestVoip.callTime);
+                                                return '-';
+                                            })()} />
+                                            {telephonyLogs.length > 0 && (
+                                                <DetailItem label="سوابق سانترال VoIP" value={
+                                                    <span className="inline-flex items-center gap-1 font-bold font-mono text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-200/80 dark:border-sky-800/80">
+                                                        <Headphones className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                                                        {telephonyLogs.length.toLocaleString('fa-IR')} رکورد تماس
+                                                    </span>
+                                                } />
+                                            )}
+                                            <DetailItem label="آخرین ویرایش توسط" value={
+                                                targetUser.lastEditedBy ? (
+                                                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                        {targetUser.lastEditedBy}
+                                                    </span>
+                                                ) : '-'
+                                            } />
+                                            <DetailItem label="استان" value={targetUser.Province || (targetUser as any).province || '-'} />
+                                            <DetailItem label="شهر" value={targetUser.City || (targetUser as any).city || '-'} />
+                                            <DetailItem label="مرجع" value={targetUser.reference || (targetUser as any).Reference || '-'} />
+                                            <DetailItem label="زمان ثبت" value={formatDate(targetUser.RegisterTime || targetUser.createdAt || (targetUser as any).crmDate)} />
+                                            <DetailItem label="آخرین فعالیت" value={formatDate(targetUser.LastAction || targetUser.updatedAt)} />
+                                            {targetUser.failReason && (
+                                                <DetailItem label="علت شکست معامله" value={
+                                                    <span className="font-extrabold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded border border-red-100 dark:border-red-900/30">
+                                                        {targetUser.failReason}
+                                                    </span>
+                                                } />
+                                            )}
+                                            {targetUser.failExplanation && (
+                                                <div className="col-span-full border-t border-slate-100 dark:border-slate-850 pt-2 mt-1">
+                                                    <DetailItem label="توضیحات تکمیلی شکست معامله" value={
+                                                        <span className="whitespace-pre-wrap text-red-600 dark:text-red-400 font-medium">
+                                                            {targetUser.failExplanation}
+                                                        </span>
+                                                    } />
+                                                </div>
+                                            )}
+
+                                            {/* Descriptions Section */}
+                                            <div className="col-span-full border-t border-slate-100 dark:border-slate-800 pt-3 mt-1">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                                        <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                                                        <span>توضیحات و یادداشت‌های مشتری:</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveTab('EDIT_LEAD')}
+                                                        className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50/70 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800 hover:bg-indigo-100 transition"
+                                                    >
+                                                        <Edit className="w-3 h-3" />
+                                                        <span>{(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description) ? 'ویرایش توضیحات' : 'ثبت توضیحات'}</span>
+                                                    </button>
+                                                </div>
+                                                {(targetUser.Decription || (targetUser as any).Description || (targetUser as any).description) ? (
+                                                    <div className="bg-slate-50/90 dark:bg-slate-850/90 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+                                                        {targetUser.Decription || (targetUser as any).Description || (targetUser as any).description}
+                                                    </div>
+                                                ) : (
+                                                    <div 
+                                                        onClick={() => setActiveTab('EDIT_LEAD')}
+                                                        className="p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850/50 text-slate-400 dark:text-slate-500 text-xs flex items-center justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50/20 transition-all"
+                                                    >
+                                                        <span>هنوز توضیحی برای این مشتری ثبت نشده است.</span>
+                                                        <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[11px] flex items-center gap-1">
+                                                            <PlusCircle className="w-3.5 h-3.5" />
+                                                            افزودن توضیحات
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-slate-500 text-xs">جزئیات کامل کاربر یافت نشد.</p>
+                                    )}
+                                </div>
+
                                 {/* Quick Status Assignment */}
                                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
                                     <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2.5">تعیین سریع وضعیت سرنخ (ثبت گزارش خودکار):</p>
@@ -2013,97 +2026,6 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                                 </button>
                                             );
                                         })}
-                                    </div>
-                                </div>
-
-                                {/* Customer Tagging (CRM Club Merged) */}
-                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm space-y-4">
-                                    <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                                        <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
-                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">برچسب‌گذاری مشتری (باشگاه مشتریان):</p>
-                                    </div>
-
-                                    {/* Ready-made tags selection list */}
-                                    <div className="space-y-2">
-                                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">برچسب‌های توصیفی آماده (انتخاب سریع):</span>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {['سختگیر', 'خوش اخلاق', 'محتاط و بادقت', 'سرمایه‌گذار', 'نفوذ سیاسی/حاکمیتی', 'سابقه دوستی', 'سفارشی', 'تخفیف مشاغل'].map((tag) => {
-                                                const isSelected = crmTags.includes(tag);
-                                                return (
-                                                    <button
-                                                        key={tag}
-                                                        type="button"
-                                                        onClick={() => handleToggleCrmTag(tag)}
-                                                        className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
-                                                            isSelected 
-                                                                ? 'bg-indigo-500 text-white border-indigo-500 font-bold shadow-xs' 
-                                                                : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
-                                                        }`}
-                                                    >
-                                                        {isSelected ? `✓ ${tag}` : `+ ${tag}`}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {/* Typed/Custom tags */}
-                                    <div className="space-y-2">
-                                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">برچسب‌های اختصاصی و دلخواه مشتری:</span>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={newCrmTagInput}
-                                                onChange={(e) => setNewCrmTagInput(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        handleAddCrmTag();
-                                                    }
-                                                }}
-                                                placeholder="تایپ برچسب جدید و فشردن اینتر..."
-                                                className="flex-grow px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-850 dark:text-white text-xs outline-none"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={handleAddCrmTag}
-                                                className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition"
-                                            >
-                                                افزودن برچسب
-                                            </button>
-                                        </div>
-
-                                        {/* Display Active Tags */}
-                                        {crmTags.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-150 dark:border-slate-850">
-                                                {crmTags.map((tag) => (
-                                                    <span 
-                                                        key={tag} 
-                                                        className="inline-flex items-center gap-1 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full"
-                                                    >
-                                                        {tag}
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => handleRemoveCrmTag(tag)}
-                                                            className="text-slate-400 hover:text-rose-500 font-bold ml-0.5 transition focus:outline-none"
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex justify-end pt-1">
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveBehaviorRating}
-                                            disabled={isSavingCrmRatings}
-                                            className="bg-indigo-650 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                                        >
-                                            {isSavingCrmRatings ? 'در حال ذخیره‌سازی...' : '✓ ثبت و ذخیره برچسب‌های مشتری'}
-                                        </button>
                                     </div>
                                 </div>
 
@@ -3332,6 +3254,97 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* Customer Tagging (CRM Club Merged) */}
+                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm space-y-4">
+                                    <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                                        <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">برچسب‌گذاری مشتری (باشگاه مشتریان):</p>
+                                    </div>
+
+                                    {/* Ready-made tags selection list */}
+                                    <div className="space-y-2">
+                                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">برچسب‌های توصیفی آماده (انتخاب سریع):</span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {['سختگیر', 'خوش اخلاق', 'محتاط و بادقت', 'سرمایه‌گذار', 'نفوذ سیاسی/حاکمیتی', 'سابقه دوستی', 'سفارشی', 'تخفیف مشاغل'].map((tag) => {
+                                                const isSelected = crmTags.includes(tag);
+                                                return (
+                                                    <button
+                                                        key={tag}
+                                                        type="button"
+                                                        onClick={() => handleToggleCrmTag(tag)}
+                                                        className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
+                                                            isSelected 
+                                                                ? 'bg-indigo-500 text-white border-indigo-500 font-bold shadow-xs' 
+                                                                : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
+                                                        }`}
+                                                    >
+                                                        {isSelected ? `✓ ${tag}` : `+ ${tag}`}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Typed/Custom tags */}
+                                    <div className="space-y-2">
+                                        <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">برچسب‌های اختصاصی و دلخواه مشتری:</span>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={newCrmTagInput}
+                                                onChange={(e) => setNewCrmTagInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddCrmTag();
+                                                    }
+                                                }}
+                                                placeholder="تایپ برچسب جدید و فشردن اینتر..."
+                                                className="flex-grow px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-850 dark:text-white text-xs outline-none"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAddCrmTag}
+                                                className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition"
+                                            >
+                                                افزودن برچسب
+                                            </button>
+                                        </div>
+
+                                        {/* Display Active Tags */}
+                                        {crmTags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-150 dark:border-slate-850">
+                                                {crmTags.map((tag) => (
+                                                    <span 
+                                                        key={tag} 
+                                                        className="inline-flex items-center gap-1 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full"
+                                                    >
+                                                        {tag}
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => handleRemoveCrmTag(tag)}
+                                                            className="text-slate-400 hover:text-rose-500 font-bold ml-0.5 transition focus:outline-none"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex justify-end pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveBehaviorRating}
+                                            disabled={isSavingCrmRatings}
+                                            className="bg-indigo-650 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                                        >
+                                            {isSavingCrmRatings ? 'در حال ذخیره‌سازی...' : '✓ ثبت و ذخیره برچسب‌های مشتری'}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -3891,6 +3904,19 @@ ${deliveryStatsSummary.dimensions.map(d => `• ${d.title}: ${d.score} از ۱۰
                                         </div>
                                     )}
                                 </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'DOCUMENTS' && targetUser && (
+                            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+                                <DocumentUploadsPanel
+                                    scopeType="LEAD"
+                                    scopeId={String(targetUser.id || targetUser.Number)}
+                                    nationalCode={(targetUser as any).NationalCode || (targetUser as any).nationalCode || undefined}
+                                    customerName={targetUser.FullName}
+                                    phone={targetUser.Number}
+                                    compact
+                                />
                             </div>
                         )}
                     </main>

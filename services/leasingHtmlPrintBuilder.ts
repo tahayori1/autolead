@@ -27,6 +27,10 @@ import {
     numberToPersianWords,
     toPersianDigits
 } from './bankLetterValidation';
+import {
+    buildAutoPaginationScript,
+    buildPaginationSheetCss
+} from './htmlPaginationEngine';
 
 export interface LeasingHtmlPrintOptions {
     paperSize?: DocumentPaperSize;
@@ -88,32 +92,11 @@ function collectVazirmatnFontCss(forStandaloneDownload = false): string {
 
 function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): string {
     const isA5 = paperSize === 'A5';
-    const pageW = isA5 ? '148mm' : '210mm';
-    const pageMinH = isA5 ? '210mm' : '297mm';
-    const screenPad = isA5 ? '7.5mm 8.5mm 10.5mm 8.5mm' : '10mm 12mm 13mm 12mm';
-    const printMargin = isA5 ? '6.5mm 7.5mm 9.5mm 7.5mm' : '8.5mm 10.5mm 11.5mm 10.5mm';
     const baseFont = isA5 ? '8.9pt' : '10.1pt';
     const lineHeight = isA5 ? '1.74' : '1.86';
 
     return `
     <style>
-        @page {
-            size: ${paperSize} portrait;
-            margin: ${printMargin};
-            @bottom-left {
-                content: "صفحه " counter(page) " از " counter(pages);
-                font-family: 'Vazirmatn', Tahoma, sans-serif;
-                font-size: ${isA5 ? '7pt' : '8pt'};
-                color: #64748b;
-            }
-            @bottom-right {
-                content: "نمایندگی ۲۶۰۶ کرمان موتور (حسینی خودرو شیراز) — تلفن: ${COMPANY_PHONE_PERSIAN}";
-                font-family: 'Vazirmatn', Tahoma, sans-serif;
-                font-size: ${isA5 ? '7pt' : '8pt'};
-                color: #64748b;
-            }
-        }
-
         *, *::before, *::after {
             box-sizing: border-box;
             -webkit-print-color-adjust: exact !important;
@@ -149,34 +132,7 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
             font-variant-numeric: tabular-nums;
         }
 
-        .form-sheet {
-            width: ${pageW};
-            max-width: 100%;
-            min-height: ${pageMinH};
-            margin: 0 auto 20px;
-            background-color: #ffffff;
-            padding: ${screenPad};
-            border-radius: 6px;
-            box-shadow: 0 10px 28px -8px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(148, 163, 184, 0.45);
-            position: relative;
-        }
-
-        .page-break-after {
-            page-break-after: always;
-            break-after: page;
-        }
-
-        .watermark-layer {
-            display: ${showWatermark ? 'flex' : 'none'};
-            position: fixed;
-            inset: 0;
-            align-items: center;
-            justify-content: center;
-            pointer-events: none;
-            user-select: none;
-            z-index: 0;
-            opacity: 0.03;
-        }
+        ${buildPaginationSheetCss(paperSize, 'leasing', showWatermark)}
 
         .watermark-text {
             transform: rotate(-18deg);
@@ -188,6 +144,19 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
         .watermark-text .wm-sub { font-size: ${isA5 ? '12pt' : '16pt'}; margin-top: 4px; color: #334155; }
 
         .doc-content { position: relative; z-index: 1; }
+
+        .l-footer {
+            border-top: 1.5px solid #94a3b8;
+            padding-top: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: ${isA5 ? '6.8pt' : '7.7pt'};
+            color: #475569;
+            background: #ffffff;
+        }
 
         /* Top Header */
         .l-header {
@@ -376,29 +345,6 @@ function buildLeasingCss(paperSize: DocumentPaperSize, showWatermark: boolean): 
         }
 
         .avoid-break { break-inside: avoid; page-break-inside: avoid; }
-
-        @media print {
-            html, body {
-                background: #ffffff !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 100% !important;
-                height: auto !important;
-                overflow: visible !important;
-            }
-            .form-sheet {
-                width: 100% !important;
-                max-width: 100% !important;
-                min-height: auto !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border-radius: 0 !important;
-                box-shadow: none !important;
-                display: block !important;
-                overflow: visible !important;
-            }
-            .watermark-layer { position: fixed !important; opacity: 0.025 !important; }
-        }
     </style>
     `;
 }
@@ -2069,6 +2015,62 @@ function renderSingleFormHtml(c: LeasingCase, formId: LeasingFormId): string {
     }
 }
 
+function buildLeasingFooterHtml(docTitle: string, c: LeasingCase): string {
+    return `
+        <footer class="l-footer">
+            <span>شرکت واسپاری کرمان موتور — نمایندگی ${esc(toPersianDigits(c.dealershipCode || '2606'))} حسینی خودرو شیراز (تلفن: <strong>${COMPANY_PHONE_PERSIAN}</strong>)</span>
+            <span>${esc(docTitle)} | قرارداد: <span class="ltr">${esc(toPersianDigits(c.contractNumber || '-'))}</span> | <span class="sheet-page-num-badge">صفحه {{DOC_PAGE}} از {{DOC_PAGES}}</span></span>
+        </footer>
+    `;
+}
+
+function convertFormSheetsToSourceUnits(rawHtml: string, c: LeasingCase): string {
+    const units: string[] = [];
+    const sectionRegex = /<section class="form-sheet(?:\s+page-break-after)?">([\s\S]*?)<\/section>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = sectionRegex.exec(rawHtml)) !== null) {
+        let inner = match[1].trim();
+        // Strip outer <div class="doc-content">...</div> wrapper if present
+        if (inner.startsWith('<div class="doc-content">') && inner.endsWith('</div>')) {
+            inner = inner.slice('<div class="doc-content">'.length, -'</div>'.length).trim();
+        }
+
+        // Extract <header class="l-header">...</header>
+        let headerHtml = '';
+        const hdrMatch = inner.match(/<header class="l-header">[\s\S]*?<\/header>/);
+        if (hdrMatch) {
+            headerHtml = hdrMatch[0];
+            inner = inner.replace(hdrMatch[0], '').trim();
+        }
+
+        // Extract title from header for footer caption
+        const titleMatch = headerHtml.match(/<h1 class="l-title">([\s\S]*?)<\/h1>/);
+        const rawTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'فرم لیزینگ کرمان موتور';
+
+        // Extract optional <div class="page-tag">...</div> into footer label instead of inline body
+        let pageTagText = '';
+        const tagMatch = inner.match(/<div class="page-tag">([\s\S]*?)<\/div>/);
+        if (tagMatch) {
+            pageTagText = tagMatch[1].replace(/<[^>]+>/g, '').trim();
+            inner = inner.replace(tagMatch[0], '').trim();
+        }
+
+        const footerTitle = pageTagText ? `${rawTitle} (${pageTagText})` : rawTitle;
+        const footerHtml = buildLeasingFooterHtml(footerTitle, c);
+
+        units.push(`
+            <article class="doc-source-unit">
+                <div class="src-hdr">${headerHtml}</div>
+                <div class="src-ftr">${footerHtml}</div>
+                <div class="src-body">${inner}</div>
+            </article>
+        `);
+    }
+
+    return units.join('\n');
+}
+
 export function buildLeasingHtmlDocument(
     leasingCase: LeasingCase,
     formsToRender: LeasingFormId[],
@@ -2083,18 +2085,18 @@ export function buildLeasingHtmlDocument(
         ? `فرم لیزینگ - ${buyerName} (${leasingCase.contractNumber})`
         : `پکیج فرم‌های لیزینگ (${toPersianDigits(list.length)} فرم) - ${buyerName}`;
 
-    const sectionsHtml = list
-        .map((fid, idx) => {
-            const html = renderSingleFormHtml(leasingCase, fid);
-            if (idx < list.length - 1) {
-                const lastIdx = html.lastIndexOf('<section class="form-sheet">');
-                if (lastIdx >= 0) {
-                    return html.slice(0, lastIdx) + '<section class="form-sheet page-break-after">' + html.slice(lastIdx + '<section class="form-sheet">'.length);
-                }
-            }
-            return html;
-        })
+    const rawSectionsHtml = list
+        .map((fid) => renderSingleFormHtml(leasingCase, fid))
         .join('\n');
+
+    const sourceUnitsHtml = convertFormSheetsToSourceUnits(rawSectionsHtml, leasingCase);
+
+    const watermarkInnerHtml = `
+        <div class="watermark-text">
+            <div class="wm-en">KERMAN MOTOR LEASING</div>
+            <div class="wm-sub">HOSEINI KHODRO 2606</div>
+        </div>
+    `;
 
     return `<!DOCTYPE html>
 <html dir="rtl" lang="fa">
@@ -2106,16 +2108,13 @@ export function buildLeasingHtmlDocument(
     ${buildLeasingCss(paperSize, showWatermark)}
 </head>
 <body>
-    <div class="watermark-layer" aria-hidden="true">
-        <div class="watermark-text">
-            <div class="wm-en">KERMAN MOTOR LEASING</div>
-            <div class="wm-sub">HOSEINI KHODRO 2606</div>
-        </div>
+    <div id="doc-sources-vault" aria-hidden="true">
+        ${sourceUnitsHtml}
     </div>
 
-    <main dir="rtl" lang="fa">
-        ${sectionsHtml}
-    </main>
+    <main id="paginated-pages-root" dir="rtl" lang="fa"></main>
+
+    ${buildAutoPaginationScript(watermarkInnerHtml, paperSize, 'leasing')}
 </body>
 </html>`;
 }

@@ -72,8 +72,8 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
             forStandaloneDownload: false
         });
         return html.replace(
-            '</style>',
-            `@media screen { body { padding: 14px 8px; } .form-sheet { zoom: 0.86; margin-bottom: 12px; } }\n</style>`
+            '</head>',
+            `<style>@media screen { body { padding: 14px 8px; } #paginated-pages-root, #doc-sources-vault { zoom: 0.86; } .sheet-page, .doc-source-unit { margin-bottom: 12px; } }</style>\n</head>`
         );
     }, [leasingCase, activeForm, paperSize]);
 

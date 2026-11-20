@@ -160,7 +160,7 @@ export const PaginatedDocumentSheet: React.FC<PaginatedDocumentSheetProps> = ({
                     >
                         <div className="w-full border-t-2 border-dashed border-amber-400/90 relative">
                             <span className="absolute left-1/2 -translate-x-1/2 -top-3 bg-amber-50 text-amber-800 border border-amber-300 px-3 py-0.5 rounded-full text-[10px] font-black shadow-xs whitespace-nowrap">
-                                پایان صفحه {toPersianDigits(idx)} — ادامه در صفحه {toPersianDigits(idx + 1)}
+                                پایان صفحه {toPersianDigits(idx)} (با پاورقی) — صفحه {toPersianDigits(idx + 1)} (با تکرار سربرگ)
                             </span>
                         </div>
                     </div>

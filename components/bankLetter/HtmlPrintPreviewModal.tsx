@@ -56,8 +56,8 @@ export const HtmlPrintPreviewModal: React.FC<HtmlPrintPreviewModalProps> = ({
         if (zoomPercent === 100) return baseHtml;
         // Inject screen-only zoom so @media print always prints at exact 100% scale
         return baseHtml.replace(
-            '</style>',
-            `@media screen { .sheet-wrapper { zoom: ${zoomPercent / 100}; } }\n</style>`
+            '</head>',
+            `<style>@media screen { #paginated-pages-root, #doc-sources-vault { zoom: ${zoomPercent / 100}; } }</style>\n</head>`
         );
     }, [payload, paperSize, showWatermark, zoomPercent]);
 
