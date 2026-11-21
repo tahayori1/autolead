@@ -46,7 +46,6 @@ export const LeasingPrintPreviewModal: React.FC<LeasingPrintPreviewModalProps> =
     const [selectedForms, setSelectedForms] = useState<LeasingFormId[]>(
         initialForms.length > 0 ? initialForms : ['PRE_REGISTRATION']
     );
-    const [showWatermark, setShowWatermark] = useState(true);
     const [zoomPercent, setZoomPercent] = useState<number>(100);
     const [isPrinting, setIsPrinting] = useState(false);
     const [showDesignPanel, setShowDesignPanel] = useState(false);
@@ -55,6 +54,7 @@ export const LeasingPrintPreviewModal: React.FC<LeasingPrintPreviewModalProps> =
     );
 
     const activeDesign = design || localDesign;
+    const showWatermark = activeDesign.showWatermark;
     const handleDesignChange = (next: DocumentPrintDesignSettings) => {
         savePrintDesign('leasing', next);
         if (onDesignChange) {
@@ -191,7 +191,7 @@ export const LeasingPrintPreviewModal: React.FC<LeasingPrintPreviewModalProps> =
 
                     <button
                         type="button"
-                        onClick={() => setShowWatermark((w) => !w)}
+                        onClick={() => handleDesignChange({ ...activeDesign, showWatermark: !showWatermark })}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                             showWatermark ? 'bg-amber-500/15 text-amber-300 border-amber-500/40' : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                         }`}
@@ -210,7 +210,7 @@ export const LeasingPrintPreviewModal: React.FC<LeasingPrintPreviewModalProps> =
                         }`}
                     >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
-                        <span>فونت، هدر و فوتر</span>
+                        <span>فونت، هدر، فوتر و واترمارک</span>
                     </button>
                 </div>
 

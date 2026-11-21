@@ -125,6 +125,12 @@ function buildDocumentCss(
     const ftrPadPx = design.footerPaddingPx;
     const badgeSizePx = Math.max(28, Math.round(hdrFontPt * 4.6));
 
+    const wmFontPt = Math.max(12, Math.min(72, design.watermarkFontSizePt || (isA5 ? 26 : 38)));
+    const wmSubFontPt = Math.max(8, Math.round(wmFontPt * 0.45));
+    const wmAngle = Number.isFinite(design.watermarkAngleDeg) ? design.watermarkAngleDeg : -18;
+    const wmOpacity = Math.max(0.01, Math.min(0.4, design.watermarkOpacity ?? 0.035));
+    const isPersianWm = /[\u0600-\u06FF]/.test(design.watermarkText || '');
+
     return `
     <style>
         *, *::before, *::after {
@@ -162,16 +168,18 @@ function buildDocumentCss(
             font-variant-numeric: tabular-nums;
         }
 
-        ${buildPaginationSheetCss(paperSize, 'official', showWatermark)}
+        ${buildPaginationSheetCss(paperSize, 'official', showWatermark, wmOpacity)}
 
         .watermark-text {
-            transform: rotate(-18deg);
+            transform: rotate(${wmAngle}deg);
             text-align: center;
             font-weight: 900;
             color: #0f172a;
+            max-width: 90%;
+            line-height: 1.35;
         }
-        .watermark-text .wm-en { font-size: ${isA5 ? '28pt' : '40pt'}; letter-spacing: 3px; }
-        .watermark-text .wm-sub { font-size: ${isA5 ? '13pt' : '18pt'}; margin-top: 4px; color: #334155; }
+        .watermark-text .wm-en { font-size: ${wmFontPt}pt; letter-spacing: ${isPersianWm ? '0' : '2px'}; }
+        .watermark-text .wm-sub { font-size: ${wmSubFontPt}pt; margin-top: 6px; color: #334155; letter-spacing: 0; }
 
         .doc-content {
             position: relative;
@@ -1230,8 +1238,8 @@ export function buildBatchOfficialDocumentsHtml(
     options: HtmlPrintBuildOptions = {}
 ): string {
     const paperSize: DocumentPaperSize = options.paperSize || 'A4';
-    const showWatermark = options.showWatermark ?? true;
     const design = options.design || getDefaultPrintDesign('official', paperSize);
+    const showWatermark = options.showWatermark ?? design.showWatermark;
     const list = payloads.length > 0 ? payloads : [];
     const renderedList = list.map((p) => renderPayloadToParts(p, design));
     const title = renderedList.length === 1
@@ -1244,12 +1252,16 @@ export function buildBatchOfficialDocumentsHtml(
         .map((parts) => wrapSourceUnitHtml(parts))
         .join('\n');
 
-    const watermarkInnerHtml = `
+    const wmMainText = design.watermarkText?.trim() || '';
+    const wmSubText = design.watermarkSubText?.trim() || '';
+    const watermarkInnerHtml = (wmMainText || wmSubText)
+        ? `
         <div class="watermark-text">
-            <div class="wm-en">HOSEINI KHODRO</div>
-            <div class="wm-sub">KERMAN MOTOR 2606</div>
+            ${wmMainText ? `<div class="wm-en">${escapeHtml(wmMainText)}</div>` : ''}
+            ${wmSubText ? `<div class="wm-sub">${escapeHtml(wmSubText)}</div>` : ''}
         </div>
-    `;
+        `
+        : '';
 
     return `<!DOCTYPE html>
 <html dir="rtl" lang="fa">

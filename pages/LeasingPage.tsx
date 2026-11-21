@@ -81,7 +81,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
     const livePreviewHtml = useMemo(() => {
         const html = buildLeasingHtmlDocument(leasingCase, [activeForm], {
             paperSize,
-            showWatermark: true,
+            showWatermark: printDesign.showWatermark,
             forStandaloneDownload: false,
             design: printDesign
         });
@@ -121,7 +121,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
             setIsDirectPrinting(true);
             const html = buildLeasingHtmlDocument(leasingCase, [activeForm], {
                 paperSize,
-                showWatermark: true,
+                showWatermark: printDesign.showWatermark,
                 forStandaloneDownload: false,
                 design: printDesign
             });
@@ -377,7 +377,7 @@ const LeasingPage: React.FC<LeasingPageProps> = () => {
                                     }`}
                                 >
                                     <SlidersHorizontal className="w-3.5 h-3.5" />
-                                    <span>فونت، هدر و فوتر</span>
+                                    <span>فونت، هدر، فوتر و واترمارک</span>
                                 </button>
 
                                 <button type="button" onClick={handleCopyFormText} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer">

@@ -36,8 +36,8 @@ export async function printHtmlString(html: string): Promise<void> {
     iframe.style.position = 'fixed';
     iframe.style.left = '-10000px';
     iframe.style.top = '0';
-    iframe.style.width = '794px';
-    iframe.style.height = '1123px';
+    iframe.style.width = '920px';
+    iframe.style.height = '1200px';
     iframe.style.border = 'none';
     iframe.style.zIndex = '-9999';
     document.body.appendChild(iframe);

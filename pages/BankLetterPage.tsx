@@ -146,7 +146,7 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
         const payload = dossierToOfficialPayload(dossier, activeForm);
         const html = buildOfficialDocumentHtml(payload, {
             paperSize,
-            showWatermark: true,
+            showWatermark: printDesign.showWatermark,
             forStandaloneDownload: false,
             design: printDesign
         });
@@ -205,7 +205,7 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
             const payload = dossierToOfficialPayload(dossier, activeForm);
             const html = buildOfficialDocumentHtml(payload, {
                 paperSize,
-                showWatermark: true,
+                showWatermark: printDesign.showWatermark,
                 forStandaloneDownload: false,
                 design: printDesign
             });
@@ -682,7 +682,7 @@ const BankLetterPage: React.FC<BankLetterPageProps> = () => {
                                     }`}
                                 >
                                     <SlidersHorizontal className="w-3.5 h-3.5" />
-                                    <span>فونت، هدر و فوتر</span>
+                                    <span>فونت، هدر، فوتر و واترمارک</span>
                                 </button>
 
                                 <button

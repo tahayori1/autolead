@@ -29,4 +29,12 @@ export interface DocumentPrintDesignSettings {
     // Footer Editable Texts (supports {{DOC_TITLE}}, {{DOC_NUMBER}}, {{DOC_DATE}})
     footerRightText: string;
     footerLeftText: string;
+
+    // Watermark Settings
+    showWatermark: boolean;
+    watermarkText: string;
+    watermarkSubText: string;
+    watermarkFontSizePt: number;
+    watermarkOpacity: number;
+    watermarkAngleDeg: number;
 }

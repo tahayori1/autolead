@@ -27,40 +27,43 @@ export interface SheetGeometry {
 export function getSheetGeometry(paperSize: DocumentPaperSize, variant: 'official' | 'leasing' = 'official'): SheetGeometry {
     const isA5 = paperSize === 'A5';
     if (variant === 'leasing') {
-        const marginTopMm = isA5 ? 6.5 : 8.5;
-        const marginSideMm = isA5 ? 7.5 : 10.5;
-        const marginBottomMm = isA5 ? 8.5 : 10.5;
+        const marginTopMm = isA5 ? 6 : 7.5;
+        const marginSideMm = isA5 ? 7.5 : 10;
+        const marginBottomMm = isA5 ? 7.5 : 9;
         const pageWidthMm = isA5 ? 148 : 210;
         const pageHeightMm = isA5 ? 210 : 297;
+        const safetyBufferMm = isA5 ? 9.0 : 11.0;
         return {
             pageWidthMm,
             pageHeightMm,
             marginTopMm,
             marginSideMm,
             marginBottomMm,
-            printableHeightMm: Number((pageHeightMm - marginTopMm - marginBottomMm - 1.0).toFixed(2))
+            printableHeightMm: Number((pageHeightMm - marginTopMm - marginBottomMm - safetyBufferMm).toFixed(2))
         };
     }
 
-    const marginTopMm = isA5 ? 8 : 10.5;
-    const marginSideMm = isA5 ? 9 : 12.5;
-    const marginBottomMm = isA5 ? 9.5 : 12;
+    const marginTopMm = isA5 ? 7 : 8.5;
+    const marginSideMm = isA5 ? 8.5 : 11.5;
+    const marginBottomMm = isA5 ? 8.5 : 10;
     const pageWidthMm = isA5 ? 148 : 210;
     const pageHeightMm = isA5 ? 210 : 297;
+    const safetyBufferMm = isA5 ? 9.0 : 11.0;
     return {
         pageWidthMm,
         pageHeightMm,
         marginTopMm,
         marginSideMm,
         marginBottomMm,
-        printableHeightMm: Number((pageHeightMm - marginTopMm - marginBottomMm - 1.0).toFixed(2))
+        printableHeightMm: Number((pageHeightMm - marginTopMm - marginBottomMm - safetyBufferMm).toFixed(2))
     };
 }
 
 export function buildPaginationSheetCss(
     paperSize: DocumentPaperSize,
     variant: 'official' | 'leasing' = 'official',
-    showWatermark = true
+    showWatermark = true,
+    watermarkOpacity = 0.035
 ): string {
     const g = getSheetGeometry(paperSize, variant);
     const isA5 = paperSize === 'A5';
@@ -134,9 +137,12 @@ export function buildPaginationSheetCss(
         }
 
         .sheet-page.cal-sheet {
+            width: ${g.pageWidthMm}mm !important;
+            max-width: none !important;
             height: ${g.pageHeightMm}mm !important;
             min-height: ${g.pageHeightMm}mm !important;
             max-height: ${g.pageHeightMm}mm !important;
+            padding: ${g.marginTopMm}mm ${g.marginSideMm}mm ${g.marginBottomMm}mm ${g.marginSideMm}mm !important;
             zoom: 1 !important;
             overflow: hidden !important;
         }
@@ -155,7 +161,7 @@ export function buildPaginationSheetCss(
             pointer-events: none;
             user-select: none;
             z-index: 0;
-            opacity: 0.032;
+            opacity: ${watermarkOpacity};
         }
 
         .sheet-header-slot {
@@ -218,11 +224,18 @@ export function buildPaginationSheetCss(
                 padding: 0 !important;
                 width: 100% !important;
                 height: auto !important;
+                min-height: 0 !important;
                 overflow: visible !important;
+            }
+
+            #doc-sources-vault {
+                display: none !important;
             }
 
             #paginated-pages-root {
                 zoom: 1 !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
 
             .doc-source-unit {
@@ -240,7 +253,7 @@ export function buildPaginationSheetCss(
                 width: 100% !important;
                 max-width: 100% !important;
                 height: ${g.printableHeightMm}mm !important;
-                min-height: ${g.printableHeightMm}mm !important;
+                min-height: 0 !important;
                 max-height: ${g.printableHeightMm}mm !important;
                 margin: 0 !important;
                 padding: 0 !important;
@@ -250,6 +263,8 @@ export function buildPaginationSheetCss(
                 overflow: hidden !important;
                 display: flex !important;
                 flex-direction: column !important;
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
             }
 
             .sheet-page.doc-page-break {
@@ -257,7 +272,8 @@ export function buildPaginationSheetCss(
                 break-after: page !important;
             }
 
-            .sheet-page:last-child {
+            .sheet-page:last-child,
+            .sheet-page:last-of-type {
                 page-break-after: auto !important;
                 break-after: auto !important;
             }
@@ -488,11 +504,14 @@ export function buildAutoPaginationScript(
             calObj.sheet.clientHeight -
             (parseFloat(calStyle.paddingTop) || 0) -
             (parseFloat(calStyle.paddingBottom) || 0);
-        var innerSheetH = measuredInnerH >= 150 ? measuredInnerH : FALLBACK_PRINTABLE_PX;
+        var innerSheetH = Math.min(
+            measuredInnerH >= 150 ? measuredInnerH : FALLBACK_PRINTABLE_PX,
+            FALLBACK_PRINTABLE_PX
+        );
         var hdrH = headerHtml.trim() ? (calObj.hdr.offsetHeight || 86) : 0;
         var ftrH = footerHtml.trim() ? (calObj.ftr.offsetHeight || 34) : 0;
-        // body.scrollHeight / body.offsetHeight already include .sheet-body-slot padding
-        var maxBodyH = Math.max(160, Math.floor(innerSheetH - hdrH - ftrH - 10));
+        // body.scrollHeight / body.offsetHeight already include .sheet-body-slot padding; reserve 22px for print font-metric differences
+        var maxBodyH = Math.max(150, Math.floor(innerSheetH - hdrH - ftrH - 22));
         outputRoot.removeChild(calObj.sheet);
 
         var pages = [];
@@ -894,7 +913,12 @@ export function buildAutoPaginationScript(
         });
     }
 
-    window.addEventListener('beforeprint', paginateAllDocuments);
+    window.addEventListener('beforeprint', function() {
+        var root = document.getElementById('paginated-pages-root');
+        if (!document.documentElement.classList.contains('is-paginated') || !root || root.children.length === 0) {
+            paginateAllDocuments();
+        }
+    });
 })();
 </script>
 `;
