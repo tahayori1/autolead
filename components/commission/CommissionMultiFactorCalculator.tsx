@@ -20,7 +20,7 @@ interface AttendanceZone {
 export const CommissionMultiFactorCalculator: React.FC = () => {
     // 1. Raw Commission by Sale Type
     const [havalehProfit, setHavalehProfit] = useState<number | ''>(50000000);
-    const [havalehRate, setHavalehRate] = useState<number | ''>(3);
+    const [havalehRate, setHavalehRate] = useState<number | ''>(10);
 
     const [leasingCount, setLeasingCount] = useState<number | ''>(3);
     const [leasingRate, setLeasingRate] = useState<number | ''>(2000000);

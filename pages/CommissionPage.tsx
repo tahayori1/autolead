@@ -7,6 +7,7 @@ import {
     CarYardItem,
     CommissionUserRole,
     CommissionSettings,
+    CommissionPayoutAdjustmentItem,
     User 
 } from '../types';
 import { 
@@ -26,7 +27,14 @@ import {
     saveCommissionSettings,
     exportCommissionJSONData,
     savePeriodTarget,
-    checkIfDealIsInstantPayout
+    checkIfDealIsInstantPayout,
+    recalculateDealsWithSettings,
+    isDealEligibleForConfirmedTotals,
+    getDealParticipantInfo,
+    validateSalePurchaseDates,
+    normalizePersonnelName,
+    formatDecimalPercentLabel,
+    buildPersonnelFinalAndPayoutSummary
 } from '../services/commissionService';
 import { 
     exportFullCommissionWorkbook, 
@@ -201,10 +209,32 @@ const CommissionPage: React.FC = () => {
         saveCarYardItems(newYard);
     };
 
-    // Save commission settings
+    // Save commission settings & recalculate deals with updated parameters
     const handleSaveSettings = (newSettings: CommissionSettings) => {
         setCommissionSettings(newSettings);
         saveCommissionSettings(newSettings);
+        const recalculated = recalculateDealsWithSettings(deals, newSettings);
+        handleUpdateDeals(recalculated);
+    };
+
+    // Recalculate all deals in active period using current formulas
+    const handleRecalculateAllDeals = () => {
+        const recalculated = recalculateDealsWithSettings(deals, commissionSettings);
+        handleUpdateDeals(recalculated);
+    };
+
+    // Toggle manager approval for unrealistic purchase price flagged deals
+    const handleToggleApproveUnrealistic = (dealId: string) => {
+        const updated = deals.map(d => {
+            if (d.id === dealId) {
+                return {
+                    ...d,
+                    managerApprovedUnrealistic: !d.managerApprovedUnrealistic
+                };
+            }
+            return d;
+        });
+        handleUpdateDeals(updated);
     };
 
     // Current active period object
@@ -213,10 +243,22 @@ const CommissionPage: React.FC = () => {
     }, [periods, activePeriodId]);
 
     // Save adjustments to current period
-    const handleSaveAdjustments = (adjustments: Record<string, { bonus: number; deductions: number; notes?: string }>) => {
+    const handleSaveAdjustments = (adjustments: Record<string, { bonus: number; deductions: number; gift?: number; ceremony?: number; notes?: string }>) => {
         const updated = periods.map(p => {
             if (p.id === activePeriodId) {
                 return { ...p, adjustments };
+            }
+            return p;
+        });
+        setPeriods(updated);
+        saveCommissionPeriods(updated);
+    };
+
+    // Save payout extras (شیت پرداختی) to current period
+    const handleSavePayoutExtras = (payoutExtras: Record<string, CommissionPayoutAdjustmentItem>) => {
+        const updated = periods.map(p => {
+            if (p.id === activePeriodId) {
+                return { ...p, payoutExtras };
             }
             return p;
         });
@@ -297,17 +339,21 @@ const CommissionPage: React.FC = () => {
         const profits: Record<string, number> = {};
 
         periodDeals.forEach(deal => {
-            const persons = deal.sharedPersons && deal.sharedPersons.length > 0 
-                ? deal.sharedPersons 
-                : parseSalesPersons(deal.salesPerson);
-            const share = 1 / (persons.length || 1);
+            if (!isDealEligibleForConfirmedTotals(deal, commissionSettings).eligible) return;
+            const partInfo = getDealParticipantInfo(deal, periodDeals);
+            const persons = partInfo.rowParticipants.length > 0
+                ? partInfo.rowParticipants
+                : [normalizePersonnelName(deal.salesPerson)].filter(Boolean);
+            const share = 1 / Math.max(1, partInfo.participantCount);
             const volume = (deal.salePrice || deal.downPayment || 0) * share;
             const profit = (deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0)) * share;
 
             persons.forEach(p => {
-                counts[p] = (counts[p] || 0) + share;
-                volumes[p] = (volumes[p] || 0) + volume;
-                profits[p] = (profits[p] || 0) + profit;
+                const norm = normalizePersonnelName(p);
+                if (!norm) return;
+                counts[norm] = (counts[norm] || 0) + share;
+                volumes[norm] = (volumes[norm] || 0) + volume;
+                profits[norm] = (profits[norm] || 0) + profit;
             });
         });
 
@@ -320,16 +366,17 @@ const CommissionPage: React.FC = () => {
             topVolume: { name: topVolumePerson[0], value: topVolumePerson[1] },
             topProfit: { name: topProfitPerson[0], value: topProfitPerson[1] }
         };
-    }, [periodDeals]);
+    }, [periodDeals, commissionSettings]);
 
     // Distinct list of personnel in active period
     const personnelList = useMemo(() => {
         const set = new Set<string>();
         periodDeals.forEach(d => {
-            if (d.salesPerson) {
-                d.salesPerson.split(/[/،+&]/).forEach(p => set.add(p.trim()));
+            parseSalesPersons(d.salesPerson).forEach(p => set.add(p));
+            if (d.contractWriter) {
+                const nw = normalizePersonnelName(d.contractWriter);
+                if (nw) set.add(nw);
             }
-            if (d.contractWriter) set.add(d.contractWriter.trim());
         });
         return Array.from(set).sort();
     }, [periodDeals]);
@@ -394,40 +441,47 @@ const CommissionPage: React.FC = () => {
         let totalGrossProfit = 0;
         let totalCommission = 0;
         let totalPaidCommission = 0;
+        let draftLeasingCount = 0;
+        let flaggedUnrealisticCount = 0;
+        let dateErrorCount = 0;
+        let missingTxIdCount = 0;
 
         filteredDeals.forEach(d => {
+            const elig = isDealEligibleForConfirmedTotals(d, commissionSettings);
+            const dateCheck = validateSalePurchaseDates(d.purchaseDate, d.saleDate);
+            const partInfo = getDealParticipantInfo(d, periodDeals);
+
+            if (!dateCheck.isValid) dateErrorCount += 1;
+            if (partInfo.missingTransactionIdWarning) missingTxIdCount += 1;
+            if (elig.reason === 'LEASING_DRAFT') draftLeasingCount += 1;
+            if (elig.reason === 'UNREALISTIC_UNAPPROVED') flaggedUnrealisticCount += 1;
+
             totalPurchase += d.purchasePrice || 0;
             totalDailyPrice += d.dailyPrice || 0;
             totalSales += d.salePrice || (d.downPayment || 0);
             totalDailyProfitLoss += d.dailyProfitLoss || 0;
             totalGrossProfit += d.grossProfit || 0;
-            totalCommission += d.commissionAmount || 0;
 
-            if (d.paymentStatus === 'PAID') {
-                totalPaidCommission += d.paidCommissionShare ?? d.commissionAmount;
-            } else if (d.paymentStatus === 'PARTIAL') {
-                totalPaidCommission += d.paidCommissionShare ?? 0;
+            if (elig.eligible) {
+                totalCommission += d.commissionAmount || 0;
+                if (d.paymentStatus === 'PAID') {
+                    totalPaidCommission += d.paidCommissionShare ?? d.commissionAmount;
+                } else if (d.paymentStatus === 'PARTIAL') {
+                    totalPaidCommission += d.paidCommissionShare ?? 0;
+                }
             }
         });
 
         const pendingCommission = Math.max(0, totalCommission - totalPaidCommission);
         const payoutPercentage = totalCommission > 0 ? Math.round((totalPaidCommission / totalCommission) * 100) : 0;
 
-        // Azad Specific Karaneh Calculation: (مجموع کمیسیون فروش آزاد - جمع کل پورسانت فروش آزاد) / ۲۵
-        const azadKaranehDivisor = commissionSettings?.azadKaranehDivisor || 25;
-        const tabAzadSurplus = totalGrossProfit - totalCommission;
-        const tabAzadKaraneh = Math.round(tabAzadSurplus / azadKaranehDivisor);
+        const periodSummary = buildPersonnelFinalAndPayoutSummary(periodDeals, activePeriod, commissionSettings);
+        const tabAzadConfirmedComm = filteredDeals
+            .filter(d => d.category === 'AZAD' && isDealEligibleForConfirmedTotals(d, commissionSettings).eligible)
+            .reduce((s, d) => s + (d.commissionAmount || 0), 0);
 
-        // Period-wide Azad calculations
-        const periodAzadDeals = periodDeals.filter(d => d.category === 'AZAD');
-        let periodAzadGross = 0;
-        let periodAzadComm = 0;
-        periodAzadDeals.forEach(d => {
-            periodAzadGross += d.grossProfit || 0;
-            periodAzadComm += d.commissionAmount || 0;
-        });
-        const periodAzadSurplus = periodAzadGross - periodAzadComm;
-        const periodAzadKaraneh = Math.round(periodAzadSurplus / azadKaranehDivisor);
+        const karanehSectionCount = periodSummary.karaneh.sectionCount;
+        const tabAzadKaranehPerSection = Math.round(tabAzadConfirmedComm / Math.max(1, karanehSectionCount));
 
         return {
             totalDealsCount: filteredDeals.length,
@@ -440,17 +494,19 @@ const CommissionPage: React.FC = () => {
             totalPaidCommission: Math.round(totalPaidCommission / divisor),
             pendingCommission: Math.round(pendingCommission / divisor),
             payoutPercentage,
-            azadKaranehDivisor,
-            tabAzadSurplus: Math.round(tabAzadSurplus / divisor),
-            tabAzadKaraneh: Math.round(tabAzadKaraneh / divisor),
-            periodAzadGross: Math.round(periodAzadGross / divisor),
-            periodAzadComm: Math.round(periodAzadComm / divisor),
-            periodAzadSurplus: Math.round(periodAzadSurplus / divisor),
-            periodAzadKaraneh: Math.round(periodAzadKaraneh / divisor),
+            draftLeasingCount,
+            flaggedUnrealisticCount,
+            dateErrorCount,
+            missingTxIdCount,
+            karanehSectionCount,
+            tabAzadTotalKaraneh: Math.round(tabAzadConfirmedComm / divisor),
+            tabAzadKaranehPerSection: Math.round(tabAzadKaranehPerSection / divisor),
+            periodAzadTotalKaraneh: Math.round(periodSummary.karaneh.totalAzadFinalCommission / divisor),
+            periodAzadKaranehPerSection: Math.round(periodSummary.karaneh.perSectionKaraneh / divisor),
             divisor,
             unitLabel: currencyUnit === 'TOMAN' ? 'تومان' : 'ریال'
         };
-    }, [filteredDeals, periodDeals, currencyUnit, commissionSettings]);
+    }, [filteredDeals, periodDeals, activePeriod, currencyUnit, commissionSettings]);
 
     // Handle Save Single Deal
     const handleSaveDeal = (deal: CommissionDeal) => {
@@ -640,7 +696,8 @@ const CommissionPage: React.FC = () => {
             deals,
             periods,
             activePeriodId: activePeriodId || undefined,
-            yardItems
+            yardItems,
+            settings: commissionSettings
         });
     };
 
@@ -651,11 +708,21 @@ const CommissionPage: React.FC = () => {
             return;
         }
 
-        exportSingleCategoryXLSX(
-            filteredDeals,
-            activeTab,
-            activePeriod.title || 'دوره_مالی'
-        );
+        if (activeTab === 'ANBAR' || activeTab === 'AZAD' || activeTab === 'HAVALEH' || activeTab === 'LEASING' || activeTab === 'REGISTRATION') {
+            exportSingleCategoryXLSX(
+                filteredDeals,
+                activeTab,
+                activePeriod.title || 'دوره_مالی'
+            );
+        } else {
+            exportFullCommissionWorkbook({
+                deals: filteredDeals,
+                periods,
+                activePeriodId: activePeriodId || undefined,
+                yardItems,
+                settings: commissionSettings
+            });
+        }
     };
 
     // Handle Export to CSV (Excel format)
@@ -1097,6 +1164,7 @@ const CommissionPage: React.FC = () => {
                             currencyUnit={currencyUnit}
                             onApproveCeo={() => handleApproveRole('CEO')}
                             onOpenPrintReport={(t) => handleOpenPrintReport(t)}
+                            settings={commissionSettings}
                         />
                     )}
 
@@ -1113,6 +1181,7 @@ const CommissionPage: React.FC = () => {
                             }}
                             onOpenPrintReport={(t) => handleOpenPrintReport(t)}
                             onSaveAdjustments={handleSaveAdjustments}
+                            settings={commissionSettings}
                         />
                     )}
 
@@ -1123,6 +1192,7 @@ const CommissionPage: React.FC = () => {
                             activePeriod={activePeriod}
                             currencyUnit={currencyUnit}
                             onOpenPrintReport={(t, staff) => handleOpenPrintReport(t, staff)}
+                            settings={commissionSettings}
                         />
                     )}
 
@@ -1170,11 +1240,11 @@ const CommissionPage: React.FC = () => {
                                     </span>
 
                                     {[
-                                        { id: 'ANBAR', label: 'فروش انبار (۰.۰۵٪)', icon: <Building2 className="w-3.5 h-3.5" />, count: tabCounts.ANBAR },
-                                        { id: 'AZAD', label: 'فروش آزاد (۱۰٪ کمیسیون)', icon: <Repeat className="w-3.5 h-3.5" />, count: tabCounts.AZAD },
-                                        { id: 'HAVALEH', label: 'فروش حواله (۰.۰۵٪)', icon: <FileText className="w-3.5 h-3.5" />, count: tabCounts.HAVALEH },
-                                        { id: 'LEASING', label: 'فروش لیزینگ (۰.۱٪)', icon: <CreditCard className="w-3.5 h-3.5" />, count: tabCounts.LEASING },
-                                        { id: 'REGISTRATION', label: 'ثبت‌نام کارخانه', icon: <ClipboardList className="w-3.5 h-3.5" />, count: tabCounts.REGISTRATION },
+                                        { id: 'ANBAR', label: `فروش انبار (${formatDecimalPercentLabel(commissionSettings.anbarRate)} + ۵۰م)`, icon: <Building2 className="w-3.5 h-3.5" />, count: tabCounts.ANBAR },
+                                        { id: 'AZAD', label: `فروش آزاد (${formatDecimalPercentLabel(commissionSettings.azadRate)} / ${formatDecimalPercentLabel(commissionSettings.azadHardRate)})`, icon: <Repeat className="w-3.5 h-3.5" />, count: tabCounts.AZAD },
+                                        { id: 'HAVALEH', label: `فروش حواله (${formatDecimalPercentLabel(commissionSettings.havalehRate)})`, icon: <FileText className="w-3.5 h-3.5" />, count: tabCounts.HAVALEH },
+                                        { id: 'LEASING', label: `فروش لیزینگ (${commissionSettings.leasingRateConfirmed ? formatDecimalPercentLabel(commissionSettings.leasingRate) : 'پیش‌نویس'})`, icon: <CreditCard className="w-3.5 h-3.5" />, count: tabCounts.LEASING },
+                                        { id: 'REGISTRATION', label: `ثبت‌نام کارخانه (${formatDecimalPercentLabel(commissionSettings.registrationRate)})`, icon: <ClipboardList className="w-3.5 h-3.5" />, count: tabCounts.REGISTRATION },
                                         { id: 'yard', label: 'کاردکس انبار خودروها', icon: <Car className="w-3.5 h-3.5" />, count: tabCounts.yard },
                                         { id: 'all', label: 'کل معاملات یکجا', icon: <Table className="w-3.5 h-3.5" />, count: tabCounts.all },
                                     ].map(tab => {
@@ -1212,6 +1282,7 @@ const CommissionPage: React.FC = () => {
                                     deals={periodDeals}
                                     currencyUnit={currencyUnit}
                                     activePeriodName={activePeriod.title}
+                                    settings={commissionSettings}
                                 />
                             )}
 
@@ -1223,6 +1294,9 @@ const CommissionPage: React.FC = () => {
                                     activePeriodId={activePeriodId}
                                     periodAdjustments={activePeriod.adjustments}
                                     onSaveAdjustments={handleSaveAdjustments}
+                                    periodPayoutExtras={activePeriod.payoutExtras}
+                                    onSavePayoutExtras={handleSavePayoutExtras}
+                                    settings={commissionSettings}
                                 />
                             )}
 
@@ -1275,43 +1349,79 @@ const CommissionPage: React.FC = () => {
 
                                         <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 shadow-xs">
                                             <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold block mb-1">
-                                                {activeTab === 'AZAD' ? 'جمع کل پورسانت آزاد' : 'پورسانت کل تعلق‌گرفته'}
+                                                {activeTab === 'AZAD' ? 'جمع کل پورسانت قطعی آزاد' : 'پورسانت قطعی تعلق‌گرفته'}
                                             </span>
-                                            <div className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base truncate">
+                                            <div className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base truncate tabular-nums">
                                                 {metrics.totalCommission.toLocaleString('fa-IR')}
                                             </div>
                                             <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                                                {activeTab === 'AZAD' ? '۱۰٪ سود کمیسیون' : activeTab === 'LEASING' ? '۰.۱٪ پیش‌پرداخت' : '۰.۰۵٪ فروش'}
+                                                {activeTab === 'AZAD'
+                                                    ? `${formatDecimalPercentLabel(commissionSettings.azadRate)} عادی / ${formatDecimalPercentLabel(commissionSettings.azadHardRate)} سخت`
+                                                    : activeTab === 'ANBAR'
+                                                    ? `${formatDecimalPercentLabel(commissionSettings.anbarRate)} مابه‌التفاوت + تشویقی`
+                                                    : activeTab === 'HAVALEH'
+                                                    ? `${formatDecimalPercentLabel(commissionSettings.havalehRate)} مابه‌التفاوت`
+                                                    : activeTab === 'REGISTRATION'
+                                                    ? `${formatDecimalPercentLabel(commissionSettings.registrationRate)} پیش‌پرداخت`
+                                                    : activeTab === 'LEASING'
+                                                    ? (commissionSettings.leasingRateConfirmed ? `${formatDecimalPercentLabel(commissionSettings.leasingRate)} پیش‌پرداخت` : 'پیش‌نویس (نیاز به تنظیم نرخ)')
+                                                    : 'مطابق فرمول‌های مصوب'}
                                             </span>
                                         </div>
 
                                         {activeTab === 'AZAD' && (
-                                            <div className="p-4 bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl border border-amber-300 dark:border-amber-700/60 shadow-xs ring-1 ring-amber-400/30">
+                                            <div className="p-4 bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl border border-amber-300 dark:border-amber-700/60 shadow-xs">
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="text-[11px] text-amber-900 dark:text-amber-300 font-black">
-                                                        کارانه فروش آزاد
+                                                        کارانه هر بخش (فروش آزاد)
                                                     </span>
                                                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-mono font-bold">
-                                                        سهم ۱/{metrics.azadKaranehDivisor}
+                                                        ÷ {metrics.karanehSectionCount} بخش
                                                     </span>
                                                 </div>
-                                                <div className="font-mono font-black text-amber-700 dark:text-amber-300 text-base truncate">
-                                                    {metrics.tabAzadKaraneh.toLocaleString('fa-IR')}
+                                                <div className="font-mono font-black text-amber-700 dark:text-amber-300 text-base truncate tabular-nums">
+                                                    {metrics.tabAzadKaranehPerSection.toLocaleString('fa-IR')}
                                                 </div>
-                                                <span className="text-[10px] text-amber-700/80 dark:text-amber-400 block truncate" title={`(${metrics.totalGrossProfit.toLocaleString('fa-IR')} - ${metrics.totalCommission.toLocaleString('fa-IR')}) ÷ ${metrics.azadKaranehDivisor}`}>
-                                                    {metrics.unitLabel} • (کمیسیون - پورسانت) ÷ {metrics.azadKaranehDivisor}
+                                                <span className="text-[10px] text-amber-700/80 dark:text-amber-400 block truncate">
+                                                    کارانه کلی: {metrics.tabAzadTotalKaraneh.toLocaleString('fa-IR')} {metrics.unitLabel}
                                                 </span>
                                             </div>
                                         )}
 
                                         <div className="p-4 bg-teal-50/70 dark:bg-teal-950/30 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs">
                                             <span className="text-[11px] text-teal-800 dark:text-teal-300 font-bold block mb-1">واریز شده به مشاوران</span>
-                                            <div className="font-mono font-black text-teal-700 dark:text-teal-300 text-base truncate">
+                                            <div className="font-mono font-black text-teal-700 dark:text-teal-300 text-base truncate tabular-nums">
                                                 {metrics.totalPaidCommission.toLocaleString('fa-IR')}
                                             </div>
-                                            <span className="text-[10px] text-teal-600 dark:text-teal-400">{metrics.payoutPercentage}٪ کل پورسانت</span>
+                                            <span className="text-[10px] text-teal-600 dark:text-teal-400">{metrics.payoutPercentage}٪ کل پورسانت قطعی</span>
                                         </div>
                                     </div>
+
+                                    {(metrics.draftLeasingCount > 0 || metrics.flaggedUnrealisticCount > 0 || metrics.dateErrorCount > 0 || metrics.missingTxIdCount > 0) && (
+                                        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl flex flex-wrap items-center gap-3 text-xs text-amber-900 dark:text-amber-200">
+                                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                            {metrics.flaggedUnrealisticCount > 0 && (
+                                                <span className="font-bold">
+                                                    {metrics.flaggedUnrealisticCount} معامله دارای نرخ خرید غیرواقعی (در انتظار تأیید مدیر و خارج از جمع قطعی)
+                                                </span>
+                                            )}
+                                            {metrics.draftLeasingCount > 0 && (
+                                                <span className="font-bold">
+                                                    • {metrics.draftLeasingCount} معامله لیزینگ در وضعیت پیش‌نویس
+                                                </span>
+                                            )}
+                                            {metrics.dateErrorCount > 0 && (
+                                                <span className="font-bold text-rose-700 dark:text-rose-300">
+                                                    • {metrics.dateErrorCount} ردیف دارای خطای ترتیب تاریخ (فروش قبل از خرید)
+                                                </span>
+                                            )}
+                                            {metrics.missingTxIdCount > 0 && (
+                                                <span className="font-bold">
+                                                    • {metrics.missingTxIdCount} ردیف مشارکتی بدون شناسه معامله (transaction_id)
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Filters & Table Actions Toolbar */}
                                     <div className="bg-white dark:bg-slate-900 p-3.5 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-3">
@@ -1393,6 +1503,15 @@ const CommissionPage: React.FC = () => {
 
                                         {/* Table Action Buttons */}
                                         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                                            <button
+                                                onClick={handleRecalculateAllDeals}
+                                                className="px-3 py-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                                                title="بازمحاسبه همه معاملات بر اساس فرمول‌های جاری و اتصال transaction_id"
+                                            >
+                                                <Calculator className="w-4 h-4" />
+                                                بازمحاسبه با فرمول‌های جدید
+                                            </button>
+
                                             <button
                                                 onClick={handleExportCurrentSheetXLSX}
                                                 className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
@@ -1539,28 +1658,63 @@ const CommissionPage: React.FC = () => {
                                                     ) : (
                                                         filteredDeals.map((deal, index) => {
                                                             const div = metrics.divisor;
-                                                            const partners = deal.sharedPersons && deal.sharedPersons.length > 0 
-                                                                ? deal.sharedPersons 
+                                                            const partInfo = getDealParticipantInfo(deal, periodDeals);
+                                                            const partners = partInfo.transactionParticipants.length > 0
+                                                                ? partInfo.transactionParticipants
                                                                 : parseSalesPersons(deal.salesPerson);
-                                                            const isShared = partners.length > 1;
-                                                            const sharePercent = partners.length > 0 ? (100 / partners.length).toFixed(1).replace('.0', '') : '100';
+                                                            const isShared = partInfo.participantCount > 1;
+                                                            const sharePercent = partInfo.participantCount > 0 ? (100 / partInfo.participantCount).toFixed(1).replace('.0', '') : '100';
+                                                            const elig = isDealEligibleForConfirmedTotals(deal, commissionSettings);
+                                                            const dateCheck = validateSalePurchaseDates(deal.purchaseDate, deal.saleDate);
+                                                            const isRowSelected = selectedDealIds.includes(deal.id);
 
                                                             return (
-                                                                <tr key={deal.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                                                                <tr key={deal.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors ${!elig.eligible ? 'bg-amber-50/40 dark:bg-amber-950/15' : ''}`}>
+                                                                    <td className="py-3 px-3 text-center">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={isRowSelected}
+                                                                            onChange={() => toggleSelectDeal(deal.id)}
+                                                                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                                                        />
+                                                                    </td>
                                                                     <td className="py-3 px-3 text-center font-mono text-slate-400">
                                                                         {index + 1}
                                                                     </td>
                                                                     <td className="py-3 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                                                                        {deal.saleDate || '-'}
+                                                                        <div>{deal.saleDate || '-'}</div>
+                                                                        {deal.purchaseDate && (
+                                                                            <div className="text-[10px] text-slate-400">خرید: {deal.purchaseDate}</div>
+                                                                        )}
+                                                                        {!dateCheck.isValid && (
+                                                                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[9px] font-sans font-bold" title={dateCheck.message}>
+                                                                                خطای ترتیب تاریخ
+                                                                            </span>
+                                                                        )}
                                                                     </td>
                                                                     <td className="py-3 px-3.5 whitespace-nowrap">
-                                                                        <div className="font-bold text-slate-900 dark:text-white">
-                                                                            {deal.salesPerson}
+                                                                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                                                            <span>{deal.salesPerson}</span>
+                                                                            {deal.transactionId && (
+                                                                                <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[9px]">
+                                                                                    #{deal.transactionId}
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                         {isShared && (
                                                                             <span className="text-[10px] text-indigo-600 dark:text-indigo-400 flex items-center gap-0.5 mt-0.5 font-bold">
                                                                                 <Share2 className="w-3 h-3" />
-                                                                                تسهیم {sharePercent}٪ ({partners.length} همکار)
+                                                                                تسهیم {sharePercent}٪ ({partInfo.participantCount} نفر)
+                                                                            </span>
+                                                                        )}
+                                                                        {partInfo.missingTransactionIdWarning && (
+                                                                            <span className="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-bold mt-0.5 inline-block">
+                                                                                نیازمند transaction_id
+                                                                            </span>
+                                                                        )}
+                                                                        {deal.isHardDeal && (
+                                                                            <span className="text-[9px] text-purple-700 bg-purple-100 dark:bg-purple-950/60 dark:text-purple-300 px-1.5 py-0.5 rounded font-bold mt-0.5 inline-block mr-1">
+                                                                                معامله سخت ۱۵٪
                                                                             </span>
                                                                         )}
                                                                         {deal.contractWriter && (
@@ -1590,25 +1744,25 @@ const CommissionPage: React.FC = () => {
                                                                     </td>
 
                                                                     {activeTab === 'LEASING' || activeTab === 'REGISTRATION' ? (
-                                                                        <td className="py-3 px-3.5 font-mono font-black text-slate-900 dark:text-white">
+                                                                        <td className="py-3 px-3.5 font-mono font-black text-slate-900 dark:text-white tabular-nums">
                                                                             {deal.downPayment ? Math.round(deal.downPayment / div).toLocaleString('fa-IR') : '-'}
                                                                         </td>
                                                                     ) : (
                                                                         <>
-                                                                            <td className="py-3 px-3.5 font-mono text-slate-500">
+                                                                            <td className="py-3 px-3.5 font-mono text-slate-500 tabular-nums">
                                                                                 {deal.dailyPrice ? Math.round(deal.dailyPrice / div).toLocaleString('fa-IR') : '-'}
                                                                             </td>
-                                                                            <td className="py-3 px-3.5 font-mono text-slate-500">
+                                                                            <td className="py-3 px-3.5 font-mono text-slate-500 tabular-nums">
                                                                                 {deal.purchasePrice ? Math.round(deal.purchasePrice / div).toLocaleString('fa-IR') : '-'}
                                                                             </td>
-                                                                            <td className="py-3 px-3.5 font-mono font-black text-slate-900 dark:text-white">
+                                                                            <td className="py-3 px-3.5 font-mono font-black text-slate-900 dark:text-white tabular-nums">
                                                                                 {deal.salePrice ? Math.round(deal.salePrice / div).toLocaleString('fa-IR') : '-'}
                                                                             </td>
                                                                         </>
                                                                     )}
 
                                                                     {activeTab === 'AZAD' && (
-                                                                        <td className={`py-3 px-3.5 font-mono font-bold ${
+                                                                        <td className={`py-3 px-3.5 font-mono font-bold tabular-nums ${
                                                                             (deal.grossProfit || 0) >= 0 ? 'text-indigo-600' : 'text-rose-600'
                                                                         }`}>
                                                                             {deal.grossProfit !== undefined ? Math.round(deal.grossProfit / div).toLocaleString('fa-IR') : '-'}
@@ -1617,10 +1771,10 @@ const CommissionPage: React.FC = () => {
 
                                                                     {activeTab === 'HAVALEH' && (
                                                                         <>
-                                                                            <td className="py-3 px-3.5 font-mono text-slate-500">
+                                                                            <td className="py-3 px-3.5 font-mono text-slate-500 tabular-nums">
                                                                                 {deal.nextBasketAmount ? Math.round(deal.nextBasketAmount / div).toLocaleString('fa-IR') : '-'}
                                                                             </td>
-                                                                            <td className={`py-3 px-3 font-mono font-bold ${
+                                                                            <td className={`py-3 px-3 font-mono font-bold tabular-nums ${
                                                                                 (deal.dailyProfitLoss || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
                                                                             }`}>
                                                                                 {deal.dailyProfitLoss !== undefined ? Math.round(deal.dailyProfitLoss / div).toLocaleString('fa-IR') : '-'}
@@ -1629,7 +1783,7 @@ const CommissionPage: React.FC = () => {
                                                                     )}
 
                                                                     {activeTab === 'ANBAR' && (
-                                                                        <td className={`py-3 px-3 font-mono font-bold ${
+                                                                        <td className={`py-3 px-3 font-mono font-bold tabular-nums ${
                                                                             (deal.dailyProfitLoss || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
                                                                         }`}>
                                                                             {deal.dailyProfitLoss !== undefined ? Math.round(deal.dailyProfitLoss / div).toLocaleString('fa-IR') : '-'}
@@ -1637,18 +1791,51 @@ const CommissionPage: React.FC = () => {
                                                                     )}
 
                                                                     {/* Commission Amount */}
-                                                                    <td className="py-3 px-3.5 font-mono font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                                                    <td className="py-3 px-3.5 font-mono font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap tabular-nums">
                                                                         <div className="flex items-center gap-1.5">
-                                                                            <span>{Math.round((deal.commissionAmount || 0) / div).toLocaleString('fa-IR')}</span>
+                                                                            <span>
+                                                                                {elig.reason === 'LEASING_DRAFT'
+                                                                                    ? 'پیش‌نویس'
+                                                                                    : Math.round((deal.commissionAmount || 0) / div).toLocaleString('fa-IR')}
+                                                                            </span>
                                                                             {deal.isManualCommission && (
                                                                                 <span 
-                                                                                    className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[9px] font-black border border-amber-300 dark:border-amber-800 cursor-help"
+                                                                                    className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[9px] font-black border border-amber-300 dark:border-amber-800 cursor-help font-sans"
                                                                                     title={deal.manualCommissionReason ? `تغییر دستی: ${deal.manualCommissionReason}` : 'پورسانت دستی'}
                                                                                 >
                                                                                     دستی
                                                                                 </span>
                                                                             )}
                                                                         </div>
+                                                                        {deal.category === 'ANBAR' && (deal.oldCommissionAmount !== undefined || deal.incentiveBonusAmount !== undefined) && (
+                                                                            <div className="text-[9px] text-slate-400 font-normal mt-0.5">
+                                                                                قدیم: {Math.round((deal.oldCommissionAmount || 0) / div).toLocaleString('fa-IR')} + تشویقی: {Math.round((deal.incentiveBonusAmount || 0) / div).toLocaleString('fa-IR')}
+                                                                            </div>
+                                                                        )}
+                                                                        {isShared && elig.eligible && (
+                                                                            <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">
+                                                                                سهم هر نفر: {Math.round((deal.perPersonCommission ?? Math.round((deal.commissionAmount || 0) / partInfo.participantCount)) / div).toLocaleString('fa-IR')}
+                                                                            </div>
+                                                                        )}
+                                                                        {deal.category === 'AZAD' && elig.eligible && (
+                                                                            <div className="text-[9px] text-slate-400 font-normal mt-0.5">
+                                                                                ۱۰٪: {Math.round((deal.tenPercentCommission ?? Math.round((deal.perPersonCommission || deal.commissionAmount || 0) * 0.1)) / div).toLocaleString('fa-IR')}
+                                                                            </div>
+                                                                        )}
+                                                                        {deal.isUnrealisticPurchasePrice && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleToggleApproveUnrealistic(deal.id)}
+                                                                                className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-sans font-bold border ${
+                                                                                    deal.managerApprovedUnrealistic
+                                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                                                                        : 'bg-rose-50 text-rose-700 border-rose-300'
+                                                                                }`}
+                                                                                title="کلیک برای تغییر وضعیت تأیید مدیر"
+                                                                            >
+                                                                                {deal.managerApprovedUnrealistic ? 'نرخ غیرواقعی (تأیید مدیر ✓)' : 'نرخ غیرواقعی (نیازمند تأیید مدیر)'}
+                                                                            </button>
+                                                                        )}
                                                                     </td>
 
                                                                     {/* Payment Status Toggle & Instant Payout highlight */}
@@ -1709,24 +1896,24 @@ const CommissionPage: React.FC = () => {
                                                 {/* Totals Footer Row */}
                                                 <tfoot className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-black border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                                                     <tr>
-                                                        <td colSpan={activeTab === 'AZAD' ? 5 : 4} className="py-3 px-4 text-left">
+                                                        <td colSpan={activeTab === 'AZAD' ? 6 : 5} className="py-3 px-4 text-left">
                                                             جمع کل شیت ({activePeriod.title}):
                                                         </td>
                                                         
                                                         {activeTab === 'LEASING' || activeTab === 'REGISTRATION' ? (
-                                                            <td className="py-3 px-3.5 font-mono">
+                                                            <td className="py-3 px-3.5 font-mono tabular-nums">
                                                                 {metrics.totalSales.toLocaleString('fa-IR')}
                                                             </td>
                                                         ) : (
                                                             <>
-                                                                <td className="py-3 px-3.5 font-mono">{metrics.totalDailyPrice.toLocaleString('fa-IR')}</td>
-                                                                <td className="py-3 px-3.5 font-mono">{metrics.totalPurchase.toLocaleString('fa-IR')}</td>
-                                                                <td className="py-3 px-3.5 font-mono font-black">{metrics.totalSales.toLocaleString('fa-IR')}</td>
+                                                                <td className="py-3 px-3.5 font-mono tabular-nums">{metrics.totalDailyPrice.toLocaleString('fa-IR')}</td>
+                                                                <td className="py-3 px-3.5 font-mono tabular-nums">{metrics.totalPurchase.toLocaleString('fa-IR')}</td>
+                                                                <td className="py-3 px-3.5 font-mono font-black tabular-nums">{metrics.totalSales.toLocaleString('fa-IR')}</td>
                                                             </>
                                                         )}
 
                                                         {activeTab === 'AZAD' && (
-                                                            <td className="py-3 px-3.5 font-mono text-indigo-600">
+                                                            <td className="py-3 px-3.5 font-mono text-indigo-600 tabular-nums">
                                                                 {metrics.totalGrossProfit.toLocaleString('fa-IR')}
                                                             </td>
                                                         )}
@@ -1734,15 +1921,15 @@ const CommissionPage: React.FC = () => {
                                                         {activeTab === 'HAVALEH' && (
                                                             <>
                                                                 <td className="py-3 px-3.5 font-mono">-</td>
-                                                                <td className="py-3 px-3 font-mono">{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}</td>
+                                                                <td className="py-3 px-3 font-mono tabular-nums">{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}</td>
                                                             </>
                                                         )}
 
                                                         {activeTab === 'ANBAR' && (
-                                                            <td className="py-3 px-3 font-mono">{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}</td>
+                                                            <td className="py-3 px-3 font-mono tabular-nums">{metrics.totalDailyProfitLoss.toLocaleString('fa-IR')}</td>
                                                         )}
 
-                                                        <td className="py-3 px-3.5 font-mono text-emerald-600 font-black">
+                                                        <td className="py-3 px-3.5 font-mono text-emerald-600 font-black tabular-nums">
                                                             {metrics.totalCommission.toLocaleString('fa-IR')}
                                                         </td>
                                                         
@@ -1758,17 +1945,18 @@ const CommissionPage: React.FC = () => {
                                         {activeTab === 'AZAD' && (
                                             <div className="p-4 bg-gradient-to-l from-amber-500/10 via-amber-400/5 to-transparent dark:from-amber-500/15 dark:via-amber-400/5 dark:to-transparent rounded-2xl border border-amber-200 dark:border-amber-800/60 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
                                                 <div className="flex flex-wrap items-center gap-2 text-slate-800 dark:text-slate-200">
-                                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
                                                     <span className="font-black text-amber-900 dark:text-amber-300">فرمول کارانه فروش آزاد:</span>
-                                                    <span className="font-mono bg-white dark:bg-slate-800 px-3 py-1 rounded-xl border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-bold shadow-xs">
-                                                        (کمیسیون کل [{metrics.totalGrossProfit.toLocaleString('fa-IR')}] - پورسانت کل [{metrics.totalCommission.toLocaleString('fa-IR')}]) ÷ {metrics.azadKaranehDivisor}
+                                                    <span className="font-mono bg-white dark:bg-slate-800 px-3 py-1 rounded-xl border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-bold shadow-xs tabular-nums">
+                                                        کارانه کلی [{metrics.tabAzadTotalKaraneh.toLocaleString('fa-IR')}] ÷ {metrics.karanehSectionCount} بخش
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-slate-600 dark:text-slate-400">مازاد کمیسیون: <strong className="font-mono text-slate-900 dark:text-white font-bold">{metrics.tabAzadSurplus.toLocaleString('fa-IR')}</strong> {metrics.unitLabel}</span>
+                                                    <span className="text-slate-600 dark:text-slate-400">
+                                                        کارانه کلی آزاد: <strong className="font-mono text-slate-900 dark:text-white font-bold tabular-nums">{metrics.tabAzadTotalKaraneh.toLocaleString('fa-IR')}</strong> {metrics.unitLabel}
+                                                    </span>
                                                     <span className="text-amber-950 dark:text-amber-100 font-black bg-amber-200/90 dark:bg-amber-800/70 px-3.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 shadow-xs flex items-center gap-1.5">
-                                                        <span>کارانه حاصله:</span>
-                                                        <span className="font-mono text-sm font-black">{metrics.tabAzadKaraneh.toLocaleString('fa-IR')}</span>
+                                                        <span>کارانه هر بخش:</span>
+                                                        <span className="font-mono text-sm font-black tabular-nums">{metrics.tabAzadKaranehPerSection.toLocaleString('fa-IR')}</span>
                                                         <span className="text-[10px] font-normal">{metrics.unitLabel}</span>
                                                     </span>
                                                 </div>
@@ -1833,6 +2021,7 @@ const CommissionPage: React.FC = () => {
                 allDeals={deals}
                 currencyUnit={currencyUnit}
                 targetStaffName={reportTargetStaff}
+                settings={commissionSettings}
             />
 
             {/* Monthly Target Definition & Edit Modal */}
@@ -2060,7 +2249,9 @@ const CommissionPage: React.FC = () => {
                 isOpen={isBulkEditModalOpen}
                 onClose={() => setIsBulkEditModalOpen(false)}
                 selectedDeals={deals.filter(d => selectedDealIds.includes(d.id))}
-                onSave={handleBulkUpdateDeals}
+                onBulkUpdate={handleBulkUpdateDeals}
+                onBulkDelete={handleBulkDeleteDeals}
+                availableSalesPersons={personnelList}
             />
 
         </div>

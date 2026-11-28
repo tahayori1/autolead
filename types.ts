@@ -942,9 +942,28 @@ export interface CrmMeeting {
 export type CommissionPaymentStatus = 'PAID' | 'PENDING' | 'PARTIAL';
 export type CommissionCategory = 'ANBAR' | 'AZAD' | 'HAVALEH' | 'LEASING' | 'REGISTRATION';
 
+export interface KaranehShareConfig {
+    id: string;
+    recipientName: string; // e.g. خانم زارع، خانم یوسفی
+    mode: 'PERCENT' | 'FIXED';
+    percent?: number; // decimal e.g. 0.25 or percentage if displayed; stored as decimal (0.25 = 25%) or fraction of کارانه
+    fixedAmount?: number; // Rials
+}
+
+export interface CommissionPayoutAdjustmentItem {
+    gift?: number; // هدیه
+    ceremony?: number; // مراسم
+    t9Backlog?: number; // کمسیون t9 خرداد / معوقه
+    optionCommission?: number; // آپشن
+    lateRegistration?: number; // ثبت‌نام معوقه
+    other?: number; // سایر پرداختی‌ها
+    notes?: string;
+}
+
 export interface CommissionDeal {
     id: string;
     rowNumber?: number;
+    transactionId?: string; // شناسه معامله یکتا برای اتصال ردیف‌های همکار
     periodId: string; // e.g. '1405-05', '1405-04'
     periodName: string; // e.g. 'مرداد ۱۴۰۵', 'تیر ۱۴۰۵'
     category: CommissionCategory; // انبار، آزاد، حواله، لیزینگ، ثبت‌نام
@@ -964,81 +983,105 @@ export interface CommissionDeal {
     purchasePrice?: number; // نرخ خرید
     dailyPrice?: number; // قیمت روز / مبنا
     salePrice?: number; // نرخ فروش
-    nextBasketAmount?: number; // مبلغ سبد بعدی (برای حواله)
+    nextBasketAmount?: number; // مبلغ سبد بعدی (برای حواله - فقط اطلاعاتی)
     downPayment?: number; // پیش‌پرداخت (برای لیزینگ و ثبت‌نام)
     contractNumber?: string; // شماره قرارداد (برای ثبت‌نام)
     deliveryDate?: string; // تاریخ تحویل خودرو (برای ثبت‌نام)
     
-    dailyProfitLoss?: number; // سود یا زیان روز (نرخ فروش - قیمت روز) یا سود حواله (نرخ فروش - سبد بعدی)
-    grossProfit?: number; // سود ناخالص / کمیسیون کل معامله (نرخ فروش - نرخ خرید)
-    commissionRate?: number; // درصد پورسانت
-    commissionAmount: number; // مبلغ پورسانت کل
+    dailyProfitLoss?: number; // سود یا زیان روز (نرخ فروش - نرخ خرید)
+    grossProfit?: number; // سود / مابه‌التفاوت (نرخ فروش - نرخ خرید)
+    commissionRate?: number; // نرخ پورسانت به اعشار (مثلاً 0.05 = ۵٪)
+    oldCommissionAmount?: number; // پورسانت قدیم انبار: MAX(0, (فروش - قیمت روز) × نرخ)
+    incentiveBonusAmount?: number; // پورسانت تشویقی انبار (مثلاً ۵۰,۰۰۰,۰۰۰ ریال)
+    commissionAmount: number; // مبلغ پورسانت کل (پورسانت نهایی معامله)
+    perPersonCommission?: number; // پورسانت نهایی هر نفر (پورسانت کل ÷ تعداد پرسنل مشارکت‌کننده)
+    tenPercentCommission?: number; // پورسانت ۱۰ درصدی (سهم ۱۰٪ پرسنل در آزاد / ذخیره)
     paidCommissionShare?: number; // سهم پورسانت پرداختی / تسهیم شده
-    sharedPersons?: string[]; // تفکیک اسامی برای تسهیم ۱/۲ یا ۱/۳ بین همکاران
+    sharedPersons?: string[]; // تفکیک اسامی برای تسهیم بین همکاران
     customPersonCommissions?: Record<string, number>; // سهم پورسانت دستی اختصاصی برای هر یک از پرسنل معامله (به ریال)
     isManualCommission?: boolean; // آیا پورسانت به صورت دستی تغییر کرده است؟
     manualCommissionReason?: string; // علت / توضیح تغییر دستی پورسانت
+
+    // فلگ‌های اعتبارسنجی و سیاست‌های محاسبه
+    isHardDeal?: boolean; // معامله سخت ۱۵٪ (آزاد)
+    isUnrealisticPurchasePrice?: boolean; // Flag: عدد نرخ خرید غیر واقعی است
+    managerApprovedUnrealistic?: boolean; // تأیید مدیر برای محاسبه ردیف با نرخ خرید غیرواقعی
+    isDraftLeasing?: boolean; // پیش‌نویس لیزینگ به علت نامشخص بودن نرخ لیزینگ
     
     paymentStatus: CommissionPaymentStatus; // وضعیت واریز
     paymentDate?: string; // تاریخ واریز
+    paidAt?: string; // زمان ثبت واریز سیستمی
     paymentNotes?: string; // یادداشت و جزئیات واریز
     createdAt?: string;
     updatedAt?: string;
 }
 
 export interface CommissionSettings {
-    anbarRate: number; // e.g. 0.05 (%)
-    azadRate: number; // e.g. 10 (% of gross profit)
-    azadFlatRate: number; // e.g. 0.05 (% of sale price when gross profit <= 0)
-    azadKaranehDivisor?: number; // e.g. 25 (ضریب تقسیم کارانه فروش آزاد: [کمیسیون - پورسانت] ÷ ۲۵)
-    havalehRate: number; // e.g. 0.05 (%)
-    leasingRate: number; // e.g. 0.1 (% of down payment)
-    registrationRate: number; // e.g. 0.1 (% of down payment)
-    lossPenaltyRate: number; // e.g. 0.25 (% of sale price when daily profit/loss < 0)
+    settingsVersion?: number; // نسخه ۲: نرخ‌ها به اعشار (0.05 = 5%)
+
+    // پارامترهای اصلی پیشنهادی به صورت اعشاری (مثلاً 0.05 = ۵٪)
+    anbarRate: number; // پیش‌فرض: 0.05 (۵٪ مابه‌التفاوت فروش و قیمت روز)
+    anbarIncentiveBonus: number; // پیش‌فرض: 50,000,000 ریال
+    azadRate: number; // پیش‌فرض: 0.10 (۱۰٪ سود برای معاملات عادی)
+    azadHardRate: number; // پیش‌فرض: 0.15 (۱۵٪ سود برای معاملات سخت)
+    havalehRate: number; // پیش‌فرض: 0.10 (۱۰٪ مابه‌التفاوت فروش و قیمت روز)
+    registrationRate: number; // پیش‌فرض: 0.09 (۹٪ پیش‌پرداخت)
+    leasingRate: number | null; // پیش‌فرض: null (نامشخص - نیازمند تایید مدیر)
+    leasingRateConfirmed?: boolean; // آیا نرخ لیزینگ توسط مدیر تایید شده است؟
+
+    // تنظیمات پرداختی ماهانه و کارانه
+    payoutHoldRate?: number; // پیش‌فرض: 0.10 (۱۰٪ کمسیون نهایی در شیت پرداختی)
+    payoutHoldMode?: 'DEDUCT' | 'ADD'; // کسر ۱۰٪ (پیش‌فرض) یا اضافه شدن در پرداختی
+    karanehSectionCount?: number; // تعداد بخش‌ها برای تقسیم کارانه کلی (مثلاً ۴ بخش)
+    karanehShares?: KaranehShareConfig[]; // جدول سهام کارانه (خانم زارع، خانم یوسفی و...)
+
+    // فیلدهای میراثی/اختیاری برای سازگاری
+    azadFlatRate?: number;
+    azadKaranehDivisor?: number;
+    lossPenaltyRate?: number;
 
     // تنظیمات محاسبه با عدد ثابت (Fixed Amount in Rials)
     anbarCalcType?: 'PERCENT' | 'FIXED';
-    anbarFixedAmount?: number; // مبلغ ثابت پورسانت انبار (ریال)
+    anbarFixedAmount?: number;
 
     azadCalcType?: 'PERCENT' | 'FIXED';
-    azadFixedAmount?: number; // مبلغ ثابت پورسانت آزاد (ریال)
+    azadFixedAmount?: number;
 
     havalehCalcType?: 'PERCENT' | 'FIXED';
-    havalehFixedAmount?: number; // مبلغ ثابت پورسانت حواله (ریال)
+    havalehFixedAmount?: number;
 
     leasingCalcType?: 'PERCENT' | 'FIXED';
-    leasingFixedAmount?: number; // مبلغ ثابت پورسانت لیزینگ (ریال)
+    leasingFixedAmount?: number;
 
     registrationCalcType?: 'PERCENT' | 'FIXED';
-    registrationFixedAmount?: number; // مبلغ ثابت ثبت نام کارخانه (ریال)
+    registrationFixedAmount?: number;
 }
 
 export interface PersonnelCommissionAdjustment {
     staffName: string;
     bonus: number; // پاداش
     deductions: number; // کسورات / جریمه
+    gift?: number; // هدیه
+    ceremony?: number; // مراسم
     notes?: string;
 }
 
 export interface CommissionTargetGoal {
     id: string;
-    title: string; // e.g. "دو ثبت نام لیزینگ", "فروش سه دستگاه خودروهای موجود انبار (مدل ۱۴۰۴ و ۱۴۰۵)", "فروش سه دستگاه حواله ایگل"
-    category?: CommissionCategory | 'ANY'; // 'LEASING' | 'ANBAR' | 'HAVALEH' | 'AZAD' | 'REGISTRATION' | 'ANY'
-    targetCount: number; // e.g. 2, 3
-    modelKeyword?: string; // keywords to match carModel e.g. "1404,1405,۱۴۰۴,۱۴۰۵" or "eagle,ایگل" or "j4,جی۴"
+    title: string;
+    category?: CommissionCategory | 'ANY';
+    targetCount: number;
+    modelKeyword?: string;
     rewardText?: string;
-    achievedCount?: number;
-    isCompleted?: boolean;
 }
 
 export interface MonthlyCommissionTarget {
-    title: string; // e.g. "تارگت فروش مرداد ماه"
+    title: string;
     goals: CommissionTargetGoal[];
-    specialNotes?: string; // e.g. "در ضمن کمیسیون دو دستگاه جی۴ مشکی ۱۴۰۴ و یک دستگاه ایگل مشکی ۱۴۰۴ آنی واریز خواهد شد."
-    instantPayoutModels?: string[]; // e.g. ["جی۴ مشکی ۱۴۰۴", "ایگل مشکی ۱۴۰۴"]
-    generalRewardBonus?: number;
+    specialNotes?: string;
+    instantPayoutModels?: string[];
     announcedDate?: string;
-    status?: 'ACTIVE' | 'ACHIEVED' | 'MISSED';
+    status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 }
 
 export interface CommissionPeriod {
@@ -1048,7 +1091,8 @@ export interface CommissionPeriod {
     endDate?: string;
     isLocked?: boolean;
     target?: MonthlyCommissionTarget;
-    adjustments?: Record<string, { bonus: number; deductions: number; notes?: string }>;
+    adjustments?: Record<string, { bonus: number; deductions: number; gift?: number; ceremony?: number; notes?: string }>;
+    payoutExtras?: Record<string, CommissionPayoutAdjustmentItem>;
     approvals?: {
         salesApproved?: boolean;
         salesApprovedBy?: string;

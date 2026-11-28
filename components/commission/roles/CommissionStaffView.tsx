@@ -1,6 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { CommissionDeal, CommissionPeriod } from '../../../types';
-import { parseSalesPersons } from '../../../services/commissionService';
+import { CommissionDeal, CommissionPeriod, CommissionSettings } from '../../../types';
+import {
+    getCommissionSettings,
+    getDealParticipantInfo,
+    getPersonCommissionShareForDeal,
+    isDealEligibleForConfirmedTotals,
+    normalizePersonnelName
+} from '../../../services/commissionService';
 import { 
     User, 
     DollarSign, 
@@ -24,37 +30,50 @@ interface CommissionStaffViewProps {
     activePeriod: CommissionPeriod;
     currencyUnit: 'RIAL' | 'TOMAN';
     onOpenPrintReport: (type: 'STAFF', staffName?: string) => void;
+    settings?: CommissionSettings;
 }
 
 export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
     deals,
     activePeriod,
     currencyUnit,
-    onOpenPrintReport
+    onOpenPrintReport,
+    settings: customSettings
 }) => {
     const divisor = currencyUnit === 'TOMAN' ? 10 : 1;
     const unitLabel = currencyUnit === 'TOMAN' ? 'تومان' : 'ریال';
+    const settings = customSettings || getCommissionSettings();
 
-    // List of known staff
-    const ALL_STAFF = [
-        'درسا محمدی',
-        'محمد مبین غلامی',
-        'ندا قاسمی',
-        'طرلان منوچهری',
-        'عرشیا عسکری',
-        'شبنم کشاورز',
-        'امین رضا موسوی اصل',
-        'مرضیه ایران نژاد',
-        'هیلدا منوچهری',
-        'محسن موسوی',
-        'مریم یوسفی',
-        'زهرا زارع'
-    ];
+    // Base known staff + dynamic normalized personnel from active deals
+    const ALL_STAFF = useMemo(() => {
+        const base = [
+            'درسا محمدی',
+            'محمد مبین غلامی',
+            'ندا قاسمی',
+            'طرلان منوچهری',
+            'عرشیا عسکری',
+            'شبنم کشاورز',
+            'امین رضا موسوی اصل',
+            'مرضیه ایران نژاد',
+            'هیلدا منوچهری',
+            'محسن موسوی',
+            'مریم یوسفی',
+            'زهرا زارع'
+        ];
+        const set = new Set<string>(base.map(normalizePersonnelName));
+        deals.forEach(d => {
+            getDealParticipantInfo(d, deals).rowParticipants.forEach(p => {
+                if (p) set.add(p);
+            });
+        });
+        return Array.from(set).filter(Boolean);
+    }, [deals]);
 
     const [selectedStaff, setSelectedStaff] = useState<string>('درسا محمدی');
 
     // Calculate personal scorecard for selected staff
     const staffScorecard = useMemo(() => {
+        const normTarget = normalizePersonnelName(selectedStaff);
         let anbar = 0;
         let azad = 0;
         let havaleh = 0;
@@ -62,31 +81,31 @@ export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
         let registration = 0;
         let totalSales = 0;
         let paidAmount = 0;
+        let excludedCount = 0;
 
-        const myDeals: { deal: CommissionDeal; shareFactor: number; shareComm: number; shareSales: number }[] = [];
-
-        // Seed check for ندا قاسمی
-        if (selectedStaff === 'ندا قاسمی' && !deals.some(d => d.salesPerson?.includes('ندا قاسمی') && d.category === 'ANBAR')) {
-            anbar += 5837500;
-            paidAmount += 5837500;
-        }
+        const myDeals: { deal: CommissionDeal; shareFactor: number; shareComm: number; shareSales: number; excludedReason?: string }[] = [];
 
         deals.forEach(deal => {
-            const rawPersons = deal.sharedPersons && deal.sharedPersons.length > 0 
-                ? deal.sharedPersons 
-                : parseSalesPersons(deal.salesPerson);
-            
-            const staffList = rawPersons.length > 0 ? rawPersons : [deal.salesPerson || ''];
-            
-            if (staffList.includes(selectedStaff)) {
-                const shareFactor = 1 / staffList.length;
-                const dealComm = deal.commissionAmount || 0;
+            const partInfo = getDealParticipantInfo(deal, deals);
+            if (partInfo.rowParticipants.includes(normTarget)) {
+                const elig = isDealEligibleForConfirmedTotals(deal, settings);
+                const shareFactor = 1 / Math.max(1, partInfo.participantCount);
                 const dealSales = (deal.salePrice || deal.downPayment || 0) * shareFactor;
-                const shareComm = (deal.customPersonCommissions && deal.customPersonCommissions[selectedStaff] !== undefined)
-                    ? deal.customPersonCommissions[selectedStaff]
-                    : Math.round(dealComm * shareFactor);
-                const category = deal.category || 'ANBAR';
+                const shareComm = getPersonCommissionShareForDeal(deal, normTarget, deals, settings);
 
+                if (!elig.eligible) {
+                    excludedCount += 1;
+                    myDeals.push({
+                        deal,
+                        shareFactor,
+                        shareComm: 0,
+                        shareSales: dealSales,
+                        excludedReason: elig.reason
+                    });
+                    return;
+                }
+
+                const category = deal.category || 'ANBAR';
                 totalSales += dealSales;
 
                 if (category === 'ANBAR') anbar += shareComm;
@@ -111,8 +130,18 @@ export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
         });
 
         const grossComm = anbar + azad + havaleh + leasing + registration;
-        const adj = activePeriod.adjustments?.[selectedStaff] || { bonus: 0, deductions: 0, notes: '' };
-        const bonus = adj.bonus || 0;
+
+        let adj: { bonus?: number; deductions?: number; gift?: number; ceremony?: number; notes?: string } = {};
+        if (activePeriod.adjustments) {
+            for (const [k, v] of Object.entries(activePeriod.adjustments)) {
+                if (normalizePersonnelName(k) === normTarget) {
+                    adj = v;
+                    break;
+                }
+            }
+        }
+
+        const bonus = (adj.bonus || 0) + (adj.gift || 0) + (adj.ceremony || 0);
         const deductions = adj.deductions || 0;
         const netPayable = Math.max(0, (grossComm + bonus) - deductions);
         const remaining = Math.max(0, netPayable - paidAmount);
@@ -131,10 +160,11 @@ export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
             paidAmount: Math.round(paidAmount / divisor),
             remaining: Math.round(remaining / divisor),
             totalSales: Math.round(totalSales / divisor),
-            dealsCount: myDeals.length,
+            dealsCount: myDeals.filter(d => !d.excludedReason).length,
+            excludedCount,
             myDeals
         };
-    }, [deals, selectedStaff, activePeriod, divisor]);
+    }, [deals, selectedStaff, activePeriod, divisor, settings]);
 
     return (
         <div className="space-y-6 animate-fade-in" dir="rtl">
@@ -350,7 +380,7 @@ export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
                                         <td className="py-3 px-3 text-center whitespace-nowrap">
                                             {item.shareFactor < 1 ? (
                                                 <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
-                                                    مشترک ۵۰٪
+                                                    مشارکت {Math.round(item.shareFactor * 100).toLocaleString('fa-IR')}٪
                                                 </span>
                                             ) : (
                                                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px]">
@@ -359,7 +389,13 @@ export const CommissionStaffView: React.FC<CommissionStaffViewProps> = ({
                                             )}
                                         </td>
                                         <td className="py-3 px-3.5 font-mono font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                                            {Math.round(item.shareComm / divisor).toLocaleString('fa-IR')}
+                                            {item.excludedReason ? (
+                                                <span className="text-[11px] font-sans text-amber-600">
+                                                    {item.excludedReason === 'LEASING_DRAFT' ? 'پیش‌نویس لیزینگ' : 'نیاز به تأیید مدیر'}
+                                                </span>
+                                            ) : (
+                                                Math.round(item.shareComm / divisor).toLocaleString('fa-IR')
+                                            )}
                                         </td>
                                         <td className="py-3 px-3 whitespace-nowrap">
                                             {item.deal.paymentStatus === 'PAID' ? (

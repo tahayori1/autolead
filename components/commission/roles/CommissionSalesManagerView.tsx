@@ -1,6 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { CommissionDeal, CommissionPeriod } from '../../../types';
-import { parseSalesPersons } from '../../../services/commissionService';
+import { CommissionDeal, CommissionPeriod, CommissionSettings } from '../../../types';
+import {
+    getCommissionSettings,
+    getDealParticipantInfo,
+    getPersonCommissionShareForDeal,
+    isDealEligibleForConfirmedTotals,
+    normalizePersonnelName
+} from '../../../services/commissionService';
 import { 
     Users, 
     Target, 
@@ -26,7 +32,8 @@ interface CommissionSalesManagerViewProps {
     onApproveSales: () => void;
     onOpenNewDeal: () => void;
     onOpenPrintReport: (type: 'SALES_MANAGER') => void;
-    onSaveAdjustments?: (adjustments: Record<string, { bonus: number; deductions: number; notes?: string }>) => void;
+    onSaveAdjustments?: (adjustments: Record<string, { bonus: number; deductions: number; gift?: number; ceremony?: number; notes?: string }>) => void;
+    settings?: CommissionSettings;
 }
 
 export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProps> = ({
@@ -36,10 +43,12 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
     onApproveSales,
     onOpenNewDeal,
     onOpenPrintReport,
-    onSaveAdjustments
+    onSaveAdjustments,
+    settings: customSettings
 }) => {
     const divisor = currencyUnit === 'TOMAN' ? 10 : 1;
     const unitLabel = currencyUnit === 'TOMAN' ? 'تومان' : 'ریال';
+    const settings = customSettings || getCommissionSettings();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [monthlyTargetDeals, setMonthlyTargetDeals] = useState<number>(30);
@@ -60,22 +69,35 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
 
         const adjustments = activePeriod.adjustments || {};
 
+        const findAdj = (normName: string) => {
+            for (const [k, v] of Object.entries(adjustments)) {
+                if (normalizePersonnelName(k) === normName) return v;
+            }
+            return { bonus: 0, deductions: 0, gift: 0, ceremony: 0 };
+        };
+
+        let confirmedDealsCount = 0;
+
         deals.forEach(deal => {
-            const rawPersons = deal.sharedPersons && deal.sharedPersons.length > 0 
-                ? deal.sharedPersons 
-                : parseSalesPersons(deal.salesPerson);
-            
-            const staffList = rawPersons.length > 0 ? rawPersons : [deal.salesPerson || 'نامشخص'];
-            const shareFactor = 1 / staffList.length;
-            const isShared = staffList.length > 1;
+            const elig = isDealEligibleForConfirmedTotals(deal, settings);
+            if (!elig.eligible) return;
+            confirmedDealsCount += 1;
+
+            const partInfo = getDealParticipantInfo(deal, deals);
+            const staffList = partInfo.rowParticipants.length > 0
+                ? partInfo.rowParticipants
+                : [normalizePersonnelName(deal.salesPerson) || 'نامشخص'];
+            const shareFactor = 1 / Math.max(1, partInfo.participantCount);
+            const isShared = partInfo.participantCount > 1;
 
             const sales = (deal.salePrice || deal.downPayment || 0) * shareFactor;
             const profit = (deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0)) * shareFactor;
-            const comm = (deal.commissionAmount || 0) * shareFactor;
 
-            staffList.forEach(name => {
+            staffList.forEach(rawName => {
+                const name = normalizePersonnelName(rawName) || 'نامشخص';
                 if (!staffMap[name]) {
-                    const adj = adjustments[name] || { bonus: 0, deductions: 0 };
+                    const adj = findAdj(name);
+                    const totalPositiveAdj = Number(adj.bonus || 0) + Number(adj.gift || 0) + Number(adj.ceremony || 0);
                     staffMap[name] = {
                         name,
                         dealsCount: 0,
@@ -83,15 +105,13 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
                         grossProfit: 0,
                         commission: 0,
                         sharedDealsCount: 0,
-                        bonus: adj.bonus || 0,
-                        deductions: adj.deductions || 0,
+                        bonus: totalPositiveAdj,
+                        deductions: Number(adj.deductions || 0),
                         netPayable: 0
                     };
                 }
 
-                const personComm = (deal.customPersonCommissions && deal.customPersonCommissions[name] !== undefined)
-                    ? deal.customPersonCommissions[name]
-                    : comm;
+                const personComm = getPersonCommissionShareForDeal(deal, name, deals, settings);
 
                 staffMap[name].dealsCount += shareFactor;
                 staffMap[name].salesVolume += sales;
@@ -106,7 +126,7 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
             return item;
         }).sort((a, b) => b.dealsCount - a.dealsCount);
 
-        const totalDeals = deals.length;
+        const totalDeals = confirmedDealsCount;
         const totalVolume = list.reduce((sum, s) => sum + s.salesVolume, 0);
         const totalCommission = list.reduce((sum, s) => sum + s.netPayable, 0);
         const targetAchievementRate = monthlyTargetDeals > 0 ? Math.min(100, Math.round((totalDeals / monthlyTargetDeals) * 100)) : 100;
@@ -119,7 +139,7 @@ export const CommissionSalesManagerView: React.FC<CommissionSalesManagerViewProp
             targetAchievementRate,
             activeRepsCount: list.filter(s => s.dealsCount > 0).length
         };
-    }, [deals, activePeriod, divisor, monthlyTargetDeals]);
+    }, [deals, activePeriod, divisor, monthlyTargetDeals, settings]);
 
     const isSalesApproved = Boolean(activePeriod.approvals?.salesApproved);
 

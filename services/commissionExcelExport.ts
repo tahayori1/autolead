@@ -1,8 +1,13 @@
 import * as XLSX from 'xlsx';
-import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem } from '../types';
-import { parseSalesPersons } from './commissionService';
+import { CommissionDeal, CommissionPeriod, CommissionCategory, CarYardItem, CommissionSettings } from '../types';
+import {
+    buildPersonnelFinalAndPayoutSummary,
+    formatDecimalPercentLabel,
+    getCommissionSettings,
+    getDealParticipantInfo,
+    isDealEligibleForConfirmedTotals
+} from './commissionService';
 
-// Helper to format currency for Excel cells
 const formatNumber = (num?: number): number => {
     return typeof num === 'number' && !isNaN(num) ? Math.round(num) : 0;
 };
@@ -34,36 +39,32 @@ export function exportFullCommissionWorkbook({
     deals,
     periods,
     activePeriodId,
-    yardItems = []
+    yardItems = [],
+    settings: customSettings
 }: {
     deals: CommissionDeal[];
     periods: CommissionPeriod[];
     activePeriodId?: string;
     yardItems?: CarYardItem[];
+    settings?: CommissionSettings;
 }): void {
     const wb = XLSX.utils.book_new();
+    const settings = customSettings || getCommissionSettings();
 
-    // Determine target deals (either for active period or all if none selected)
     const targetPeriod = periods.find(p => p.id === activePeriodId);
     const activeDeals = activePeriodId ? deals.filter(d => d.periodId === activePeriodId) : deals;
     const periodTitle = targetPeriod?.title || (periods.length > 0 ? periods.map(p => p.title).join(' - ') : 'کلیه دوره‌ها');
 
-    // ----------------------------------------------------
-    // 1. Sheet 1: خلاصه مدیریتی و شاخص‌های مالی (Executive Summary)
-    // ----------------------------------------------------
-    const summaryData: any[][] = [
-        ['گزارش جامع پورسانت و کارکرد معاملات خودرویی - هلدینگ حسینی خودرو'],
-        ['دوره مالی:', periodTitle],
-        ['تاریخ صدور گزارش:', new Date().toLocaleDateString('fa-IR')],
-        [''],
-        ['شاخص مالی کل', 'مبلغ (ریال)', 'مبلغ (تومان)', 'توضیحات'],
-    ];
+    const summary = buildPersonnelFinalAndPayoutSummary(activeDeals, targetPeriod, settings);
 
+    // ----------------------------------------------------
+    // 1. Sheet 1: خلاصه مدیریتی و شاخص‌های مالی
+    // ----------------------------------------------------
     let totalSales = 0;
     let totalPurchase = 0;
     let totalGrossProfit = 0;
     let totalDailyProfitLoss = 0;
-    let totalCommission = 0;
+    let totalCommissionConfirmed = 0;
     let totalPaidCommission = 0;
 
     activeDeals.forEach(d => {
@@ -71,39 +72,42 @@ export function exportFullCommissionWorkbook({
         totalPurchase += (d.purchasePrice || 0);
         totalGrossProfit += (d.grossProfit || 0);
         totalDailyProfitLoss += (d.dailyProfitLoss || 0);
-        totalCommission += (d.commissionAmount || 0);
-        if (d.paymentStatus === 'PAID') {
-            totalPaidCommission += d.paidCommissionShare ?? d.commissionAmount;
-        } else if (d.paymentStatus === 'PARTIAL') {
-            totalPaidCommission += d.paidCommissionShare ?? 0;
+        const elig = isDealEligibleForConfirmedTotals(d, settings);
+        if (elig.eligible) {
+            totalCommissionConfirmed += (d.commissionAmount || 0);
+            if (d.paymentStatus === 'PAID') {
+                totalPaidCommission += d.paidCommissionShare ?? d.commissionAmount;
+            } else if (d.paymentStatus === 'PARTIAL') {
+                totalPaidCommission += d.paidCommissionShare ?? 0;
+            }
         }
     });
 
-    const pendingCommission = Math.max(0, totalCommission - totalPaidCommission);
-    const payoutPct = totalCommission > 0 ? ((totalPaidCommission / totalCommission) * 100).toFixed(1) + '%' : '0%';
+    const pendingCommission = Math.max(0, totalCommissionConfirmed - totalPaidCommission);
+    const payoutPct = totalCommissionConfirmed > 0 ? ((totalPaidCommission / totalCommissionConfirmed) * 100).toFixed(1) + '%' : '0%';
 
-    // Azad Karaneh Calculation
-    const azadDealsForSummary = activeDeals.filter(d => d.category === 'AZAD');
-    const totalAzadGrossForSummary = azadDealsForSummary.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
-    const totalAzadCommForSummary = azadDealsForSummary.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
-    const azadSurplusForSummary = totalAzadGrossForSummary - totalAzadCommForSummary;
-    const azadKaranehForSummary = Math.round(azadSurplusForSummary / 25);
-
-    summaryData.push(
+    const summaryData: any[][] = [
+        ['گزارش جامع پورسانت و کارانه معاملات خودرویی - هلدینگ حسینی خودرو'],
+        ['دوره مالی:', periodTitle],
+        ['تاریخ صدور گزارش:', new Date().toLocaleDateString('fa-IR')],
+        [''],
+        ['شاخص مالی کل', 'مبلغ (ریال)', 'مبلغ (تومان)', 'توضیحات'],
         ['تعداد کل معاملات ثبت‌شده', activeDeals.length, '-', `${activeDeals.length} فقره قرارداد`],
-        ['مجموع حجم فروش و پیش‌پرداخت‌ها', totalSales, Math.round(totalSales / 10), 'گردش مالی حاصل از فروش'],
-        ['مجموع نرخ خرید خودروها', totalPurchase, Math.round(totalPurchase / 10), 'بهای تمام‌شده خرید خودروها'],
-        ['سود ناخالص کل (مارجین ناخالص)', totalGrossProfit, Math.round(totalGrossProfit / 10), 'اختلاف نرخ فروش و نرخ خرید'],
-        ['مجموع سود یا زیان نسبت به روز', totalDailyProfitLoss, Math.round(totalDailyProfitLoss / 10), 'اختلاف نرخ فروش و قیمت روز بازار'],
-        ['کل پورسانت تعلق‌گرفته به پرسنل', totalCommission, Math.round(totalCommission / 10), 'محاسبه‌شده بر اساس قوانین و نرخ‌ها'],
-        ['پورسانت‌های تسویه‌شده و واریزی', totalPaidCommission, Math.round(totalPaidCommission / 10), 'مبالغ قطعی پرداخت‌شده به مشاوران'],
-        ['مانده پورسانت در انتظار پرداخت', pendingCommission, Math.round(pendingCommission / 10), 'تعهدات پرداخت‌نشده دوره'],
-        ['درصد تحقق پرداخت پورسانت', payoutPct, '-', 'نسبت واریزی‌ها به کل تعهدات'],
-        ['کارانه فروش آزاد (سهم ۱/۲۵ مازاد)', azadKaranehForSummary, Math.round(azadKaranehForSummary / 10), 'فرمول: (مجموع کمیسیون آزاد - جمع کل پورسانت آزاد) ÷ ۲۵'],
+        ['مجموع حجم فروش و پیش‌پرداخت‌ها', formatNumber(totalSales), formatNumber(totalSales / 10), 'گردش مالی حاصل از فروش'],
+        ['مجموع نرخ خرید خودروها', formatNumber(totalPurchase), formatNumber(totalPurchase / 10), 'بهای تمام‌شده خرید خودروها'],
+        ['سود ناخالص کل', formatNumber(totalGrossProfit), formatNumber(totalGrossProfit / 10), 'اختلاف نرخ فروش و نرخ خرید'],
+        ['کل پورسانت قطعی بخش‌ها', formatNumber(totalCommissionConfirmed), formatNumber(totalCommissionConfirmed / 10), 'بدون احتساب ردیف‌های پرچم‌دار تأییدنشده و لیزینگ پیش‌نویس'],
+        ['جمع نهایی شیت «نهایی» (پس از تعدیل‌ها)', formatNumber(summary.totals.totalFinalCommission), formatNumber(summary.totals.totalFinalCommission / 10), 'مجموع خالص پورسانت پرسنل'],
+        ['جمع نهایی شیت «پرداختی»', formatNumber(summary.totals.totalFinalPayable), formatNumber(summary.totals.totalFinalPayable / 10), settings.payoutHoldMode === 'ADD' ? 'با احتساب +۱۰٪' : 'پس از کسر ۱۰٪ و اعمال اضافات پرداختی'],
+        ['پورسانت‌های تسویه‌شده و واریزی', formatNumber(totalPaidCommission), formatNumber(totalPaidCommission / 10), 'مبالغ پرداخت‌شده به مشاوران'],
+        ['مانده در انتظار تسویه', formatNumber(pendingCommission), formatNumber(pendingCommission / 10), `تحقق تسویه: ${payoutPct}`],
+        ['کارانه کلی (جمع نهایی پورسانت‌های آزاد)', formatNumber(summary.karaneh.totalAzadFinalCommission), formatNumber(summary.karaneh.totalAzadFinalCommission / 10), `تقسیم بر ${summary.karaneh.sectionCount} بخش = ${formatNumber(summary.karaneh.perSectionKaraneh).toLocaleString('fa-IR')} ریال هر بخش`],
+        ['تعداد ردیف‌های لیزینگ پیش‌نویس', summary.totals.draftLeasingCount, '-', settings.leasingRateConfirmed ? `نرخ مصوب: ${formatDecimalPercentLabel(settings.leasingRate)}` : 'نرخ لیزینگ هنوز تعیین/تأیید نشده است'],
+        ['تعداد ردیف‌های دارای نرخ خرید غیرواقعی (در انتظار تأیید)', summary.totals.flaggedUnrealisticCount, '-', 'ردیف‌های پرچم‌دار تا تأیید مدیر در جمع لحاظ نمی‌شوند'],
         [''],
         ['تفکیک عملکرد بر اساس شیت و دسته‌بندی معامله:'],
-        ['دسته‌بندی', 'تعداد معامله', 'حجم فروش (ریال)', 'سود ناخالص (ریال)', 'سود/زیان روز (ریال)', 'پورسانت (ریال)', 'نرخ محاسبه'],
-    );
+        ['دسته‌بندی', 'تعداد معامله', 'حجم فروش (ریال)', 'سود ناخالص (ریال)', 'سود/زیان (ریال)', 'پورسانت قطعی (ریال)', 'فرمول و نرخ محاسبه']
+    ];
 
     const categories: CommissionCategory[] = ['ANBAR', 'AZAD', 'HAVALEH', 'LEASING', 'REGISTRATION'];
     categories.forEach(cat => {
@@ -111,146 +115,134 @@ export function exportFullCommissionWorkbook({
         const catSales = catDeals.reduce((sum, d) => sum + (d.salePrice || d.downPayment || 0), 0);
         const catGross = catDeals.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
         const catDaily = catDeals.reduce((sum, d) => sum + (d.dailyProfitLoss || 0), 0);
-        const catComm = catDeals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
-        
-        let rateDesc = '۰.۰۵٪ فروش';
-        if (cat === 'AZAD') rateDesc = '۱۰٪ سود کمیسیون (یا ۰.۲۵٪ در زیان)';
-        else if (cat === 'HAVALEH') rateDesc = '۰.۰۵٪ فروش (یا ۰.۲۵٪ در زیان)';
-        else if (cat === 'LEASING') rateDesc = '۰.۱٪ پیش‌پرداخت';
-        else if (cat === 'REGISTRATION') rateDesc = '۰.۱٪ پیش‌پرداخت';
-        else if (cat === 'ANBAR') rateDesc = '۰.۰۵٪ فروش (یا ۰.۲۵٪ در زیان)';
+        const catComm = catDeals.reduce((sum, d) => {
+            const elig = isDealEligibleForConfirmedTotals(d, settings);
+            return sum + (elig.eligible ? (d.commissionAmount || 0) : 0);
+        }, 0);
+
+        let rateDesc = '';
+        if (cat === 'ANBAR') rateDesc = `MAX(0, فروش - قیمت روز) × ${formatDecimalPercentLabel(settings.anbarRate)} + ${formatNumber(settings.anbarIncentiveBonus).toLocaleString('fa-IR')} ریال تشویقی`;
+        else if (cat === 'AZAD') rateDesc = `MAX(0, سود) × ${formatDecimalPercentLabel(settings.azadRate)} (${formatDecimalPercentLabel(settings.azadHardRate)} معاملات سخت) ÷ تعداد پرسنل`;
+        else if (cat === 'HAVALEH') rateDesc = `MAX(0, فروش - قیمت روز) × ${formatDecimalPercentLabel(settings.havalehRate)} ÷ تعداد پرسنل`;
+        else if (cat === 'LEASING') rateDesc = settings.leasingRateConfirmed ? `${formatDecimalPercentLabel(settings.leasingRate)} پیش‌پرداخت` : 'پیش‌نویس (نیازمند تعیین نرخ توسط مدیر)';
+        else if (cat === 'REGISTRATION') rateDesc = `${formatDecimalPercentLabel(settings.registrationRate)} پیش‌پرداخت`;
 
         summaryData.push([
             getCategoryPersianName(cat),
             catDeals.length,
-            catSales,
-            catGross,
-            catDaily,
-            catComm,
+            formatNumber(catSales),
+            formatNumber(catGross),
+            formatNumber(catDaily),
+            formatNumber(catComm),
             rateDesc
         ]);
     });
 
     const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-    summaryWs['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 22 }, { wch: 35 }, { wch: 22 }, { wch: 20 }, { wch: 30 }];
+    summaryWs['!cols'] = [{ wch: 36 }, { wch: 22 }, { wch: 22 }, { wch: 38 }, { wch: 22 }, { wch: 22 }, { wch: 44 }];
     XLSX.utils.book_append_sheet(wb, summaryWs, 'خلاصه مدیریتی');
 
     // ----------------------------------------------------
     // 2. Sheet 2: فروش انبار (ANBAR)
     // ----------------------------------------------------
     const anbarDeals = activeDeals.filter(d => d.category === 'ANBAR');
-    if (anbarDeals.length > 0 || true) {
-        const anbarHeaders = [
-            'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'خریدار / مشتری',
-            'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'نرخ فروش (ریال)',
-            'سود یا زیان روز (ریال)', 'سود ناخالص (ریال)', 'درصد پورسانت', 'پورسانت کل (ریال)',
-            'سهم پرداختی (ریال)', 'وضعیت واریز', 'تاریخ واریز', 'توضیحات واریز'
-        ];
-        const anbarRows = anbarDeals.map((d, i) => [
-            i + 1,
-            d.purchaseDate || '',
-            d.saleDate || '',
-            d.salesPerson || '',
-            d.contractWriter || '',
-            d.customerName || d.buyerName || '',
-            d.carModel || '',
-            formatNumber(d.purchasePrice),
-            formatNumber(d.dailyPrice),
-            formatNumber(d.salePrice),
-            formatNumber(d.dailyProfitLoss),
-            formatNumber(d.grossProfit),
-            d.isManualCommission ? 'دستی' : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : `${(d.commissionRate ? d.commissionRate * (d.commissionRate < 1 ? 100 : 1) : 0.05)}%`),
-            formatNumber(d.commissionAmount),
-            formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
-            getPaymentStatusPersian(d.paymentStatus),
-            d.paymentDate || '',
-            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : ''))
-        ]);
-
-        const anbarWs = XLSX.utils.aoa_to_sheet([anbarHeaders, ...anbarRows]);
-        anbarWs['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
-            { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
-            { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
-            { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 30 }
-        ];
-        XLSX.utils.book_append_sheet(wb, anbarWs, 'فروش انبار');
-    }
+    const anbarHeaders = [
+        'ردیف', 'شناسه معامله', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس', 'خریدار / مشتری',
+        'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'نرخ فروش (ریال)',
+        'سود یا زیان روز (ریال)', 'درصد پورسانت', 'پورسانت قدیم (ریال)', 'پورسانت تشویقی (ریال)', 'پورسانت نهایی (ریال)',
+        'وضعیت واریز', 'توضیحات'
+    ];
+    const anbarRows = anbarDeals.map((d, i) => [
+        i + 1,
+        d.transactionId || '',
+        d.purchaseDate || '',
+        d.saleDate || '',
+        d.salesPerson || '',
+        d.contractWriter || '',
+        d.customerName || d.buyerName || '',
+        d.carModel || '',
+        formatNumber(d.purchasePrice),
+        formatNumber(d.dailyPrice),
+        formatNumber(d.salePrice),
+        formatNumber(d.dailyProfitLoss ?? ((d.salePrice || 0) - (d.purchasePrice || 0))),
+        d.isManualCommission ? 'دستی' : formatDecimalPercentLabel(d.commissionRate ?? settings.anbarRate),
+        formatNumber(d.oldCommissionAmount),
+        formatNumber(d.incentiveBonusAmount ?? settings.anbarIncentiveBonus),
+        formatNumber(d.commissionAmount),
+        getPaymentStatusPersian(d.paymentStatus),
+        d.paymentNotes || ''
+    ]);
+    const anbarWs = XLSX.utils.aoa_to_sheet([anbarHeaders, ...anbarRows]);
+    anbarWs['!cols'] = [
+        { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 22 },
+        { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+        { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+        { wch: 18 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, anbarWs, 'فروش انبار');
 
     // ----------------------------------------------------
     // 3. Sheet 3: فروش آزاد (AZAD)
     // ----------------------------------------------------
     const azadDeals = activeDeals.filter(d => d.category === 'AZAD');
-    if (azadDeals.length > 0 || true) {
-        const azadHeaders = [
-            'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'فروشنده (مالک)', 'خریدار',
-            'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'نرخ فروش (ریال)',
-            'کمیسیون کل معامله / سود (ریال)', 'سود/زیان روز (ریال)', 'درصد پورسانت', 'پورسانت کل (ریال)',
-            'سهم پرداختی (ریال)', 'وضعیت واریز', 'توضیحات واریز'
-        ];
-        const azadRows = azadDeals.map((d, i) => [
+    const azadHeaders = [
+        'ردیف', 'شناسه معامله', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'تعداد مشارکت‌کننده', 'فروشنده', 'خریدار',
+        'مدل خودرو', 'نرخ خرید (ریال)', 'نرخ فروش (ریال)',
+        'سود معامله (ریال)', 'نوع معامله / نرخ', 'پورسانت کل معامله (ریال)', 'پورسانت نهایی هر نفر (ریال)',
+        'پورسانت ۱۰ درصدی (ریال)', 'پرچم نرخ خرید', 'وضعیت واریز', 'توضیحات'
+    ];
+    const azadRows = azadDeals.map((d, i) => {
+        const partInfo = getDealParticipantInfo(d, activeDeals);
+        return [
             i + 1,
+            d.transactionId || '',
             d.purchaseDate || '',
             d.saleDate || '',
             d.salesPerson || '',
-            d.contractWriter || '',
+            partInfo.participantCount,
             d.sellerName || '',
             d.buyerName || d.customerName || '',
             d.carModel || '',
             formatNumber(d.purchasePrice),
-            formatNumber(d.dailyPrice),
             formatNumber(d.salePrice),
             formatNumber(d.grossProfit),
-            formatNumber(d.dailyProfitLoss),
-            d.isManualCommission ? 'دستی' : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : (d.grossProfit && d.grossProfit > 0 ? '10%' : '0.05%')),
+            d.isManualCommission ? 'دستی' : (d.isHardDeal ? `معاملات سخت (${formatDecimalPercentLabel(settings.azadHardRate)})` : `عادی (${formatDecimalPercentLabel(settings.azadRate)})`),
             formatNumber(d.commissionAmount),
-            formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
+            formatNumber(d.perPersonCommission ?? Math.round((d.commissionAmount || 0) / partInfo.participantCount)),
+            formatNumber(d.tenPercentCommission ?? Math.round((d.perPersonCommission ?? ((d.commissionAmount || 0) / partInfo.participantCount)) * 0.10)),
+            d.isUnrealisticPurchasePrice ? (d.managerApprovedUnrealistic ? 'تأیید مدیر' : 'نرخ غیرواقعی (حذف از جمع)') : 'معتبر',
             getPaymentStatusPersian(d.paymentStatus),
-            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : '')
-        ]);
-
-        const totalAzadGross = azadDeals.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
-        const totalAzadComm = azadDeals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
-        const totalAzadPaid = azadDeals.reduce((sum, d) => sum + (d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)), 0);
-        const azadSurplus = totalAzadGross - totalAzadComm;
-        const azadKaraneh = Math.round(azadSurplus / 25);
-
-        const azadFooterRows = [
-            [''],
-            ['--- خلاصه کارکرد و کارانه فروش آزاد دوره ---'],
-            ['مجموع کمیسیون فروش آزاد (سود ناخالص)', formatNumber(totalAzadGross), 'ریال', `${Math.round(totalAzadGross / 10).toLocaleString('fa-IR')} تومان`],
-            ['جمع کل پورسانت فروش آزاد پرسنل', formatNumber(totalAzadComm), 'ریال', `${Math.round(totalAzadComm / 10).toLocaleString('fa-IR')} تومان`],
-            ['مازاد کمیسیون فروش آزاد (اختلاف کمیسیون و پورسانت)', formatNumber(azadSurplus), 'ریال', `${Math.round(azadSurplus / 10).toLocaleString('fa-IR')} تومان`],
-            ['کارانه فروش آزاد (سهم ۱/۲۵ مازاد)', formatNumber(azadKaraneh), 'ریال', `${Math.round(azadKaraneh / 10).toLocaleString('fa-IR')} تومان`, 'فرمول مصوب: (مجموع کمیسیون - جمع کل پورسانت) ÷ ۲۵']
+            d.paymentNotes || ''
         ];
-
-        const azadWs = XLSX.utils.aoa_to_sheet([azadHeaders, ...azadRows, ...azadFooterRows]);
-        azadWs['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 }, { wch: 22 },
-            { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
-            { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
-            { wch: 16 }, { wch: 18 }, { wch: 35 }
-        ];
-        XLSX.utils.book_append_sheet(wb, azadWs, 'فروش آزاد');
-    }
+    });
+    const azadWs = XLSX.utils.aoa_to_sheet([azadHeaders, ...azadRows]);
+    azadWs['!cols'] = [
+        { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 20 },
+        { wch: 16 }, { wch: 16 }, { wch: 16 },
+        { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 20 },
+        { wch: 18 }, { wch: 22 }, { wch: 16 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, azadWs, 'فروش آزاد');
 
     // ----------------------------------------------------
     // 4. Sheet 4: فروش حواله (HAVALEH)
     // ----------------------------------------------------
     const havalehDeals = activeDeals.filter(d => d.category === 'HAVALEH');
-    if (havalehDeals.length > 0 || true) {
-        const havalehHeaders = [
-            'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'نام خریدار',
-            'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'مبلغ سبد بعدی (ریال)', 'نرخ فروش (ریال)',
-            'سود یا زیان حواله / روز (ریال)', 'سود ناخالص (ریال)', 'درصد پورسانت', 'پورسانت کل (ریال)',
-            'سهم پرداختی (ریال)', 'وضعیت واریز', 'توضیحات واریز'
-        ];
-        const havalehRows = havalehDeals.map((d, i) => [
+    const havalehHeaders = [
+        'ردیف', 'شناسه معامله', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'تعداد پرسنل', 'خریدار',
+        'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'مبلغ سبد بعدی (اطلاعاتی)', 'نرخ فروش (ریال)',
+        'سود و زیان (ریال)', 'درصد پورسانت', 'پورسانت کل (ریال)', 'پورسانت نهایی هر نفر (ریال)',
+        'وضعیت واریز', 'توضیحات'
+    ];
+    const havalehRows = havalehDeals.map((d, i) => {
+        const partInfo = getDealParticipantInfo(d, activeDeals);
+        return [
             i + 1,
+            d.transactionId || '',
             d.purchaseDate || '',
             d.saleDate || '',
             d.salesPerson || '',
-            d.contractWriter || '',
+            partInfo.participantCount,
             d.customerName || d.buyerName || '',
             d.carModel || '',
             formatNumber(d.purchasePrice),
@@ -258,180 +250,207 @@ export function exportFullCommissionWorkbook({
             formatNumber(d.nextBasketAmount),
             formatNumber(d.salePrice),
             formatNumber(d.dailyProfitLoss),
-            formatNumber(d.grossProfit),
-            d.isManualCommission ? 'دستی' : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? '0.25%' : '0.05%'),
+            d.isManualCommission ? 'دستی' : formatDecimalPercentLabel(d.commissionRate ?? settings.havalehRate),
             formatNumber(d.commissionAmount),
-            formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
+            formatNumber(d.perPersonCommission ?? Math.round((d.commissionAmount || 0) / partInfo.participantCount)),
             getPaymentStatusPersian(d.paymentStatus),
-            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : ''))
-        ]);
-
-        const havalehWs = XLSX.utils.aoa_to_sheet([havalehHeaders, ...havalehRows]);
-        havalehWs['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
-            { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
-            { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 16 },
-            { wch: 16 }, { wch: 18 }, { wch: 30 }
+            d.paymentNotes || ''
         ];
-        XLSX.utils.book_append_sheet(wb, havalehWs, 'فروش حواله');
-    }
+    });
+    const havalehWs = XLSX.utils.aoa_to_sheet([havalehHeaders, ...havalehRows]);
+    havalehWs['!cols'] = [
+        { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 20 },
+        { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
+        { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 20 },
+        { wch: 18 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, havalehWs, 'فروش حواله');
 
     // ----------------------------------------------------
-    // 5. Sheet 5: فروش لیزینگ و اقساط (LEASING)
-    // ----------------------------------------------------
-    const leasingDeals = activeDeals.filter(d => d.category === 'LEASING');
-    if (leasingDeals.length > 0 || true) {
-        const leasingHeaders = [
-            'ردیف', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس', 'نام مشتری',
-            'مدل خودرو', 'مبلغ پیش‌پرداخت (ریال)', 'درصد پورسانت', 'پورسانت محاسبه‌شده (ریال)',
-            'سهم پرداختی (ریال)', 'وضعیت واریز', 'توضیحات'
-        ];
-        const leasingRows = leasingDeals.map((d, i) => [
-            i + 1,
-            d.saleDate || '',
-            d.salesPerson || '',
-            d.contractWriter || '',
-            d.customerName || d.buyerName || '',
-            d.carModel || '',
-            formatNumber(d.downPayment),
-            '0.10%',
-            formatNumber(d.commissionAmount),
-            formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
-            getPaymentStatusPersian(d.paymentStatus),
-            d.paymentNotes || '۰.۱٪ مبلغ پیش‌پرداخت'
-        ]);
-
-        const leasingWs = XLSX.utils.aoa_to_sheet([leasingHeaders, ...leasingRows]);
-        leasingWs['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
-            { wch: 16 }, { wch: 20 }, { wch: 12 }, { wch: 18 },
-            { wch: 16 }, { wch: 18 }, { wch: 30 }
-        ];
-        XLSX.utils.book_append_sheet(wb, leasingWs, 'لیزینگ و اقساط');
-    }
-
-    // ----------------------------------------------------
-    // 6. Sheet 6: ثبت نام و کارخانه (REGISTRATION)
+    // 5. Sheet 5: ثبت نام (REGISTRATION)
     // ----------------------------------------------------
     const regDeals = activeDeals.filter(d => d.category === 'REGISTRATION');
-    if (regDeals.length > 0 || true) {
-        const regHeaders = [
-            'ردیف', 'تاریخ ثبت‌نام', 'شماره قرارداد', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'نام متقاضی',
-            'مدل خودرو', 'پیش‌پرداخت / واریزی (ریال)', 'پورسانت (ریال)',
-            'سهم پرداختی (ریال)', 'وضعیت واریز', 'تاریخ تحویل', 'توضیحات'
-        ];
-        const regRows = regDeals.map((d, i) => [
+    const regHeaders = [
+        'ردیف', 'شناسه معامله', 'تاریخ ثبت‌نام', 'شماره قرارداد', 'پرسنل فروش', 'نام متقاضی',
+        'مدل خودرو', 'پیش‌پرداخت (ریال)', 'درصد پورسانت', 'پورسانت کل (ریال)', 'سهم هر نفر (ریال)',
+        'وضعیت واریز', 'توضیحات'
+    ];
+    const regRows = regDeals.map((d, i) => {
+        const partInfo = getDealParticipantInfo(d, activeDeals);
+        return [
             i + 1,
+            d.transactionId || '',
             d.saleDate || '',
             d.contractNumber || '',
             d.salesPerson || '',
-            d.contractWriter || '',
             d.customerName || '',
             d.carModel || '',
             formatNumber(d.downPayment),
+            d.isManualCommission ? 'دستی' : formatDecimalPercentLabel(d.commissionRate ?? settings.registrationRate),
             formatNumber(d.commissionAmount),
-            formatNumber(d.paidCommissionShare ?? (d.paymentStatus === 'PAID' ? d.commissionAmount : 0)),
+            formatNumber(d.perPersonCommission ?? Math.round((d.commissionAmount || 0) / partInfo.participantCount)),
             getPaymentStatusPersian(d.paymentStatus),
-            d.deliveryDate || '',
-            d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : '')
-        ]);
-
-        const regWs = XLSX.utils.aoa_to_sheet([regHeaders, ...regRows]);
-        regWs['!cols'] = [
-            { wch: 6 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 22 },
-            { wch: 16 }, { wch: 20 }, { wch: 16 },
-            { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 30 }
+            d.paymentNotes || ''
         ];
-        XLSX.utils.book_append_sheet(wb, regWs, 'ثبت نام کارخانه');
-    }
-
-    // ----------------------------------------------------
-    // 7. Sheet 7: کارنامه تجمیعی و تسویه پرسنل (Personnel Summary)
-    // ----------------------------------------------------
-    const staffAggregates: Record<string, {
-        dealCount: number;
-        salesVolume: number;
-        grossProfit: number;
-        earnedCommission: number;
-        paidCommission: number;
-        dealsList: string[];
-    }> = {};
-
-    activeDeals.forEach(deal => {
-        const persons = deal.sharedPersons && deal.sharedPersons.length > 0
-            ? deal.sharedPersons
-            : parseSalesPersons(deal.salesPerson);
-        const shareFraction = 1 / (persons.length || 1);
-
-        const dealVolume = (deal.salePrice || deal.downPayment || 0) * shareFraction;
-        const dealProfit = (deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0)) * shareFraction;
-        const dealComm = (deal.commissionAmount || 0) * shareFraction;
-        const dealPaid = (deal.paymentStatus === 'PAID' 
-            ? (deal.paidCommissionShare !== undefined ? deal.paidCommissionShare : deal.commissionAmount) 
-            : (deal.paidCommissionShare || 0)) * shareFraction;
-
-        persons.forEach(person => {
-            if (!staffAggregates[person]) {
-                staffAggregates[person] = {
-                    dealCount: 0,
-                    salesVolume: 0,
-                    grossProfit: 0,
-                    earnedCommission: 0,
-                    paidCommission: 0,
-                    dealsList: []
-                };
-            }
-            staffAggregates[person].dealCount += shareFraction;
-            staffAggregates[person].salesVolume += dealVolume;
-            staffAggregates[person].grossProfit += dealProfit;
-            staffAggregates[person].earnedCommission += dealComm;
-            staffAggregates[person].paidCommission += dealPaid;
-            staffAggregates[person].dealsList.push(`${deal.carModel} (${deal.customerName || 'مشتری'})`);
-        });
     });
-
-    const staffHeaders = [
-        'ردیف', 'نام و نام خانوادگی مشاور', 'تعداد معامله (سهم)', 'حجم فروش کل (ریال)',
-        'سودآوری کل (ریال)', 'پورسانت ناخالص (ریال)', 'پاداش تشویقی (ریال)', 'کسورات و جریمه (ریال)',
-        'خالص پورسانت دوره (ریال)', 'مبلغ پرداخت‌شده (ریال)', 'مانده قابل پرداخت (ریال)', 'وضعیت تسویه', 'یادداشت'
+    const regWs = XLSX.utils.aoa_to_sheet([regHeaders, ...regRows]);
+    regWs['!cols'] = [
+        { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 22 },
+        { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 },
+        { wch: 18 }, { wch: 30 }
     ];
-
-    const adjustments = targetPeriod?.adjustments || {};
-    const staffRows = Object.entries(staffAggregates)
-        .sort((a, b) => b[1].earnedCommission - a[1].earnedCommission)
-        .map(([name, data], idx) => {
-            const adj = adjustments[name] || { bonus: 0, deductions: 0, notes: '' };
-            const netCommission = data.earnedCommission + (adj.bonus || 0) - (adj.deductions || 0);
-            const remaining = Math.max(0, netCommission - data.paidCommission);
-            const statusStr = remaining <= 0 ? 'تسویه کامل' : (data.paidCommission > 0 ? 'تسویه علی‌الحساب' : 'پرداخت‌نشده');
-
-            return [
-                idx + 1,
-                name,
-                Number(data.dealCount.toFixed(1)),
-                formatNumber(data.salesVolume),
-                formatNumber(data.grossProfit),
-                formatNumber(data.earnedCommission),
-                formatNumber(adj.bonus),
-                formatNumber(adj.deductions),
-                formatNumber(netCommission),
-                formatNumber(data.paidCommission),
-                formatNumber(remaining),
-                statusStr,
-                adj.notes || ''
-            ];
-        });
-
-    const staffWs = XLSX.utils.aoa_to_sheet([staffHeaders, ...staffRows]);
-    staffWs['!cols'] = [
-        { wch: 6 }, { wch: 22 }, { wch: 18 }, { wch: 18 },
-        { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
-        { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 30 }
-    ];
-    XLSX.utils.book_append_sheet(wb, staffWs, 'کارنامه پرسنل و تسویه');
+    XLSX.utils.book_append_sheet(wb, regWs, 'ثبت نام');
 
     // ----------------------------------------------------
-    // 8. Sheet 8: کاردکس انبار و موجودی خودروها (Car Yard Ledger)
+    // 6. Sheet 6: لیزینگ (LEASING)
+    // ----------------------------------------------------
+    const leasingDeals = activeDeals.filter(d => d.category === 'LEASING');
+    const leasingHeaders = [
+        'ردیف', 'شناسه معامله', 'تاریخ فروش', 'پرسنل فروش', 'نام مشتری',
+        'مدل خودرو', 'مبلغ پیش‌پرداخت (ریال)', 'نرخ لیزینگ', 'پورسانت محاسبه‌شده (ریال)',
+        'وضعیت تایید نرخ', 'وضعیت واریز', 'توضیحات'
+    ];
+    const leasingRows = leasingDeals.map((d, i) => [
+        i + 1,
+        d.transactionId || '',
+        d.saleDate || '',
+        d.salesPerson || '',
+        d.customerName || d.buyerName || '',
+        d.carModel || '',
+        formatNumber(d.downPayment),
+        settings.leasingRateConfirmed ? formatDecimalPercentLabel(settings.leasingRate) : 'نامشخص',
+        formatNumber(d.commissionAmount),
+        settings.leasingRateConfirmed ? 'تایید شده (قطعی)' : 'پیش‌نویس (حذف از جمع نهایی)',
+        getPaymentStatusPersian(d.paymentStatus),
+        d.paymentNotes || ''
+    ]);
+    const leasingWs = XLSX.utils.aoa_to_sheet([leasingHeaders, ...leasingRows]);
+    leasingWs['!cols'] = [
+        { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 22 },
+        { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 20 },
+        { wch: 24 }, { wch: 16 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, leasingWs, 'لیزینگ');
+
+    // ----------------------------------------------------
+    // 7. Sheet 7: نهایی (Personnel Aggregation & Rank)
+    // ----------------------------------------------------
+    const finalHeaders = [
+        'رتبه', 'نام پرسنل (نرمال‌شده)', 'فروش انبار (ریال)', 'فروش آزاد (ریال)', 'فروش حواله (ریال)',
+        'ثبت نام (ریال)', 'لیزینگ (ریال)', 'جمع پورسانت (ریال)',
+        'هدیه (ریال)', 'مراسم (ریال)', 'پاداش (ریال)', 'کسورات (ریال)', 'مجموع تعدیل‌ها (ریال)',
+        'نهایی (ریال)', 'پرداخت‌شده (ریال)', 'مانده (ریال)', 'توضیحات'
+    ];
+    const finalSheetRows = summary.finalRows.map(r => [
+        r.rank,
+        r.staffName,
+        formatNumber(r.anbarCommission),
+        formatNumber(r.azadCommission),
+        formatNumber(r.havalehCommission),
+        formatNumber(r.registrationCommission),
+        formatNumber(r.leasingCommission),
+        formatNumber(r.totalSheetCommission),
+        formatNumber(r.giftAdjustment),
+        formatNumber(r.ceremonyAdjustment),
+        formatNumber(r.bonusAdjustment),
+        formatNumber(r.deductionsAdjustment),
+        formatNumber(r.netAdjustmentTotal),
+        formatNumber(r.finalCommission),
+        formatNumber(r.paidAmount),
+        formatNumber(r.remainingAmount),
+        r.notes || ''
+    ]);
+    finalSheetRows.push([
+        '',
+        'جمع کل',
+        formatNumber(summary.totals.anbar),
+        formatNumber(summary.totals.azad),
+        formatNumber(summary.totals.havaleh),
+        formatNumber(summary.totals.registration),
+        formatNumber(summary.totals.leasing),
+        formatNumber(summary.totals.totalSheetCommission),
+        '', '', '', '',
+        formatNumber(summary.totals.totalAdjustments),
+        formatNumber(summary.totals.totalFinalCommission),
+        '', '', ''
+    ] as any);
+
+    const finalWs = XLSX.utils.aoa_to_sheet([finalHeaders, ...finalSheetRows]);
+    finalWs['!cols'] = [
+        { wch: 6 }, { wch: 24 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+        { wch: 16 }, { wch: 16 }, { wch: 18 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 },
+        { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 28 }
+    ];
+    XLSX.utils.book_append_sheet(wb, finalWs, 'نهایی');
+
+    // ----------------------------------------------------
+    // 8. Sheet 8: پرداختی ماهانه (Monthly Payout)
+    // ----------------------------------------------------
+    const holdLabel = settings.payoutHoldMode === 'ADD' ? 'اضافه ۱۰٪ کمسیون نهایی' : 'کسر ۱۰٪ کمسیون نهایی';
+    const payoutHeaders = [
+        'رتبه', 'نام پرسنل', 'کمسیون نهایی (از شیت نهایی)', 'هدیه', 'کمسیون T9', 'مراسم',
+        'آپشن', 'ثبت‌نام معوقه', 'سایر اضافات', holdLabel, 'نهایی پرداختی (ریال)', 'یادداشت'
+    ];
+    const payoutSheetRows = summary.payoutRows.map(p => [
+        p.rank,
+        p.staffName,
+        formatNumber(p.finalCommissionFromNahayi),
+        formatNumber(p.gift),
+        formatNumber(p.t9Backlog),
+        formatNumber(p.ceremony),
+        formatNumber(p.optionCommission),
+        formatNumber(p.lateRegistration),
+        formatNumber(p.otherExtras),
+        formatNumber(p.tenPercentHold),
+        formatNumber(p.finalPayable),
+        p.notes || ''
+    ]);
+    payoutSheetRows.push([
+        '',
+        'جمع کل پرداختی',
+        formatNumber(summary.totals.totalFinalCommission),
+        '', '', '', '', '',
+        formatNumber(summary.totals.totalExtras),
+        formatNumber(summary.totals.totalTenPercentHold),
+        formatNumber(summary.totals.totalFinalPayable),
+        ''
+    ] as any);
+    const payoutWs = XLSX.utils.aoa_to_sheet([payoutHeaders, ...payoutSheetRows]);
+    payoutWs['!cols'] = [
+        { wch: 6 }, { wch: 24 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+        { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 28 }
+    ];
+    XLSX.utils.book_append_sheet(wb, payoutWs, 'پرداختی');
+
+    // ----------------------------------------------------
+    // 9. Sheet 9: سهام کارانه (Karaneh Shares)
+    // ----------------------------------------------------
+    const karanehData: any[][] = [
+        ['محاسبه کارانه کلی، کارانه هر بخش و جدول سهام کارانه'],
+        ['کارانه کلی (جمع نهایی پورسانت‌های فروش آزاد)', formatNumber(summary.karaneh.totalAzadFinalCommission), 'ریال'],
+        ['تعداد بخش‌های کارانه', summary.karaneh.sectionCount, 'بخش'],
+        ['کارانه هر بخش (کارانه کلی ÷ تعداد بخش)', formatNumber(summary.karaneh.perSectionKaraneh), 'ریال'],
+        [''],
+        ['ردیف', 'دریافت‌کننده سهم کارانه', 'روش محاسبه', 'درصد / مبلغ ثابت', 'سهم محاسبه‌شده (ریال)']
+    ];
+    summary.karaneh.recipientShares.forEach((s, idx) => {
+        karanehData.push([
+            idx + 1,
+            s.recipientName,
+            s.mode === 'FIXED' ? 'مبلغ ثابت' : 'درصد از کارانه هر بخش',
+            s.mode === 'FIXED' ? formatNumber(s.fixedAmount) : formatDecimalPercentLabel(s.percent),
+            formatNumber(s.calculatedAmount)
+        ]);
+    });
+    karanehData.push(['', 'جمع کل سهام توزیع‌شده', '', '', formatNumber(summary.karaneh.totalDistributedShares)]);
+
+    const karanehWs = XLSX.utils.aoa_to_sheet(karanehData);
+    karanehWs['!cols'] = [{ wch: 10 }, { wch: 28 }, { wch: 24 }, { wch: 20 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, karanehWs, 'سهام کارانه');
+
+    // ----------------------------------------------------
+    // 10. Sheet 10: کاردکس انبار خودرو (اختیاری)
     // ----------------------------------------------------
     if (yardItems && yardItems.length > 0) {
         const yardHeaders = [
@@ -461,11 +480,8 @@ export function exportFullCommissionWorkbook({
         XLSX.utils.book_append_sheet(wb, yardWs, 'کاردکس انبار خودرو');
     }
 
-    // Generate sanitized file name
     const sanitizedTitle = (periodTitle || 'Commission_Report').replace(/[/\\?%*:|"<> ]/g, '_');
     const fileName = `گزارش_جامع_پورسانت_${sanitizedTitle}.xlsx`;
-
-    // Trigger File Download in browser
     XLSX.writeFile(wb, fileName);
 }
 
@@ -482,40 +498,47 @@ export function exportSingleCategoryXLSX(
     const catDeals = deals.filter(d => d.category === category);
 
     const headers = [
-        'ردیف', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس / همکار', 'خریدار / مشتری',
-        'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'نرخ فروش / پیش پرداخت (ریال)',
-        'سود/زیان روز (ریال)', 'سود ناخالص (ریال)', 'پورسانت کل (ریال)', 'وضعیت واریز', 'توضیحات'
+        'ردیف', 'شناسه معامله', 'تاریخ خرید', 'تاریخ فروش', 'پرسنل فروش', 'قولنامه‌نویس', 'خریدار / مشتری',
+        'مدل خودرو', 'نرخ خرید (ریال)', 'قیمت روز (ریال)', 'نرخ فروش / پیش‌پرداخت (ریال)',
+        'سود/زیان (ریال)', 'پورسانت قدیم (ریال)', 'تشویقی (ریال)', 'پورسانت کل (ریال)', 'سهم هر نفر (ریال)',
+        'وضعیت واریز', 'توضیحات'
     ];
 
-    const rows = catDeals.map((d, i) => [
-        i + 1,
-        d.purchaseDate || '',
-        d.saleDate || '',
-        d.salesPerson || '',
-        d.contractWriter || '',
-        d.customerName || d.buyerName || '',
-        d.carModel || '',
-        formatNumber(d.purchasePrice),
-        formatNumber(d.dailyPrice),
-        formatNumber(d.salePrice || d.downPayment),
-        formatNumber(d.dailyProfitLoss),
-        formatNumber(d.grossProfit),
-        formatNumber(d.commissionAmount),
-        getPaymentStatusPersian(d.paymentStatus),
-        d.paymentNotes || (d.isManualCommission ? `تغییر دستی: ${d.manualCommissionReason || ''}` : (d.dailyProfitLoss && d.dailyProfitLoss < 0 ? 'زیان روز: ۰.۲۵٪ نرخ فروش' : ''))
-    ]);
+    const rows = catDeals.map((d, i) => {
+        const partInfo = getDealParticipantInfo(d, deals);
+        return [
+            i + 1,
+            d.transactionId || '',
+            d.purchaseDate || '',
+            d.saleDate || '',
+            d.salesPerson || '',
+            d.contractWriter || '',
+            d.customerName || d.buyerName || '',
+            d.carModel || '',
+            formatNumber(d.purchasePrice),
+            formatNumber(d.dailyPrice),
+            formatNumber(d.salePrice || d.downPayment),
+            formatNumber(d.grossProfit ?? d.dailyProfitLoss),
+            formatNumber(d.oldCommissionAmount),
+            formatNumber(d.incentiveBonusAmount),
+            formatNumber(d.commissionAmount),
+            formatNumber(d.perPersonCommission ?? Math.round((d.commissionAmount || 0) / partInfo.participantCount)),
+            getPaymentStatusPersian(d.paymentStatus),
+            d.paymentNotes || ''
+        ];
+    });
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws['!cols'] = [
-        { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
+        { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 22 },
         { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 },
-        { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 30 }
+        { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+        { wch: 18 }, { wch: 30 }
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, catName);
 
     const sanitizedTitle = (periodTitle || 'Period').replace(/[/\\?%*:|"<> ]/g, '_');
     const fileName = `${catName}_${sanitizedTitle}.xlsx`;
-
     XLSX.writeFile(wb, fileName);
 }

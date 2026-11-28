@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CommissionDeal, CommissionCategory, CommissionPaymentStatus } from '../../types';
+import { getCommissionSettings, normalizePersonnelName, recalculateDealsWithSettings } from '../../services/commissionService';
 import { 
     X, 
     Check, 
@@ -74,7 +75,7 @@ export const CommissionBulkEditModal: React.FC<CommissionBulkEditModalProps> = (
 
             // 2. Sales person
             if (changeSalesPerson && targetSalesPerson.trim()) {
-                d.salesPerson = targetSalesPerson.trim();
+                d.salesPerson = normalizePersonnelName(targetSalesPerson);
             }
 
             // 3. Category
@@ -113,7 +114,11 @@ export const CommissionBulkEditModal: React.FC<CommissionBulkEditModalProps> = (
             return d;
         });
 
-        onBulkUpdate(updated);
+        const finalUpdated = commissionActionType === 'recalc'
+            ? recalculateDealsWithSettings(updated, getCommissionSettings())
+            : updated;
+
+        onBulkUpdate(finalUpdated);
         onClose();
     };
 

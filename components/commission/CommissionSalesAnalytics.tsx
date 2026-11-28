@@ -1,6 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { CommissionDeal } from '../../types';
-import { parseSalesPersons } from '../../services/commissionService';
+import { CommissionDeal, CommissionSettings } from '../../types';
+import {
+    getCommissionSettings,
+    getDealParticipantInfo,
+    getPersonCommissionShareForDeal,
+    isDealEligibleForConfirmedTotals,
+    normalizePersonnelName
+} from '../../services/commissionService';
 import { 
     Trophy, 
     TrendingUp, 
@@ -28,14 +34,15 @@ interface CommissionSalesAnalyticsProps {
     deals: CommissionDeal[];
     currencyUnit: 'RIAL' | 'TOMAN';
     activePeriodName: string;
+    settings?: CommissionSettings;
 }
 
 export interface SalesPersonMetric {
     name: string;
-    totalDealsCount: number; // تعداد کل معاملات (با تسهیم ۵۰٪)
+    totalDealsCount: number; // تعداد کل معاملات (با تسهیم مشارکت‌کنندگان)
     totalSalesVolume: number; // حجم کل فروش ریالی
     companyGrossProfit: number; // سود ناخالص ایجاد شده برای شرکت
-    earnedCommission: number; // کل پورسانت تعلق گرفته به مشاور
+    earnedCommission: number; // کل پورسانت قطعی تعلق گرفته به مشاور
     netCompanyGain: number; // سود خالص شرکت پس از کسر پورسانت
     profitToCommissionRatio: number; // نسبت سودآوری (چند برابر پورسانت برای شرکت سود ایجاد شده)
     anbarSales: number;
@@ -51,10 +58,12 @@ export interface SalesPersonMetric {
 export const CommissionSalesAnalytics: React.FC<CommissionSalesAnalyticsProps> = ({
     deals,
     currencyUnit,
-    activePeriodName
+    activePeriodName,
+    settings: customSettings
 }) => {
     const divisor = currencyUnit === 'TOMAN' ? 10 : 1;
     const unitLabel = currencyUnit === 'TOMAN' ? 'تومان' : 'ریال';
+    const settings = customSettings || getCommissionSettings();
 
     const [sortBy, setSortBy] = useState<'profit' | 'volume' | 'count' | 'commission'>('profit');
     const [searchQuery, setSearchQuery] = useState('');
@@ -91,7 +100,8 @@ export const CommissionSalesAnalytics: React.FC<CommissionSalesAnalyticsProps> =
             carModels: Record<string, number>;
         }> = {};
 
-        const getOrCreate = (name: string) => {
+        const getOrCreate = (rawName: string) => {
+            const name = normalizePersonnelName(rawName) || 'نامشخص';
             if (!map[name]) {
                 map[name] = {
                     name,
@@ -113,22 +123,25 @@ export const CommissionSalesAnalytics: React.FC<CommissionSalesAnalyticsProps> =
         // Initialize known staff
         ALL_KNOWN_STAFF.forEach(name => getOrCreate(name));
 
-        // Process all deals
+        // Process confirmed deals
         deals.forEach(deal => {
-            const rawPersons = deal.sharedPersons && deal.sharedPersons.length > 0
-                ? deal.sharedPersons
-                : parseSalesPersons(deal.salesPerson);
+            const elig = isDealEligibleForConfirmedTotals(deal, settings);
+            if (!elig.eligible) return;
 
-            const staffList = rawPersons.length > 0 ? rawPersons : [deal.salesPerson || 'نامشخص'];
-            const shareFactor = 1 / staffList.length;
+            const partInfo = getDealParticipantInfo(deal, deals);
+            const staffList = partInfo.rowParticipants.length > 0
+                ? partInfo.rowParticipants
+                : [normalizePersonnelName(deal.salesPerson) || 'نامشخص'];
+            const shareFactor = 1 / Math.max(1, partInfo.participantCount);
 
             const dealSales = (deal.salePrice || deal.downPayment || 0) * shareFactor;
             const dealProfit = (deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0)) * shareFactor;
-            const dealComm = (deal.commissionAmount || 0) * shareFactor;
             const category = deal.category || 'ANBAR';
 
             staffList.forEach(staffName => {
                 const item = getOrCreate(staffName);
+                const dealComm = getPersonCommissionShareForDeal(deal, staffName, deals, settings);
+
                 item.dealsCount += shareFactor;
                 item.salesVolume += dealSales;
                 item.grossProfit += dealProfit;

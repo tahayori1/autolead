@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { CommissionDeal, CommissionCategory, CommissionPaymentStatus, CommissionPeriod } from '../../types';
+import {
+    calculateDealFinancials,
+    detectHardDeal,
+    detectUnrealisticPurchasePrice,
+    getCommissionSettings,
+    normalizePersonnelName,
+    parseSalesPersons,
+    recalculateDealsWithSettings
+} from '../../services/commissionService';
 import { 
     X, 
     Upload, 
@@ -46,6 +55,7 @@ interface SheetColumn {
 }
 
 interface FieldMappingConfig {
+    transactionIdCol: number;
     salesPersonCol: number;
     customerNameCol: number;
     sellerNameCol: number;
@@ -218,6 +228,7 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
     const createInitialMapping = (columns: SheetColumn[], headerRowIndex: number): FieldMappingConfig => {
         return {
             headerRowIndex,
+            transactionIdCol: detectBestColumn(columns, ['شناسه', 'transaction_id', 'transaction', 'کد معامله', 'کد پیگیری'], -1),
             salesPersonCol: detectBestColumn(columns, ['پرسنل', 'مشاور', 'کارشناس', 'فروشنده', 'مسئول'], 3),
             customerNameCol: detectBestColumn(columns, ['مشتری', 'خریدار', 'متقاضی', 'طرف حساب'], 4),
             sellerNameCol: detectBestColumn(columns, ['فروشنده', 'مالک', 'صاحب'], 14),
@@ -267,7 +278,8 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                 return row[colIdx] !== undefined && row[colIdx] !== null ? row[colIdx] : '';
             };
 
-            const salesPersonRaw = String(getCell(mapping.salesPersonCol) || '').trim();
+            const txIdVal = String(getCell(mapping.transactionIdCol) || '').trim();
+            const salesPersonRaw = normalizePersonnelName(String(getCell(mapping.salesPersonCol) || ''));
             const customerName = String(getCell(mapping.customerNameCol) || '').trim();
             const sellerName = String(getCell(mapping.sellerNameCol) || '').trim();
             const carModel = String(getCell(mapping.carModelCol) || '').trim();
@@ -281,60 +293,42 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                 continue;
             }
 
-            let salesPerson = salesPersonRaw || 'تیم فروش عمومی';
-            let contractWriter = '';
-            let sharedPersons: string[] = [];
-
-            if (salesPersonRaw.includes('/')) {
-                const parts = salesPersonRaw.split('/').map(p => p.trim());
-                salesPerson = parts[0].replace('قولنامه', '').trim();
-                if (parts[1]) {
-                    contractWriter = parts[1].replace('قولنامه', '').trim();
-                    sharedPersons = [salesPerson, contractWriter].filter(Boolean);
-                }
-            } else if (salesPersonRaw.includes(' و ')) {
-                const parts = salesPersonRaw.split(' و ').map(p => p.trim());
-                if (parts.length > 1) {
-                    sharedPersons = parts;
-                    salesPerson = parts.join(' و ');
-                }
-            }
+            const parsedStaff = parseSalesPersons(salesPersonRaw);
+            const salesPerson = parsedStaff.length > 0 ? parsedStaff.join(' / ') : (salesPersonRaw || '');
+            const sharedPersons = parsedStaff.length > 1 ? parsedStaff : undefined;
 
             const purchaseDate = parseExcelDate(getCell(mapping.purchaseDateCol), defaultDatePrefix);
             const saleDate = parseExcelDate(getCell(mapping.saleDateCol), defaultDatePrefix);
-
-            let dailyProfitLoss = cleanNumber(getCell(mapping.dailyProfitLossCol));
-            if (dailyProfitLoss === 0 && salePrice > 0 && dailyPrice > 0) {
-                dailyProfitLoss = salePrice - dailyPrice;
-            }
-
-            const grossProfit = cleanNumber(getCell(mapping.grossProfitCol)) || 
-                (salePrice > 0 && purchasePrice > 0 ? (salePrice - purchasePrice) : 0);
-
-            let commissionRate = category === 'ANBAR' ? 0.05 : (category === 'AZAD' ? 10 : (category === 'LEASING' ? 0.1 : 0.05));
-            if (dailyProfitLoss < 0) {
-                commissionRate = 0.25;
-            }
-
-            let commissionAmount = cleanNumber(getCell(mapping.commissionAmountCol));
-            if (commissionAmount === 0) {
-                if (dailyProfitLoss < 0) {
-                    commissionAmount = Math.round(salePrice * 0.0025);
-                } else if (category === 'AZAD') {
-                    commissionAmount = Math.round(grossProfit * (commissionRate / 100));
-                } else {
-                    commissionAmount = Math.round(salePrice * (commissionRate / 100));
-                }
-            }
-
             const notesVal = String(getCell(mapping.paymentNotesCol) || '').trim();
+
+            const settings = getCommissionSettings();
+            const downPaymentVal = (category === 'LEASING' || category === 'REGISTRATION') ? salePrice : undefined;
+            const calc = calculateDealFinancials(
+                category,
+                {
+                    salePrice,
+                    purchasePrice,
+                    dailyPrice,
+                    nextBasketAmount,
+                    downPayment: downPaymentVal,
+                    participantCount: Math.max(1, parsedStaff.length),
+                    paymentNotes: notesVal,
+                    carModel
+                },
+                settings
+            );
+
+            const explicitComm = cleanNumber(getCell(mapping.commissionAmountCol));
+            const finalComm = explicitComm > 0 ? explicitComm : calc.commissionAmount;
+
             let paymentStatus: CommissionPaymentStatus = 'PENDING';
             if (notesVal.includes('واریز شد') || notesVal.includes('تسویه') || notesVal.includes('پرداخت شد')) {
                 paymentStatus = 'PAID';
             }
 
             deals.push({
-                id: `xlsx-${sheetName}-${Date.now()}-${r}-${Math.random().toString(36).substr(2, 5)}`,
+                id: `xlsx-${sheetName}-${Date.now()}-${r}-${Math.random().toString(36).slice(2, 7)}`,
+                transactionId: txIdVal || undefined,
                 category,
                 rowNumber: deals.length + 1,
                 periodId: selectedTargetPeriodId,
@@ -342,26 +336,34 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
                 purchaseDate: purchaseDate || undefined,
                 saleDate,
                 salesPerson,
-                contractWriter: contractWriter || undefined,
-                sharedPersons: sharedPersons.length > 0 ? sharedPersons : undefined,
+                sharedPersons,
                 customerName: customerName || 'مشتری بدون نام',
                 sellerName: sellerName || undefined,
                 carModel: carModel || 'خودرو متفرقه',
                 purchasePrice: purchasePrice || undefined,
                 dailyPrice: dailyPrice || undefined,
                 salePrice: salePrice || 0,
-                downPayment: category === 'LEASING' || category === 'REGISTRATION' ? salePrice : undefined,
+                downPayment: downPaymentVal,
                 nextBasketAmount: nextBasketAmount || undefined,
-                dailyProfitLoss: dailyProfitLoss || undefined,
-                grossProfit: grossProfit || undefined,
-                commissionRate,
-                commissionAmount,
+                dailyProfitLoss: calc.dailyProfitLoss,
+                grossProfit: calc.grossProfit,
+                oldCommissionAmount: calc.oldCommissionAmount,
+                incentiveBonusAmount: calc.incentiveBonusAmount,
+                commissionRate: calc.effectiveRate,
+                commissionAmount: finalComm,
+                perPersonCommission: Math.round(finalComm / Math.max(1, parsedStaff.length)),
+                tenPercentCommission: Math.round((finalComm / Math.max(1, parsedStaff.length)) * 0.10),
+                isHardDeal: detectHardDeal({ paymentNotes: notesVal, carModel }),
+                isUnrealisticPurchasePrice: detectUnrealisticPurchasePrice({ paymentNotes: notesVal }),
+                isDraftLeasing: calc.isDraftLeasing,
+                isManualCommission: explicitComm > 0 && explicitComm !== calc.commissionAmount,
                 paymentStatus,
                 paymentNotes: notesVal || undefined
             });
         }
 
-        return deals;
+        // Re-link any continuation rows sharing the same transactionId
+        return recalculateDealsWithSettings(deals, getCommissionSettings());
     };
 
     // Recompute detected sheets from rawSheets
@@ -556,6 +558,7 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
     const activeDetectedSheet = detectedSheets[activePreviewSheetIndex];
 
     const systemFields = [
+        { key: 'transactionIdCol' as const, label: 'شناسه معامله (Transaction ID)', required: false, desc: 'اتصال ردیف‌های همکار یک معامله' },
         { key: 'salesPersonCol' as const, label: 'نام پرسنل فروش / مشاور', required: true, desc: 'مشاور، کارشناس، تیم فروش' },
         { key: 'customerNameCol' as const, label: 'نام مشتری / خریدار', required: true, desc: 'خریدار یا متقاضی خودرو' },
         { key: 'carModelCol' as const, label: 'مدل خودرو', required: true, desc: 'خودرو، تیپ، سیستم' },
@@ -566,10 +569,10 @@ export const CommissionExcelImportModal: React.FC<CommissionExcelImportModalProp
         { key: 'purchaseDateCol' as const, label: 'تاریخ خرید', required: false, desc: 'تاریخ خرید خودرو' },
         { key: 'commissionAmountCol' as const, label: 'پورسانت (در صورت وجود)', required: false, desc: 'در صورت خالی بودن خودکار محاسبه می‌شود' },
         { key: 'sellerNameCol' as const, label: 'نام فروشنده / مالک', required: false, desc: 'مالک قبلی خودرو' },
-        { key: 'dailyProfitLossCol' as const, label: 'سود و زیان روز', required: false, desc: 'اختلاف قیمت فروش و روز' },
-        { key: 'grossProfitCol' as const, label: 'کمیسیون کل / سود ناخالص', required: false, desc: 'سود ناخالص فروش آزاد' },
-        { key: 'paymentNotesCol' as const, label: 'توضیحات و وضعیت واریز', required: false, desc: 'واریز شد، علی‌الحساب و...' },
-        { key: 'nextBasketAmountCol' as const, label: 'مبلغ سبد بعدی (حواله)', required: false, desc: 'ویژه شیت حواله' }
+        { key: 'dailyProfitLossCol' as const, label: 'سود و زیان روز', required: false, desc: 'اختلاف قیمت فروش و خرید' },
+        { key: 'grossProfitCol' as const, label: 'سود معامله', required: false, desc: 'سود فروش آزاد' },
+        { key: 'paymentNotesCol' as const, label: 'توضیحات و وضعیت واریز', required: false, desc: 'معاملات سخت، نرخ غیرواقعی، واریز شد' },
+        { key: 'nextBasketAmountCol' as const, label: 'مبلغ سبد بعدی (حواله)', required: false, desc: 'صرفاً اطلاعاتی در شیت حواله' }
     ];
 
     return (

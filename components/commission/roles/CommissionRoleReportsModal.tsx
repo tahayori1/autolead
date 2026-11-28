@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { CommissionDeal, CommissionPeriod } from '../../../types';
-import { parseSalesPersons } from '../../../services/commissionService';
+import { CommissionDeal, CommissionPeriod, CommissionSettings } from '../../../types';
+import {
+    getCommissionSettings,
+    getDealParticipantInfo,
+    getPersonCommissionShareForDeal,
+    isDealEligibleForConfirmedTotals,
+    normalizePersonnelName
+} from '../../../services/commissionService';
 import { exportFullCommissionWorkbook } from '../../../services/commissionExcelExport';
 import { 
     X, 
@@ -19,7 +25,7 @@ import {
     Download
 } from 'lucide-react';
 
-export type ReportRoleType = 'CEO' | 'SALES_MANAGER' | 'STAFF';
+export type ReportRoleType = 'CEO' | 'SALES_MANAGER' | 'STAFF' | 'FINANCE';
 
 interface CommissionRoleReportsModalProps {
     isOpen: boolean;
@@ -31,6 +37,7 @@ interface CommissionRoleReportsModalProps {
     allDeals?: CommissionDeal[];
     currencyUnit: 'RIAL' | 'TOMAN';
     targetStaffName?: string;
+    settings?: CommissionSettings;
 }
 
 export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProps> = ({
@@ -42,8 +49,10 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
     deals,
     allDeals = deals,
     currencyUnit,
-    targetStaffName = 'درسا محمدی'
+    targetStaffName = 'درسا محمدی',
+    settings: customSettings
 }) => {
+    const settings = customSettings || getCommissionSettings();
     // Multi-period state
     const [selectedPeriodIds, setSelectedPeriodIds] = useState<string[]>(activePeriod.id ? [activePeriod.id] : (allPeriods.length > 0 ? [allPeriods[0].id] : []));
 
@@ -82,8 +91,11 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
         }
     };
 
-    // Filter deals matching the selected periods
-    const currentDeals = allDeals.filter(d => selectedPeriodIds.includes(d.periodId));
+    // Filter deals matching the selected periods & eligibility
+    const currentDeals = allDeals.filter(d =>
+        selectedPeriodIds.includes(d.periodId) &&
+        isDealEligibleForConfirmedTotals(d, settings).eligible
+    );
 
     // Summary calculations across selected periods
     let totalSales = 0;
@@ -105,40 +117,43 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
         netPayable: number;
     }> = {};
 
-    // Combine adjustments for selected periods
+    // Combine adjustments for selected periods with normalized keys
     const combinedAdjustments: Record<string, { bonus: number; deductions: number }> = {};
     allPeriods.filter(p => selectedPeriodIds.includes(p.id)).forEach(p => {
         if (p.adjustments) {
             Object.entries(p.adjustments).forEach(([staff, adj]) => {
-                if (!combinedAdjustments[staff]) {
-                    combinedAdjustments[staff] = { bonus: 0, deductions: 0 };
+                const normStaff = normalizePersonnelName(staff);
+                if (!normStaff) return;
+                if (!combinedAdjustments[normStaff]) {
+                    combinedAdjustments[normStaff] = { bonus: 0, deductions: 0 };
                 }
-                const typedAdj = adj as { bonus?: number; deductions?: number } | undefined;
+                const typedAdj = adj as { bonus?: number; deductions?: number; gift?: number; ceremony?: number } | undefined;
                 if (typedAdj) {
-                    combinedAdjustments[staff].bonus += (typedAdj.bonus || 0);
-                    combinedAdjustments[staff].deductions += (typedAdj.deductions || 0);
+                    combinedAdjustments[normStaff].bonus += (typedAdj.bonus || 0) + (typedAdj.gift || 0) + (typedAdj.ceremony || 0);
+                    combinedAdjustments[normStaff].deductions += (typedAdj.deductions || 0);
                 }
             });
         }
     });
 
     currentDeals.forEach(deal => {
-        const rawPersons = deal.sharedPersons && deal.sharedPersons.length > 0 
-            ? deal.sharedPersons 
-            : parseSalesPersons(deal.salesPerson);
-        const staffList = rawPersons.length > 0 ? rawPersons : [deal.salesPerson || 'نامشخص'];
-        const share = 1 / staffList.length;
+        const partInfo = getDealParticipantInfo(deal, currentDeals);
+        const staffList = partInfo.rowParticipants.length > 0
+            ? partInfo.rowParticipants
+            : [normalizePersonnelName(deal.salesPerson) || 'نامشخص'];
+        const share = 1 / Math.max(1, partInfo.participantCount);
 
         const s = (deal.salePrice || deal.downPayment || 0) * share;
         const p = (deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0)) * share;
-        const c = (deal.commissionAmount || 0) * share;
         const cat = deal.category || 'ANBAR';
 
         totalSales += s * staffList.length;
         totalGrossProfit += p * staffList.length;
-        totalCommission += c * staffList.length;
+        totalCommission += (deal.commissionAmount || 0);
 
-        staffList.forEach(name => {
+        staffList.forEach(rawName => {
+            const name = normalizePersonnelName(rawName) || 'نامشخص';
+            const personComm = getPersonCommissionShareForDeal(deal, name, currentDeals, settings);
             if (!staffMap[name]) {
                 const adj = combinedAdjustments[name] || { bonus: 0, deductions: 0 };
                 staffMap[name] = {
@@ -161,13 +176,13 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
             staffMap[name].dealsCount += share;
             staffMap[name].salesVolume += s;
             staffMap[name].grossProfit += p;
-            staffMap[name].commission += c;
+            staffMap[name].commission += personComm;
 
-            if (cat === 'ANBAR') staffMap[name].anbar += c;
-            else if (cat === 'AZAD') staffMap[name].azad += c;
-            else if (cat === 'HAVALEH') staffMap[name].havaleh += c;
-            else if (cat === 'LEASING') staffMap[name].leasing += c;
-            else if (cat === 'REGISTRATION') staffMap[name].registration += c;
+            if (cat === 'ANBAR') staffMap[name].anbar += personComm;
+            else if (cat === 'AZAD') staffMap[name].azad += personComm;
+            else if (cat === 'HAVALEH') staffMap[name].havaleh += personComm;
+            else if (cat === 'LEASING') staffMap[name].leasing += personComm;
+            else if (cat === 'REGISTRATION') staffMap[name].registration += personComm;
         });
     });
 
@@ -176,8 +191,9 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
         return item;
     }).sort((a, b) => b.netPayable - a.netPayable);
 
-    const targetStaffData = staffMap[targetStaffName] || {
-        name: targetStaffName,
+    const normTargetStaff = normalizePersonnelName(targetStaffName);
+    const targetStaffData = staffMap[normTargetStaff] || {
+        name: normTargetStaff || targetStaffName,
         dealsCount: 0,
         salesVolume: 0,
         grossProfit: 0,
@@ -191,8 +207,6 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
         deductions: 0,
         netPayable: 0
     };
-
-    const targetStaffDeals = currentDeals.filter(d => (d.salesPerson || '').includes(targetStaffName));
 
     const selectedPeriodNames = allPeriods
         .filter(p => selectedPeriodIds.includes(p.id))
@@ -211,6 +225,7 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
                             پیش‌نمایش سند رسمی چاپی • {
                                 reportType === 'CEO' ? 'گزارش راهبردی مدیرعامل' :
                                 reportType === 'SALES_MANAGER' ? 'گزارش ارزیابی عملکرد مدیر فروش' :
+                                reportType === 'FINANCE' ? 'سند دستور واریز مالی' :
                                 `فیش حقوقی و پورسانت (${targetStaffName})`
                             }
                         </h2>
@@ -222,7 +237,8 @@ export const CommissionRoleReportsModal: React.FC<CommissionRoleReportsModalProp
                                 exportFullCommissionWorkbook({
                                     deals: allDeals,
                                     periods: allPeriods,
-                                    activePeriodId: selectedPeriodIds.length === 1 ? selectedPeriodIds[0] : undefined
+                                    activePeriodId: selectedPeriodIds.length === 1 ? selectedPeriodIds[0] : undefined,
+                                    settings
                                 });
                             }}
                             className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 transition-all"

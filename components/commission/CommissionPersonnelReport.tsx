@@ -1,26 +1,30 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { CommissionDeal, CommissionPeriod, CommissionCategory } from '../../types';
-import { parseSalesPersons } from '../../services/commissionService';
-import { 
-    Users, 
-    Award, 
-    TrendingUp, 
-    DollarSign, 
-    CheckCircle2, 
-    Clock, 
-    Gift, 
-    MinusCircle, 
-    PlusCircle,
+import {
+    CommissionDeal,
+    CommissionSettings,
+    CommissionPayoutAdjustmentItem
+} from '../../types';
+import {
+    buildPersonnelFinalAndPayoutSummary,
+    formatDecimalPercentLabel,
+    getCommissionSettings,
+    normalizePersonnelName,
+    PersonnelFinalRow
+} from '../../services/commissionService';
+import {
+    Award,
     Edit3,
     Printer,
     FileSpreadsheet,
-    Layers,
     Eye,
     X,
-    FileText,
     Building,
-    Download
+    Download,
+    AlertTriangle,
+    Coins,
+    Wallet,
+    Gift
 } from 'lucide-react';
 
 interface CommissionPersonnelReportProps {
@@ -28,27 +32,11 @@ interface CommissionPersonnelReportProps {
     currencyUnit: 'RIAL' | 'TOMAN';
     activePeriodName: string;
     activePeriodId: string;
-    periodAdjustments?: Record<string, { bonus: number; deductions: number; notes?: string }>;
-    onSaveAdjustments?: (adjustments: Record<string, { bonus: number; deductions: number; notes?: string }>) => void;
-}
-
-interface PersonnelRow {
-    name: string;
-    anbarCommission: number;
-    azadCommission: number;
-    havalehCommission: number;
-    leasingCommission: number;
-    registrationCommission: number;
-    totalDealsCount: number;
-    totalSalesVolume: number;
-    grossCommission: number; // جمع کل پورسانت‌ها قبل از تعدیلات
-    bonus: number; // پاداش (+)
-    deductions: number; // کسورات (-)
-    netPayable: number; // خالص پرداختی
-    paidAmount: number;
-    remainingAmount: number;
-    cars: string[];
-    dealsList: CommissionDeal[];
+    periodAdjustments?: Record<string, { bonus: number; deductions: number; gift?: number; ceremony?: number; notes?: string }>;
+    onSaveAdjustments?: (adjustments: Record<string, { bonus: number; deductions: number; gift?: number; ceremony?: number; notes?: string }>) => void;
+    periodPayoutExtras?: Record<string, CommissionPayoutAdjustmentItem>;
+    onSavePayoutExtras?: (extras: Record<string, CommissionPayoutAdjustmentItem>) => void;
+    settings?: CommissionSettings;
 }
 
 export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps> = ({
@@ -57,194 +45,69 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
     activePeriodName,
     activePeriodId,
     periodAdjustments = {},
-    onSaveAdjustments
+    onSaveAdjustments,
+    periodPayoutExtras = {},
+    onSavePayoutExtras,
+    settings: customSettings
 }) => {
     const divisor = currencyUnit === 'TOMAN' ? 10 : 1;
     const unitLabel = currencyUnit === 'TOMAN' ? 'تومان' : 'ریال';
+    const settings = customSettings || getCommissionSettings();
 
-    // Local adjustments state
-    const [adjustments, setAdjustments] = useState<Record<string, { bonus: number; deductions: number; notes?: string }>>(periodAdjustments);
+    const [subTab, setSubTab] = useState<'NAHAYI' | 'PAYOUT' | 'KARANEH'>('NAHAYI');
+
+    // Local adjustments state (synced with props)
+    const [adjustments, setAdjustments] = useState<Record<string, { bonus: number; deductions: number; gift?: number; ceremony?: number; notes?: string }>>(periodAdjustments);
+    const [payoutExtras, setPayoutExtras] = useState<Record<string, CommissionPayoutAdjustmentItem>>(periodPayoutExtras);
+
+    useEffect(() => {
+        setAdjustments(periodAdjustments || {});
+    }, [periodAdjustments, activePeriodId]);
+
+    useEffect(() => {
+        setPayoutExtras(periodPayoutExtras || {});
+    }, [periodPayoutExtras, activePeriodId]);
+
+    // Edit Nahayi Adjustment modal
     const [editingStaff, setEditingStaff] = useState<string | null>(null);
+    const [editGift, setEditGift] = useState<number | ''>('');
+    const [editCeremony, setEditCeremony] = useState<number | ''>('');
     const [editBonus, setEditBonus] = useState<number | ''>('');
     const [editDeductions, setEditDeductions] = useState<number | ''>('');
     const [editNotes, setEditNotes] = useState('');
 
-    // Selected staff for viewing individual payslip
-    const [viewingPayslipStaff, setViewingPayslipStaff] = useState<PersonnelRow | null>(null);
+    // Edit Payout Extras modal
+    const [editingPayoutStaff, setEditingPayoutStaff] = useState<string | null>(null);
+    const [poGift, setPoGift] = useState<number | ''>('');
+    const [poCeremony, setPoCeremony] = useState<number | ''>('');
+    const [poT9Backlog, setPoT9Backlog] = useState<number | ''>('');
+    const [poOption, setPoOption] = useState<number | ''>('');
+    const [poLateReg, setPoLateReg] = useState<number | ''>('');
+    const [poOther, setPoOther] = useState<number | ''>('');
+    const [poNotes, setPoNotes] = useState('');
 
-    // Predefined staff list matching company personnel (from Excel final sheet)
-    const ALL_KNOWN_STAFF = [
-        'درسا محمدی',
-        'محمد مبین غلامی',
-        'ندا قاسمی',
-        'طرلان منوچهری',
-        'عرشیا عسکری',
-        'شبنم کشاورز',
-        'امین رضا موسوی اصل',
-        'مرضیه ایران نژاد',
-        'هیلدا منوچهری',
-        'محسن موسوی',
-        'مریم یوسفی',
-        'زهرا زارع'
-    ];
+    // Payslip modal
+    const [viewingPayslipStaff, setViewingPayslipStaff] = useState<PersonnelFinalRow | null>(null);
 
-    // Compute aggregated personnel commissions with 50/50 shared deals handling
-    const personnelData = useMemo<PersonnelRow[]>(() => {
-        const map: Record<string, PersonnelRow> = {};
-
-        // Helper to get or create staff row
-        const getStaffRow = (name: string): PersonnelRow => {
-            if (!map[name]) {
-                const adj = adjustments[name] || { bonus: 0, deductions: 0, notes: '' };
-                map[name] = {
-                    name,
-                    anbarCommission: 0,
-                    azadCommission: 0,
-                    havalehCommission: 0,
-                    leasingCommission: 0,
-                    registrationCommission: 0,
-                    totalDealsCount: 0,
-                    totalSalesVolume: 0,
-                    grossCommission: 0,
-                    bonus: adj.bonus || 0,
-                    deductions: adj.deductions || 0,
-                    netPayable: 0,
-                    paidAmount: 0,
-                    remainingAmount: 0,
-                    cars: [],
-                    dealsList: []
-                };
-            }
-            return map[name];
-        };
-
-        // Initialize known staff
-        ALL_KNOWN_STAFF.forEach(staffName => {
-            getStaffRow(staffName);
-        });
-
-        // Special seed case from Excel: ندا قاسمی received 5,837,500 Rials from Anbar
-        if (map['ندا قاسمی'] && !deals.some(d => d.salesPerson?.includes('ندا قاسمی') && d.category === 'ANBAR')) {
-            map['ندا قاسمی'].anbarCommission += 5837500;
-            map['ندا قاسمی'].paidAmount += 5837500;
-        }
-
-        // Process all deals in current period
-        deals.forEach(deal => {
-            const rawPersons = deal.sharedPersons && deal.sharedPersons.length > 0 
-                ? deal.sharedPersons 
-                : parseSalesPersons(deal.salesPerson);
-
-            const staffList = rawPersons.length > 0 ? rawPersons : [deal.salesPerson || 'نامشخص'];
-            const shareFactor = 1 / staffList.length; // 1.0 for single, 0.5 for 2 shared persons
-
-            const dealComm = deal.commissionAmount || 0;
-            const dealSales = (deal.salePrice || deal.downPayment || 0) * shareFactor;
-            const shareComm = Math.round(dealComm * shareFactor);
-            const category = deal.category || 'ANBAR';
-
-            staffList.forEach(staffName => {
-                const row = getStaffRow(staffName);
-                row.totalDealsCount += shareFactor;
-                row.totalSalesVolume += dealSales;
-                row.dealsList.push(deal);
-
-                // Use custom commission for this person if defined in multi-partner manual split
-                const personComm = (deal.customPersonCommissions && deal.customPersonCommissions[staffName] !== undefined)
-                    ? deal.customPersonCommissions[staffName]
-                    : shareComm;
-
-                if (category === 'ANBAR') row.anbarCommission += personComm;
-                else if (category === 'AZAD') row.azadCommission += personComm;
-                else if (category === 'HAVALEH') row.havalehCommission += personComm;
-                else if (category === 'LEASING') row.leasingCommission += personComm;
-                else if (category === 'REGISTRATION') row.registrationCommission += personComm;
-                else row.anbarCommission += personComm;
-
-                if (deal.paymentStatus === 'PAID') {
-                    row.paidAmount += personComm;
-                } else if (deal.paymentStatus === 'PARTIAL' && deal.paidCommissionShare) {
-                    row.paidAmount += Math.round(deal.paidCommissionShare * shareFactor);
-                }
-
-                if (deal.carModel && !row.cars.includes(deal.carModel)) {
-                    row.cars.push(deal.carModel);
-                }
-            });
-        });
-
-        // Compute Totals and Net Payables
-        return Object.values(map).map(row => {
-            const adj = adjustments[row.name] || { bonus: 0, deductions: 0 };
-            row.bonus = adj.bonus || 0;
-            row.deductions = adj.deductions || 0;
-
-            row.grossCommission = 
-                row.anbarCommission + 
-                row.azadCommission + 
-                row.havalehCommission + 
-                row.leasingCommission + 
-                row.registrationCommission;
-
-            // خالص پرداختی = (پورسانت کل + پاداش) - کسورات
-            row.netPayable = Math.max(0, (row.grossCommission + row.bonus) - row.deductions);
-            row.remainingAmount = Math.max(0, row.netPayable - row.paidAmount);
-
-            return row;
-        }).sort((a, b) => b.netPayable - a.netPayable);
-    }, [deals, adjustments]);
-
-    // Grand Totals across all personnel
-    const grandTotals = useMemo(() => {
-        return personnelData.reduce((acc, curr) => ({
-            anbar: acc.anbar + curr.anbarCommission,
-            azad: acc.azad + curr.azadCommission,
-            havaleh: acc.havaleh + curr.havalehCommission,
-            leasing: acc.leasing + curr.leasingCommission,
-            registration: acc.registration + curr.registrationCommission,
-            gross: acc.gross + curr.grossCommission,
-            bonus: acc.bonus + curr.bonus,
-            deductions: acc.deductions + curr.deductions,
-            net: acc.net + curr.netPayable,
-            paid: acc.paid + curr.paidAmount,
-            remaining: acc.remaining + curr.remainingAmount,
-        }), {
-            anbar: 0,
-            azad: 0,
-            havaleh: 0,
-            leasing: 0,
-            registration: 0,
-            gross: 0,
-            bonus: 0,
-            deductions: 0,
-            net: 0,
-            paid: 0,
-            remaining: 0
-        });
-    }, [personnelData]);
-
-    // Azad Karaneh Calculation for the whole period: (مجموع کمیسیون آزاد - جمع پورسانت آزاد) ÷ ۲۵
-    const azadKaranehStats = useMemo(() => {
-        const azadDeals = deals.filter(d => d.category === 'AZAD');
-        const totalAzadSales = azadDeals.reduce((sum, d) => sum + (d.salePrice || 0), 0);
-        const totalAzadGross = azadDeals.reduce((sum, d) => sum + (d.grossProfit || 0), 0);
-        const totalAzadComm = azadDeals.reduce((sum, d) => sum + (d.commissionAmount || 0), 0);
-        const surplus = totalAzadGross - totalAzadComm;
-        const karaneh = Math.round(surplus / 25);
-        return {
-            count: azadDeals.length,
-            totalSales: Math.round(totalAzadSales / divisor),
-            totalGross: Math.round(totalAzadGross / divisor),
-            totalComm: Math.round(totalAzadComm / divisor),
-            surplus: Math.round(surplus / divisor),
-            karaneh: Math.round(karaneh / divisor),
-            formulaText: `(کمیسیون [${Math.round(totalAzadGross / divisor).toLocaleString('fa-IR')}] - پورسانت [${Math.round(totalAzadComm / divisor).toLocaleString('fa-IR')}]) ÷ ۲۵`
-        };
-    }, [deals, divisor]);
+    const summary = useMemo(() => {
+        return buildPersonnelFinalAndPayoutSummary(
+            deals,
+            {
+                id: activePeriodId,
+                title: activePeriodName,
+                adjustments,
+                payoutExtras
+            },
+            settings
+        );
+    }, [deals, activePeriodId, activePeriodName, adjustments, payoutExtras, settings]);
 
     const handleOpenEditAdjustment = (staffName: string) => {
-        const current = adjustments[staffName] || { bonus: 0, deductions: 0, notes: '' };
-        setEditingStaff(staffName);
+        const norm = normalizePersonnelName(staffName);
+        const current = adjustments[norm] || adjustments[staffName] || { bonus: 0, deductions: 0, gift: 0, ceremony: 0, notes: '' };
+        setEditingStaff(norm);
+        setEditGift(current.gift ? Math.round(current.gift / divisor) : '');
+        setEditCeremony(current.ceremony ? Math.round(current.ceremony / divisor) : '');
         setEditBonus(current.bonus ? Math.round(current.bonus / divisor) : '');
         setEditDeductions(current.deductions ? Math.round(current.deductions / divisor) : '');
         setEditNotes(current.notes || '');
@@ -254,14 +117,13 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
         e.preventDefault();
         if (!editingStaff) return;
 
-        const bonusVal = editBonus !== '' ? Number(editBonus) * divisor : 0;
-        const deductionsVal = editDeductions !== '' ? Number(editDeductions) * divisor : 0;
-
         const updated = {
             ...adjustments,
             [editingStaff]: {
-                bonus: bonusVal,
-                deductions: deductionsVal,
+                gift: editGift !== '' ? Number(editGift) * divisor : 0,
+                ceremony: editCeremony !== '' ? Number(editCeremony) * divisor : 0,
+                bonus: editBonus !== '' ? Number(editBonus) * divisor : 0,
+                deductions: editDeductions !== '' ? Number(editDeductions) * divisor : 0,
                 notes: editNotes.trim()
             }
         };
@@ -271,278 +133,332 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
         setEditingStaff(null);
     };
 
+    const handleOpenEditPayoutExtras = (staffName: string) => {
+        const norm = normalizePersonnelName(staffName);
+        const cur = payoutExtras[norm] || payoutExtras[staffName] || {};
+        setEditingPayoutStaff(norm);
+        setPoGift(cur.gift ? Math.round(cur.gift / divisor) : '');
+        setPoCeremony(cur.ceremony ? Math.round(cur.ceremony / divisor) : '');
+        setPoT9Backlog(cur.t9Backlog ? Math.round(cur.t9Backlog / divisor) : '');
+        setPoOption(cur.optionCommission ? Math.round(cur.optionCommission / divisor) : '');
+        setPoLateReg(cur.lateRegistration ? Math.round(cur.lateRegistration / divisor) : '');
+        setPoOther(cur.other ? Math.round(cur.other / divisor) : '');
+        setPoNotes(cur.notes || '');
+    };
+
+    const handleSavePayoutExtras = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingPayoutStaff) return;
+
+        const updated: Record<string, CommissionPayoutAdjustmentItem> = {
+            ...payoutExtras,
+            [editingPayoutStaff]: {
+                gift: poGift !== '' ? Number(poGift) * divisor : 0,
+                ceremony: poCeremony !== '' ? Number(poCeremony) * divisor : 0,
+                t9Backlog: poT9Backlog !== '' ? Number(poT9Backlog) * divisor : 0,
+                optionCommission: poOption !== '' ? Number(poOption) * divisor : 0,
+                lateRegistration: poLateReg !== '' ? Number(poLateReg) * divisor : 0,
+                other: poOther !== '' ? Number(poOther) * divisor : 0,
+                notes: poNotes.trim()
+            }
+        };
+
+        setPayoutExtras(updated);
+        if (onSavePayoutExtras) onSavePayoutExtras(updated);
+        setEditingPayoutStaff(null);
+    };
+
+    const handleExportExcel = () => {
+        if (summary.finalRows.length === 0) return;
+        const wb = XLSX.utils.book_new();
+
+        // 1. Sheet نهایی
+        const finalHeaders = [
+            'رتبه', 'نام پرسنل', `انبار (${unitLabel})`, `آزاد (${unitLabel})`, `حواله (${unitLabel})`,
+            `ثبت‌نام (${unitLabel})`, `لیزینگ (${unitLabel})`, `جمع پورسانت (${unitLabel})`,
+            `هدیه (${unitLabel})`, `مراسم (${unitLabel})`, `پاداش (${unitLabel})`, `کسورات (${unitLabel})`,
+            `نهایی (${unitLabel})`, 'توضیحات'
+        ];
+        const finalSheetRows = summary.finalRows.map(r => [
+            r.rank,
+            r.staffName,
+            Math.round(r.anbarCommission / divisor),
+            Math.round(r.azadCommission / divisor),
+            Math.round(r.havalehCommission / divisor),
+            Math.round(r.registrationCommission / divisor),
+            Math.round(r.leasingCommission / divisor),
+            Math.round(r.totalSheetCommission / divisor),
+            Math.round(r.giftAdjustment / divisor),
+            Math.round(r.ceremonyAdjustment / divisor),
+            Math.round(r.bonusAdjustment / divisor),
+            Math.round(r.deductionsAdjustment / divisor),
+            Math.round(r.finalCommission / divisor),
+            r.notes || ''
+        ]);
+        const wsFinal = XLSX.utils.aoa_to_sheet([finalHeaders, ...finalSheetRows]);
+        XLSX.utils.book_append_sheet(wb, wsFinal, 'نهایی');
+
+        // 2. Sheet پرداختی
+        const holdLabel = settings.payoutHoldMode === 'ADD' ? `+۱۰٪ کمسیون نهایی` : `-۱۰٪ کمسیون نهایی`;
+        const payoutHeaders = [
+            'رتبه', 'نام پرسنل', `کمسیون نهایی (${unitLabel})`, `هدیه`, `کمسیون T9`,
+            `مراسم`, `آپشن`, `ثبت‌نام معوقه`, `سایر`, holdLabel, `نهایی پرداختی (${unitLabel})`, 'توضیحات'
+        ];
+        const payoutSheetRows = summary.payoutRows.map(p => [
+            p.rank,
+            p.staffName,
+            Math.round(p.finalCommissionFromNahayi / divisor),
+            Math.round(p.gift / divisor),
+            Math.round(p.t9Backlog / divisor),
+            Math.round(p.ceremony / divisor),
+            Math.round(p.optionCommission / divisor),
+            Math.round(p.lateRegistration / divisor),
+            Math.round(p.otherExtras / divisor),
+            Math.round(p.tenPercentHold / divisor),
+            Math.round(p.finalPayable / divisor),
+            p.notes || ''
+        ]);
+        const wsPayout = XLSX.utils.aoa_to_sheet([payoutHeaders, ...payoutSheetRows]);
+        XLSX.utils.book_append_sheet(wb, wsPayout, 'پرداختی');
+
+        // 3. Sheet سهام کارانه
+        const kRows: any[][] = [
+            ['کارانه کلی (جمع نهایی آزاد)', Math.round(summary.karaneh.totalAzadFinalCommission / divisor), unitLabel],
+            ['تعداد بخش', summary.karaneh.sectionCount, 'بخش'],
+            ['کارانه هر بخش', Math.round(summary.karaneh.perSectionKaraneh / divisor), unitLabel],
+            [''],
+            ['دریافت‌کننده', 'نوع', 'درصد / مبلغ ثابت', `سهم محاسبه‌شده (${unitLabel})`]
+        ];
+        summary.karaneh.recipientShares.forEach(s => {
+            kRows.push([
+                s.recipientName,
+                s.mode === 'FIXED' ? 'مبلغ ثابت' : 'درصد از کارانه هر بخش',
+                s.mode === 'FIXED' ? Math.round(s.fixedAmount / divisor) : formatDecimalPercentLabel(s.percent),
+                Math.round(s.calculatedAmount / divisor)
+            ]);
+        });
+        const wsKaraneh = XLSX.utils.aoa_to_sheet(kRows);
+        XLSX.utils.book_append_sheet(wb, wsKaraneh, 'سهام کارانه');
+
+        XLSX.writeFile(wb, `گزارش_نهایی_پرداختی_کارانه_${activePeriodName.replace(/\s+/g, '_')}.xlsx`);
+    };
+
     return (
         <div className="space-y-6 animate-fade-in" dir="rtl">
-            
+
+            {/* Warning banners for draft Leasing or flagged unrealistic rows */}
+            {(summary.totals.draftLeasingCount > 0 || summary.totals.flaggedUnrealisticCount > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {summary.totals.draftLeasingCount > 0 && (
+                        <div className="p-3.5 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 rounded-xl text-xs text-purple-900 dark:text-purple-200 flex items-center gap-2.5">
+                            <AlertTriangle className="w-4 h-4 text-purple-600 shrink-0" />
+                            <span>
+                                <strong>{summary.totals.draftLeasingCount.toLocaleString('fa-IR')} ردیف لیزینگ</strong> به‌دلیل نامشخص/تأییدنشده بودن نرخ لیزینگ در وضعیت <strong>پیش‌نویس</strong> هستند و در جمع قطعی لحاظ نشده‌اند.
+                            </span>
+                        </div>
+                    )}
+                    {summary.totals.flaggedUnrealisticCount > 0 && (
+                        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-900 dark:text-rose-200 flex items-center gap-2.5">
+                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span>
+                                <strong>{summary.totals.flaggedUnrealisticCount.toLocaleString('fa-IR')} ردیف</strong> دارای پرچم «عدد نرخ خرید غیر واقعی است» تا زمان تأیید مدیر از محاسبه نهایی حذف شده‌اند.
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Top Stat KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total Net Commission */}
-                <div className="p-5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:bg-slate-800 rounded-3xl border border-emerald-200 dark:border-emerald-900/40">
+                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-emerald-200 dark:border-emerald-900/50">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                             <Award className="w-4 h-4 text-emerald-600" />
-                            مجموع خالص پرداختی پرسنل
+                            جمع شیت «نهایی»
                         </span>
                     </div>
-                    <div className="font-mono font-black text-2xl text-emerald-600 dark:text-emerald-400">
-                        {Math.round(grandTotals.net / divisor).toLocaleString('fa-IR')}
+                    <div className="font-mono tabular-nums font-black text-2xl text-emerald-600 dark:text-emerald-400">
+                        {Math.round(summary.totals.totalFinalCommission / divisor).toLocaleString('fa-IR')}
                         <span className="text-xs font-sans text-slate-500 mr-1.5">{unitLabel}</span>
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                        (پورسانت ۵ بخش + پاداش‌ها) - کسورات
+                    <p className="text-[11px] text-slate-400 mt-1">
+                        جمع ۵ شیت + تعدیلات (هدیه، مراسم، پاداش، کسورات)
                     </p>
                 </div>
 
-                {/* Warehouse & Free Market Share */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-indigo-200 dark:border-indigo-900/50">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-500">پورسانت فروش انبار و آزاد</span>
+                        <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-1.5">
+                            <Wallet className="w-4 h-4 text-indigo-600" />
+                            خالص شیت «پرداختی ماهانه»
+                        </span>
                     </div>
-                    <div className="font-mono font-black text-xl text-slate-800 dark:text-white">
-                        {Math.round((grandTotals.anbar + grandTotals.azad) / divisor).toLocaleString('fa-IR')}
-                        <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel}</span>
+                    <div className="font-mono tabular-nums font-black text-2xl text-indigo-600 dark:text-indigo-400">
+                        {Math.round(summary.totals.totalFinalPayable / divisor).toLocaleString('fa-IR')}
+                        <span className="text-xs font-sans text-slate-500 mr-1.5">{unitLabel}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
-                        <span>انبار: {Math.round(grandTotals.anbar / divisor).toLocaleString('fa-IR')}</span>
-                        <span>آزاد: {Math.round(grandTotals.azad / divisor).toLocaleString('fa-IR')}</span>
-                    </div>
-                </div>
-
-                {/* Havaleh & Leasing Share */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-500">پورسانت حواله و لیزینگ</span>
-                    </div>
-                    <div className="font-mono font-black text-xl text-slate-800 dark:text-white">
-                        {Math.round((grandTotals.havaleh + grandTotals.leasing) / divisor).toLocaleString('fa-IR')}
-                        <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
-                        <span>حواله: {Math.round(grandTotals.havaleh / divisor).toLocaleString('fa-IR')}</span>
-                        <span>لیزینگ: {Math.round(grandTotals.leasing / divisor).toLocaleString('fa-IR')}</span>
-                    </div>
-                </div>
-
-                {/* Total Bonuses & Deductions */}
-                <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-500">تعدیلات (پاداش / کسورات)</span>
-                    </div>
-                    <div className="font-mono font-black text-xl text-indigo-600 dark:text-indigo-400">
-                        {Math.round(grandTotals.bonus / divisor).toLocaleString('fa-IR')} +
-                        <span className="text-xs text-rose-500 mr-2">({Math.round(grandTotals.deductions / divisor).toLocaleString('fa-IR')} -)</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                        اعمال شده در کارنامه نهایی
+                    <p className="text-[11px] text-slate-400 mt-1">
+                        {settings.payoutHoldMode === 'ADD' ? 'با افزودن' : 'پس از کسر'} {formatDecimalPercentLabel(settings.payoutHoldRate ?? 0.10)} کمسیون نهایی + اقلام اضافی
                     </p>
                 </div>
-            </div>
 
-            {/* Azad Karaneh Special Information Banner */}
-            <div className="p-4 bg-gradient-to-l from-amber-500/10 via-amber-400/5 to-transparent dark:from-amber-500/15 dark:via-amber-400/5 dark:to-transparent rounded-3xl border border-amber-200 dark:border-amber-800/60 flex flex-col md:flex-row items-center justify-between gap-3 text-xs shadow-xs">
-                <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-sm">
-                        🎁
+                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-amber-200 dark:border-amber-900/50">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                            <Coins className="w-4 h-4 text-amber-600" />
+                            کارانه کلی و کارانه هر بخش
+                        </span>
                     </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h4 className="font-black text-amber-950 dark:text-amber-200 text-sm">
-                                کارانه فروش آزاد دوره ({activePeriodName})
-                            </h4>
-                            <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full font-bold">
-                                سهم ۱/۲۵ مازاد
-                            </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            فرمول: کسر جمع کل پورسانت فروش آزاد از مجموع کمیسیون فروش آزاد و تقسیم حاصله بر ۲۵
-                        </p>
+                    <div className="font-mono tabular-nums font-black text-xl text-amber-700 dark:text-amber-300">
+                        {Math.round(summary.karaneh.perSectionKaraneh / divisor).toLocaleString('fa-IR')}
+                        <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel} / بخش</span>
                     </div>
+                    <p className="text-[11px] text-slate-400 mt-1 font-mono tabular-nums">
+                        کارانه کلی آزاد: {Math.round(summary.karaneh.totalAzadFinalCommission / divisor).toLocaleString('fa-IR')} ÷ {summary.karaneh.sectionCount} بخش
+                    </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block">مازاد سود کمیسیون آزاد:</span>
-                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{azadKaranehStats.surplus.toLocaleString('fa-IR')} {unitLabel}</span>
+                <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-500">تفکیک قطعی ۵ بخش</span>
                     </div>
-                    <div className="h-8 w-px bg-amber-200 dark:bg-amber-800 hidden sm:block"></div>
-                    <div className="p-2.5 bg-amber-200/80 dark:bg-amber-800/60 rounded-2xl border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 flex items-center gap-2">
-                        <span className="text-xs font-bold">کارانه کل حاصله:</span>
-                        <span className="font-mono text-base font-black">{azadKaranehStats.karaneh.toLocaleString('fa-IR')}</span>
-                        <span className="text-[10px]">{unitLabel}</span>
+                    <div className="space-y-1 text-[11px] font-mono tabular-nums">
+                        <div className="flex justify-between"><span className="text-slate-500 font-sans">انبار / آزاد:</span><span className="font-bold">{Math.round(summary.totals.anbar / divisor).toLocaleString('fa-IR')} / {Math.round(summary.totals.azad / divisor).toLocaleString('fa-IR')}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500 font-sans">حواله / ثبت‌نام:</span><span className="font-bold">{Math.round(summary.totals.havaleh / divisor).toLocaleString('fa-IR')} / {Math.round(summary.totals.registration / divisor).toLocaleString('fa-IR')}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500 font-sans">لیزینگ قطعی:</span><span className="font-bold">{Math.round(summary.totals.leasing / divisor).toLocaleString('fa-IR')}</span></div>
                     </div>
                 </div>
             </div>
 
-            {/* Final Sheet Summary Table */}
-            <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-l from-slate-50 to-transparent dark:from-slate-900/40">
-                    <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                        <div>
-                            <h3 className="text-base font-black text-slate-800 dark:text-white">
-                                جدول تجمیعی و شیت نهایی پورسانت ماهانه (کمسیون_{activePeriodName.replace(/\s+/g, '_')}_نهایی)
-                            </h3>
-                            <p className="text-xs text-slate-500">
-                                محاسبه تفکیکی ۵ بخش به همراه تسهیم ۵۰٪ معاملات اشتراکی، پاداش‌ها و کسورات
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
+            {/* Sub-Navigation & Actions */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/50">
+                    <div className="flex flex-wrap items-center gap-2">
                         <button
-                            onClick={() => {
-                                if (personnelData.length === 0) {
-                                    alert('هیچ اطلاعاتی برای خروجی اکسل وجود ندارد.');
-                                    return;
-                                }
-                                const wb = XLSX.utils.book_new();
-                                const headers = [
-                                    'ردیف', 'نام کارشناس فروش', 'تعداد معامله', 'حجم فروش کل',
-                                    `پورسانت فروش انبار (${unitLabel})`, `پورسانت فروش آزاد (${unitLabel})`,
-                                    `پورسانت فروش حواله (${unitLabel})`, `پورسانت لیزینگ (${unitLabel})`,
-                                    `پورسانت ثبت‌نام (${unitLabel})`, `جمع ناخالص پورسانت (${unitLabel})`,
-                                    `پاداش (+) (${unitLabel})`, `کسورات (-) (${unitLabel})`,
-                                    `خالص پرداختی (${unitLabel})`, `واریز شده (${unitLabel})`, `مانده (${unitLabel})`, 'وضعیت تسویه'
-                                ];
-                                const rows = personnelData.map((p, idx) => [
-                                    idx + 1,
-                                    p.name,
-                                    p.totalDealsCount,
-                                    Math.round(p.totalSalesVolume / divisor),
-                                    Math.round(p.anbarCommission / divisor),
-                                    Math.round(p.azadCommission / divisor),
-                                    Math.round(p.havalehCommission / divisor),
-                                    Math.round(p.leasingCommission / divisor),
-                                    Math.round(p.registrationCommission / divisor),
-                                    Math.round(p.grossCommission / divisor),
-                                    Math.round(p.bonus / divisor),
-                                    Math.round(p.deductions / divisor),
-                                    Math.round(p.netPayable / divisor),
-                                    Math.round(p.paidAmount / divisor),
-                                    Math.round(p.remainingAmount / divisor),
-                                    p.remainingAmount <= 0 ? 'تسویه کامل' : (p.paidAmount > 0 ? 'علی‌الحساب' : 'پرداخت‌نشده')
-                                ]);
-
-                                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-                                ws['!cols'] = [
-                                    { wch: 6 }, { wch: 22 }, { wch: 14 }, { wch: 18 },
-                                    { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-                                    { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 16 }
-                                ];
-                                XLSX.utils.book_append_sheet(wb, ws, 'کارنامه تجمیعی پورسانت');
-                                XLSX.writeFile(wb, `کارنامه_پورسانت_${activePeriodName.replace(/\s+/g, '_')}.xlsx`);
-                            }}
-                            className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
-                            title="دانلود فایل اکسل کارنامه پرسنل (.xlsx)"
+                            onClick={() => setSubTab('NAHAYI')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                subTab === 'NAHAYI'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                            }`}
                         >
-                            <Download className="w-4 h-4 text-emerald-600" />
-                            خروجی اکسل (XLSX)
+                            <FileSpreadsheet className="w-4 h-4" />
+                            شیت «نهایی» و رتبه‌بندی
                         </button>
+                        <button
+                            onClick={() => setSubTab('PAYOUT')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                subTab === 'PAYOUT'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                            }`}
+                        >
+                            <Wallet className="w-4 h-4" />
+                            شیت «پرداختی ماهانه» (−۱۰٪)
+                        </button>
+                        <button
+                            onClick={() => setSubTab('KARANEH')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                subTab === 'KARANEH'
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                            }`}
+                        >
+                            <Gift className="w-4 h-4" />
+                            کارانه کلی و جدول سهام کارانه
+                        </button>
+                    </div>
 
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExportExcel}
+                            className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800/60 text-xs font-bold rounded-xl flex items-center gap-1.5"
+                        >
+                            <Download className="w-4 h-4" />
+                            خروجی XLSX (نهایی + پرداختی + کارانه)
+                        </button>
                         <button
                             onClick={() => window.print()}
-                            className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5"
                         >
                             <Printer className="w-4 h-4" />
-                            چاپ فیش تجمیعی
+                            چاپ
                         </button>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-right border-collapse">
-                        <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-                            <tr>
-                                <th className="py-3.5 px-3 text-center">ردیف</th>
-                                <th className="py-3.5 px-4">نام کارشناس فروش</th>
-                                <th className="py-3.5 px-3">فروش انبار ({unitLabel})</th>
-                                <th className="py-3.5 px-3">فروش آزاد ({unitLabel})</th>
-                                <th className="py-3.5 px-3">فروش حواله ({unitLabel})</th>
-                                <th className="py-3.5 px-3">لیزینگ و ثبت‌نام ({unitLabel})</th>
-                                <th className="py-3.5 px-3">پاداش (+)</th>
-                                <th className="py-3.5 px-3">کسورات (-)</th>
-                                <th className="py-3.5 px-4 font-black">خالص پرداختی ({unitLabel})</th>
-                                <th className="py-3.5 px-3 text-center">عملیات</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                            {personnelData.map((person, idx) => {
-                                const leasingPlusReg = person.leasingCommission + person.registrationCommission;
-                                const isPositive = person.netPayable > 0;
-
-                                return (
-                                    <tr 
-                                        key={person.name} 
-                                        className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${
-                                            isPositive ? '' : 'opacity-60'
-                                        }`}
-                                    >
-                                        {/* Rank */}
-                                        <td className="py-3 px-3 text-center font-mono font-bold text-slate-400">
-                                            {idx + 1}
+                {/* SUB-TAB 1: شیت نهایی */}
+                {subTab === 'NAHAYI' && (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-right border-collapse">
+                            <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                                <tr>
+                                    <th className="py-3.5 px-3 text-center">رتبه</th>
+                                    <th className="py-3.5 px-4">نام پرسنل</th>
+                                    <th className="py-3.5 px-3">فروش انبار</th>
+                                    <th className="py-3.5 px-3">فروش آزاد</th>
+                                    <th className="py-3.5 px-3">فروش حواله</th>
+                                    <th className="py-3.5 px-3">ثبت‌نام</th>
+                                    <th className="py-3.5 px-3">لیزینگ</th>
+                                    <th className="py-3.5 px-3">جمع پورسانت</th>
+                                    <th className="py-3.5 px-3">مجموع تعدیل‌ها</th>
+                                    <th className="py-3.5 px-4 font-black">نهایی ({unitLabel})</th>
+                                    <th className="py-3.5 px-3 text-center">عملیات</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                {summary.finalRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={11} className="py-10 text-center text-slate-400">
+                                            داده‌ای برای تجمیع شیت نهایی در این دوره ثبت نشده است.
                                         </td>
-
-                                        {/* Staff Name */}
+                                    </tr>
+                                ) : summary.finalRows.map(person => (
+                                    <tr key={person.staffName} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                        <td className="py-3 px-3 text-center font-mono tabular-nums font-black text-slate-500">
+                                            #{person.rank}
+                                        </td>
                                         <td className="py-3 px-4">
-                                            <div className="font-bold text-slate-800 dark:text-white text-sm">
-                                                {person.name}
-                                            </div>
-                                            {person.cars.length > 0 && (
-                                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                                    خودروها: {person.cars.slice(0, 3).join('، ')}
+                                            <div className="font-bold text-slate-800 dark:text-white text-sm">{person.staffName}</div>
+                                            {person.draftLeasingCount > 0 && (
+                                                <div className="text-[10px] text-purple-600 dark:text-purple-400 mt-0.5">
+                                                    +{person.draftLeasingCount} فقره لیزینگ پیش‌نویس (حذف‌شده از جمع قطعی)
+                                                </div>
+                                            )}
+                                            {person.flaggedExcludedCount > 0 && (
+                                                <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5">
+                                                    {person.flaggedExcludedCount} ردیف نرخ غیرواقعی در انتظار تأیید مدیر
                                                 </div>
                                             )}
                                         </td>
-
-                                        {/* Anbar */}
-                                        <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                                            {person.anbarCommission > 0 ? Math.round(person.anbarCommission / divisor).toLocaleString('fa-IR') : '-'}
+                                        <td className="py-3 px-3 font-mono tabular-nums">{person.anbarCommission > 0 ? Math.round(person.anbarCommission / divisor).toLocaleString('fa-IR') : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums">{person.azadCommission > 0 ? Math.round(person.azadCommission / divisor).toLocaleString('fa-IR') : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums">{person.havalehCommission > 0 ? Math.round(person.havalehCommission / divisor).toLocaleString('fa-IR') : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums">{person.registrationCommission > 0 ? Math.round(person.registrationCommission / divisor).toLocaleString('fa-IR') : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums">{person.leasingCommission > 0 ? Math.round(person.leasingCommission / divisor).toLocaleString('fa-IR') : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums font-bold text-slate-700 dark:text-slate-200">
+                                            {Math.round(person.totalSheetCommission / divisor).toLocaleString('fa-IR')}
                                         </td>
-
-                                        {/* Azad */}
-                                        <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                                            {person.azadCommission > 0 ? Math.round(person.azadCommission / divisor).toLocaleString('fa-IR') : '-'}
+                                        <td className={`py-3 px-3 font-mono tabular-nums font-bold ${person.netAdjustmentTotal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            {person.netAdjustmentTotal !== 0
+                                                ? `${person.netAdjustmentTotal > 0 ? '+' : ''}${Math.round(person.netAdjustmentTotal / divisor).toLocaleString('fa-IR')}`
+                                                : '-'}
                                         </td>
-
-                                        {/* Havaleh */}
-                                        <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                                            {person.havalehCommission > 0 ? Math.round(person.havalehCommission / divisor).toLocaleString('fa-IR') : '-'}
+                                        <td className="py-3 px-4 font-mono tabular-nums font-black text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20">
+                                            {Math.round(person.finalCommission / divisor).toLocaleString('fa-IR')}
                                         </td>
-
-                                        {/* Leasing & Registration */}
-                                        <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                                            {leasingPlusReg > 0 ? Math.round(leasingPlusReg / divisor).toLocaleString('fa-IR') : '-'}
-                                        </td>
-
-                                        {/* Bonus */}
-                                        <td className="py-3 px-3 font-mono font-bold text-emerald-600">
-                                            {person.bonus > 0 ? `+${Math.round(person.bonus / divisor).toLocaleString('fa-IR')}` : '-'}
-                                        </td>
-
-                                        {/* Deductions */}
-                                        <td className="py-3 px-3 font-mono font-bold text-rose-600">
-                                            {person.deductions > 0 ? `-${Math.round(person.deductions / divisor).toLocaleString('fa-IR')}` : '-'}
-                                        </td>
-
-                                        {/* Net Payable */}
-                                        <td className="py-3 px-4 font-mono font-black text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20">
-                                            {person.netPayable > 0 ? Math.round(person.netPayable / divisor).toLocaleString('fa-IR') : '۰'}
-                                        </td>
-
-                                        {/* Actions: View Payslip / Edit Adjustments */}
                                         <td className="py-3 px-3 text-center">
                                             <div className="flex items-center justify-center gap-1">
                                                 <button
                                                     onClick={() => setViewingPayslipStaff(person)}
-                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-700 transition-colors"
-                                                    title="مشاهده و چاپ فیش پورسانت پرسنل"
+                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-700"
+                                                    title="مشاهده فیش"
                                                 >
                                                     <Eye className="w-3.5 h-3.5" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleOpenEditAdjustment(person.name)}
-                                                    className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center gap-1"
-                                                    title="ویرایش پاداش و کسورات"
+                                                    onClick={() => handleOpenEditAdjustment(person.staffName)}
+                                                    className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 flex items-center gap-1"
                                                 >
                                                     <Edit3 className="w-3 h-3" />
                                                     تعدیل
@@ -550,220 +466,325 @@ export const CommissionPersonnelReport: React.FC<CommissionPersonnelReportProps>
                                             </div>
                                         </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
+                                ))}
+                            </tbody>
+                            {summary.finalRows.length > 0 && (
+                                <tfoot className="bg-slate-100 dark:bg-slate-900 font-black border-t-2 border-slate-300 dark:border-slate-600 text-xs">
+                                    <tr>
+                                        <td colSpan={2} className="py-3.5 px-4 text-left">جمع کل:</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.anbar / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.azad / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.havaleh / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.registration / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.leasing / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.totalSheetCommission / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.totalAdjustments / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3.5 px-4 font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                                            {Math.round(summary.totals.totalFinalCommission / divisor).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                        </table>
+                    </div>
+                )}
 
-                        {/* Grand Totals Footer */}
-                        <tfoot className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white font-black border-t-2 border-slate-300 dark:border-slate-600 text-xs">
-                            <tr>
-                                <td colSpan={2} className="py-3.5 px-4 text-left">
-                                    جمع کل ({activePeriodName}):
-                                </td>
-                                <td className="py-3.5 px-3 font-mono">
-                                    {Math.round(grandTotals.anbar / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-3 font-mono">
-                                    {Math.round(grandTotals.azad / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-3 font-mono">
-                                    {Math.round(grandTotals.havaleh / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-3 font-mono">
-                                    {Math.round((grandTotals.leasing + grandTotals.registration) / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-3 font-mono text-emerald-600">
-                                    {Math.round(grandTotals.bonus / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-3 font-mono text-rose-600">
-                                    {Math.round(grandTotals.deductions / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-4 font-mono text-sm text-emerald-600 dark:text-emerald-400 font-black">
-                                    {Math.round(grandTotals.net / divisor).toLocaleString('fa-IR')}
-                                </td>
-                                <td className="py-3.5 px-3 text-center text-slate-400">-</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
+                {/* SUB-TAB 2: شیت پرداختی ماهانه */}
+                {subTab === 'PAYOUT' && (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-right border-collapse">
+                            <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                                <tr>
+                                    <th className="py-3.5 px-3 text-center">رتبه</th>
+                                    <th className="py-3.5 px-4">نام پرسنل</th>
+                                    <th className="py-3.5 px-3">کمسیون نهایی</th>
+                                    <th className="py-3.5 px-3">هدیه</th>
+                                    <th className="py-3.5 px-3">کمسیون T9</th>
+                                    <th className="py-3.5 px-3">مراسم</th>
+                                    <th className="py-3.5 px-3">آپشن</th>
+                                    <th className="py-3.5 px-3">ثبت‌نام معوقه</th>
+                                    <th className="py-3.5 px-3">
+                                        {settings.payoutHoldMode === 'ADD' ? `+` : `−`} {formatDecimalPercentLabel(settings.payoutHoldRate ?? 0.10)} نهایی
+                                    </th>
+                                    <th className="py-3.5 px-4 font-black">نهایی پرداختی ({unitLabel})</th>
+                                    <th className="py-3.5 px-3 text-center">اقلام پرداختی</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                {summary.payoutRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={11} className="py-10 text-center text-slate-400">
+                                            داده‌ای برای شیت پرداختی ماهانه یافت نشد.
+                                        </td>
+                                    </tr>
+                                ) : summary.payoutRows.map(p => (
+                                    <tr key={p.staffName} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                        <td className="py-3 px-3 text-center font-mono tabular-nums font-black text-slate-500">#{p.rank}</td>
+                                        <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{p.staffName}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums font-bold">{Math.round(p.finalCommissionFromNahayi / divisor).toLocaleString('fa-IR')}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums text-emerald-600">{p.gift > 0 ? `+${Math.round(p.gift / divisor).toLocaleString('fa-IR')}` : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums text-emerald-600">{p.t9Backlog > 0 ? `+${Math.round(p.t9Backlog / divisor).toLocaleString('fa-IR')}` : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums text-emerald-600">{p.ceremony > 0 ? `+${Math.round(p.ceremony / divisor).toLocaleString('fa-IR')}` : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums text-emerald-600">{p.optionCommission > 0 ? `+${Math.round(p.optionCommission / divisor).toLocaleString('fa-IR')}` : '-'}</td>
+                                        <td className="py-3 px-3 font-mono tabular-nums text-emerald-600">{p.lateRegistration > 0 ? `+${Math.round(p.lateRegistration / divisor).toLocaleString('fa-IR')}` : '-'}</td>
+                                        <td className={`py-3 px-3 font-mono tabular-nums font-bold ${p.holdMode === 'ADD' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            {p.holdMode === 'ADD' ? '+' : '-'}{Math.round(p.tenPercentHold / divisor).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="py-3 px-4 font-mono tabular-nums font-black text-sm text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/20">
+                                            {Math.round(p.finalPayable / divisor).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="py-3 px-3 text-center">
+                                            <button
+                                                onClick={() => handleOpenEditPayoutExtras(p.staffName)}
+                                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 flex items-center gap-1 mx-auto"
+                                            >
+                                                <Edit3 className="w-3 h-3" />
+                                                اقلام
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            {summary.payoutRows.length > 0 && (
+                                <tfoot className="bg-slate-100 dark:bg-slate-900 font-black border-t-2 border-slate-300 dark:border-slate-600 text-xs">
+                                    <tr>
+                                        <td colSpan={2} className="py-3.5 px-4 text-left">جمع کل پرداختی:</td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums">{Math.round(summary.totals.totalFinalCommission / divisor).toLocaleString('fa-IR')}</td>
+                                        <td colSpan={5} className="py-3.5 px-3 font-mono tabular-nums text-emerald-600 text-center">
+                                            جمع اضافات: +{Math.round(summary.totals.totalExtras / divisor).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="py-3.5 px-3 font-mono tabular-nums text-rose-600">
+                                            {settings.payoutHoldMode === 'ADD' ? '+' : '-'}{Math.round(summary.totals.totalTenPercentHold / divisor).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td className="py-3.5 px-4 font-mono tabular-nums text-indigo-700 dark:text-indigo-300">
+                                            {Math.round(summary.totals.totalFinalPayable / divisor).toLocaleString('fa-IR')}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                        </table>
+                    </div>
+                )}
+
+                {/* SUB-TAB 3: کارانه کلی، کارانه هر بخش و جدول سهام کارانه */}
+                {subTab === 'KARANEH' && (
+                    <div className="p-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="p-4 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50">
+                                <span className="text-xs font-bold text-amber-800 dark:text-amber-200 block mb-1">کارانه کلی (جمع نهایی پورسانت‌های آزاد)</span>
+                                <span className="font-mono tabular-nums font-black text-xl text-amber-900 dark:text-amber-100">
+                                    {Math.round(summary.karaneh.totalAzadFinalCommission / divisor).toLocaleString('fa-IR')} {unitLabel}
+                                </span>
+                            </div>
+                            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">تعداد بخش‌های تقسیم</span>
+                                <span className="font-mono tabular-nums font-black text-xl text-slate-800 dark:text-white">
+                                    {summary.karaneh.sectionCount.toLocaleString('fa-IR')} بخش
+                                </span>
+                            </div>
+                            <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/50">
+                                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200 block mb-1">کارانه هر بخش (کارانه کلی ÷ تعداد بخش)</span>
+                                <span className="font-mono tabular-nums font-black text-xl text-emerald-700 dark:text-emerald-300">
+                                    {Math.round(summary.karaneh.perSectionKaraneh / divisor).toLocaleString('fa-IR')} {unitLabel}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                            <table className="w-full text-xs text-right border-collapse">
+                                <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                                    <tr>
+                                        <th className="py-3 px-4 text-center w-14">ردیف</th>
+                                        <th className="py-3 px-4">دریافت‌کننده سهم کارانه</th>
+                                        <th className="py-3 px-4">روش محاسبه</th>
+                                        <th className="py-3 px-4">درصد / مقدار ثابت</th>
+                                        <th className="py-3 px-4 font-black">سهم محاسبه‌شده ({unitLabel})</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                    {summary.karaneh.recipientShares.map((s, idx) => (
+                                        <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="py-3 px-4 text-center font-mono text-slate-400">{idx + 1}</td>
+                                            <td className="py-3 px-4 font-bold text-slate-800 dark:text-white">{s.recipientName}</td>
+                                            <td className="py-3 px-4 text-slate-500">{s.mode === 'FIXED' ? 'مبلغ ثابت' : 'درصد از کارانه هر بخش'}</td>
+                                            <td className="py-3 px-4 font-mono tabular-nums font-bold">
+                                                {s.mode === 'FIXED'
+                                                    ? `${Math.round(s.fixedAmount / divisor).toLocaleString('fa-IR')} ${unitLabel}`
+                                                    : formatDecimalPercentLabel(s.percent)}
+                                            </td>
+                                            <td className="py-3 px-4 font-mono tabular-nums font-black text-amber-700 dark:text-amber-300">
+                                                {Math.round(s.calculatedAmount / divisor).toLocaleString('fa-IR')}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot className="bg-slate-100 dark:bg-slate-900 font-black border-t border-slate-300 dark:border-slate-600">
+                                    <tr>
+                                        <td colSpan={4} className="py-3 px-4 text-left">جمع کل سهام کارانه:</td>
+                                        <td className="py-3 px-4 font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                                            {Math.round(summary.karaneh.totalDistributedShares / divisor).toLocaleString('fa-IR')} {unitLabel}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Modal for Viewing & Printing Individual Payslip (فیش پورسانت پرسنل) */}
+            {/* Individual Payslip Modal */}
             {viewingPayslipStaff && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" dir="rtl">
-                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl p-6 relative">
-                        <button 
-                            onClick={() => setViewingPayslipStaff(null)} 
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl p-6 relative">
+                        <button
+                            onClick={() => setViewingPayslipStaff(null)}
                             className="absolute top-5 left-5 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
                         >
                             <X className="w-5 h-5" />
                         </button>
 
                         <div className="text-center pb-4 border-b border-slate-100 dark:border-slate-700">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold mb-2">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold mb-2">
                                 <Building className="w-3.5 h-3.5" />
-                                گروه خودرویی حسینی • فیش محاسبه پورسانت
+                                گروه خودرویی حسینی • فیش پورسانت (رتبه #{viewingPayslipStaff.rank})
                             </div>
-                            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                                {viewingPayslipStaff.name}
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                دوره مالی: {activePeriodName}
-                            </p>
+                            <h3 className="text-lg font-black text-slate-900 dark:text-white">{viewingPayslipStaff.staffName}</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">دوره مالی: {activePeriodName}</p>
                         </div>
 
-                        <div className="py-4 space-y-3">
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between items-center">
-                                    <span className="text-slate-500">پورسانت فروش انبار:</span>
-                                    <span className="font-mono font-bold text-slate-800 dark:text-white">
-                                        {Math.round(viewingPayslipStaff.anbarCommission / divisor).toLocaleString('fa-IR')} {unitLabel}
-                                    </span>
+                        <div className="py-4 space-y-2.5 text-xs">
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between">
+                                    <span className="text-slate-500">فروش انبار:</span>
+                                    <span className="font-mono tabular-nums font-bold">{Math.round(viewingPayslipStaff.anbarCommission / divisor).toLocaleString('fa-IR')} {unitLabel}</span>
                                 </div>
-
-                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between items-center">
-                                    <span className="text-slate-500">پورسانت فروش آزاد:</span>
-                                    <span className="font-mono font-bold text-slate-800 dark:text-white">
-                                        {Math.round(viewingPayslipStaff.azadCommission / divisor).toLocaleString('fa-IR')} {unitLabel}
-                                    </span>
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between">
+                                    <span className="text-slate-500">فروش آزاد:</span>
+                                    <span className="font-mono tabular-nums font-bold">{Math.round(viewingPayslipStaff.azadCommission / divisor).toLocaleString('fa-IR')} {unitLabel}</span>
                                 </div>
-
-                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between items-center">
-                                    <span className="text-slate-500">پورسانت حواله:</span>
-                                    <span className="font-mono font-bold text-slate-800 dark:text-white">
-                                        {Math.round(viewingPayslipStaff.havalehCommission / divisor).toLocaleString('fa-IR')} {unitLabel}
-                                    </span>
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between">
+                                    <span className="text-slate-500">فروش حواله:</span>
+                                    <span className="font-mono tabular-nums font-bold">{Math.round(viewingPayslipStaff.havalehCommission / divisor).toLocaleString('fa-IR')} {unitLabel}</span>
                                 </div>
-
-                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between items-center">
-                                    <span className="text-slate-500">لیزینگ و ثبت‌نام:</span>
-                                    <span className="font-mono font-bold text-slate-800 dark:text-white">
-                                        {Math.round((viewingPayslipStaff.leasingCommission + viewingPayslipStaff.registrationCommission) / divisor).toLocaleString('fa-IR')} {unitLabel}
-                                    </span>
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between">
+                                    <span className="text-slate-500">ثبت‌نام و لیزینگ:</span>
+                                    <span className="font-mono tabular-nums font-bold">{Math.round((viewingPayslipStaff.registrationCommission + viewingPayslipStaff.leasingCommission) / divisor).toLocaleString('fa-IR')} {unitLabel}</span>
                                 </div>
                             </div>
 
-                            {/* Adjustments row */}
-                            {(viewingPayslipStaff.bonus > 0 || viewingPayslipStaff.deductions > 0) && (
-                                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between items-center text-xs">
-                                    <span className="text-slate-500">تعدیلات (پاداش / کسورات):</span>
-                                    <span className="font-mono font-bold">
-                                        <span className="text-emerald-600">+{Math.round(viewingPayslipStaff.bonus / divisor).toLocaleString('fa-IR')}</span>
-                                        {' / '}
-                                        <span className="text-rose-600">-{Math.round(viewingPayslipStaff.deductions / divisor).toLocaleString('fa-IR')}</span>
-                                    </span>
-                                </div>
-                            )}
+                            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl flex justify-between">
+                                <span className="text-slate-500">تعدیلات (هدیه، مراسم، پاداش، کسورات):</span>
+                                <span className="font-mono tabular-nums font-bold">
+                                    {viewingPayslipStaff.netAdjustmentTotal >= 0 ? '+' : ''}
+                                    {Math.round(viewingPayslipStaff.netAdjustmentTotal / divisor).toLocaleString('fa-IR')} {unitLabel}
+                                </span>
+                            </div>
 
-                            {/* Net Payable Highlight */}
-                            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 flex justify-between items-center">
-                                <div>
-                                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
-                                        خالص پرداختی نهایی به مشاور:
-                                    </span>
-                                    <span className="text-[10px] text-emerald-600">
-                                        تعداد کل معاملات مرتبط: {viewingPayslipStaff.dealsList.length} مورد
-                                    </span>
-                                </div>
-                                <div className="font-mono font-black text-xl text-emerald-700 dark:text-emerald-400">
-                                    {Math.round(viewingPayslipStaff.netPayable / divisor).toLocaleString('fa-IR')}
-                                    <span className="text-xs mr-1 font-sans">{unitLabel}</span>
-                                </div>
+                            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/50 flex justify-between items-center">
+                                <span className="font-bold text-emerald-800 dark:text-emerald-300">خالص نهایی در شیت «نهایی»:</span>
+                                <span className="font-mono tabular-nums font-black text-lg text-emerald-700 dark:text-emerald-300">
+                                    {Math.round(viewingPayslipStaff.finalCommission / divisor).toLocaleString('fa-IR')} {unitLabel}
+                                </span>
                             </div>
                         </div>
 
                         <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
-                            <button
-                                type="button"
-                                onClick={() => setViewingPayslipStaff(null)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-xl"
-                            >
-                                بستن
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => window.print()}
-                                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5"
-                            >
-                                <Printer className="w-4 h-4" />
-                                چاپ فیش
+                            <button type="button" onClick={() => setViewingPayslipStaff(null)} className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-xl">بستن</button>
+                            <button type="button" onClick={() => window.print()} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5">
+                                <Printer className="w-4 h-4" /> چاپ فیش
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Modal for Editing Staff Adjustments (Bonus & Deductions) */}
+            {/* Modal for Editing Nahayi Adjustments */}
             {editingStaff && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" dir="rtl">
-                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6">
-                        <h3 className="text-base font-black text-slate-800 dark:text-white mb-1">
-                            تنظیم پاداش و کسورات
-                        </h3>
-                        <p className="text-xs text-emerald-600 font-bold mb-4">
-                            کارشناس: {editingStaff} ({activePeriodName})
-                        </p>
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6">
+                        <h3 className="text-base font-black text-slate-800 dark:text-white mb-1">تعدیلات شیت «نهایی»</h3>
+                        <p className="text-xs text-emerald-600 font-bold mb-4">پرسنل: {editingStaff} ({activePeriodName})</p>
 
-                        <form onSubmit={handleSaveAdjustment} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    مبلغ پاداش مدیریتی ({unitLabel})
-                                </label>
-                                <input
-                                    type="number"
-                                    value={editBonus}
-                                    onChange={e => setEditBonus(e.target.value === '' ? '' : Number(e.target.value))}
-                                    placeholder="0"
-                                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none text-emerald-600"
-                                />
+                        <form onSubmit={handleSaveAdjustment} className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">هدیه ({unitLabel})</label>
+                                    <input type="number" value={editGift} onChange={e => setEditGift(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">مراسم ({unitLabel})</label>
+                                    <input type="number" value={editCeremony} onChange={e => setEditCeremony(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">پاداش ({unitLabel})</label>
+                                    <input type="number" value={editBonus} onChange={e => setEditBonus(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-emerald-600" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">کسورات ({unitLabel})</label>
+                                    <input type="number" value={editDeductions} onChange={e => setEditDeductions(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-rose-600" />
+                                </div>
                             </div>
-
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    مبلغ کسورات یا جریمه ({unitLabel})
-                                </label>
-                                <input
-                                    type="number"
-                                    value={editDeductions}
-                                    onChange={e => setEditDeductions(e.target.value === '' ? '' : Number(e.target.value))}
-                                    placeholder="0"
-                                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-rose-500 outline-none text-rose-600"
-                                />
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">توضیحات</label>
+                                <input type="text" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="علت یا یادداشت" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs" />
                             </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                    توضیحات و علت تعدیل
-                                </label>
-                                <input
-                                    type="text"
-                                    value={editNotes}
-                                    onChange={e => setEditNotes(e.target.value)}
-                                    placeholder="مثلاً: پاداش ثبت رکورد فروش ماهانه"
-                                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none"
-                                />
-                            </div>
-
                             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingStaff(null)}
-                                    className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-xl"
-                                >
-                                    انصراف
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all"
-                                >
-                                    ثبت و ذخیره
-                                </button>
+                                <button type="button" onClick={() => setEditingStaff(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl">انصراف</button>
+                                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl">ثبت و ذخیره</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
+            {/* Modal for Editing Payout Sheet Extras */}
+            {editingPayoutStaff && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6">
+                        <h3 className="text-base font-black text-slate-800 dark:text-white mb-1">اقلام شیت «پرداختی ماهانه»</h3>
+                        <p className="text-xs text-indigo-600 font-bold mb-4">پرسنل: {editingPayoutStaff} ({activePeriodName})</p>
+
+                        <form onSubmit={handleSavePayoutExtras} className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">هدیه ({unitLabel})</label>
+                                    <input type="number" value={poGift} onChange={e => setPoGift(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">کمسیون T9 معوقه ({unitLabel})</label>
+                                    <input type="number" value={poT9Backlog} onChange={e => setPoT9Backlog(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">مراسم ({unitLabel})</label>
+                                    <input type="number" value={poCeremony} onChange={e => setPoCeremony(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">آپشن ({unitLabel})</label>
+                                    <input type="number" value={poOption} onChange={e => setPoOption(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ثبت‌نام معوقه ({unitLabel})</label>
+                                    <input type="number" value={poLateReg} onChange={e => setPoLateReg(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">سایر ({unitLabel})</label>
+                                    <input type="number" value={poOther} onChange={e => setPoOther(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">توضیحات پرداختی</label>
+                                <input type="text" value={poNotes} onChange={e => setPoNotes(e.target.value)} placeholder="یادداشت پرداختی" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs" />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+                                <button type="button" onClick={() => setEditingPayoutStaff(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl">انصراف</button>
+                                <button type="submit" className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl">ذخیره اقلام پرداختی</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

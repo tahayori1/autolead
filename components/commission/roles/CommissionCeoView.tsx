@@ -1,6 +1,14 @@
 import React, { useMemo } from 'react';
-import { CommissionDeal, CommissionPeriod } from '../../../types';
-import { parseSalesPersons } from '../../../services/commissionService';
+import { CommissionDeal, CommissionPeriod, CommissionSettings } from '../../../types';
+import {
+    buildPersonnelFinalAndPayoutSummary,
+    formatDecimalPercentLabel,
+    getCommissionSettings,
+    getDealParticipantInfo,
+    getPersonCommissionShareForDeal,
+    isDealEligibleForConfirmedTotals,
+    normalizePersonnelName
+} from '../../../services/commissionService';
 import { 
     Building2, 
     TrendingUp, 
@@ -25,6 +33,7 @@ interface CommissionCeoViewProps {
     currencyUnit: 'RIAL' | 'TOMAN';
     onApproveCeo: () => void;
     onOpenPrintReport: (type: 'CEO') => void;
+    settings?: CommissionSettings;
 }
 
 export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
@@ -32,10 +41,12 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
     activePeriod,
     currencyUnit,
     onApproveCeo,
-    onOpenPrintReport
+    onOpenPrintReport,
+    settings: customSettings
 }) => {
     const divisor = currencyUnit === 'TOMAN' ? 10 : 1;
     const unitLabel = currencyUnit === 'TOMAN' ? 'تومان' : 'ریال';
+    const settings = customSettings || getCommissionSettings();
 
     // Executive Level Computations
     const ceoMetrics = useMemo(() => {
@@ -43,6 +54,7 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
         let totalGrossProfit = 0;
         let totalCommission = 0;
         let totalPaid = 0;
+        let confirmedDealsCount = 0;
 
         const categoryBreakdown: Record<string, { turnover: number; profit: number; commission: number; count: number }> = {
             ANBAR: { turnover: 0, profit: 0, commission: 0, count: 0 },
@@ -55,10 +67,15 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
         const staffProfits: Record<string, { profit: number; commission: number; dealsCount: number }> = {};
 
         deals.forEach(deal => {
-            const persons = deal.sharedPersons && deal.sharedPersons.length > 0 
-                ? deal.sharedPersons 
-                : parseSalesPersons(deal.salesPerson);
-            const share = 1 / (persons.length || 1);
+            const elig = isDealEligibleForConfirmedTotals(deal, settings);
+            if (!elig.eligible) return;
+            confirmedDealsCount += 1;
+
+            const partInfo = getDealParticipantInfo(deal, deals);
+            const persons = partInfo.rowParticipants.length > 0
+                ? partInfo.rowParticipants
+                : [normalizePersonnelName(deal.salesPerson) || 'نامشخص'];
+            const share = 1 / Math.max(1, partInfo.participantCount);
 
             const turnover = deal.salePrice || deal.downPayment || 0;
             const profit = deal.grossProfit !== undefined ? deal.grossProfit : (deal.dailyProfitLoss || 0);
@@ -81,29 +98,24 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
             }
 
             persons.forEach(p => {
-                if (!staffProfits[p]) {
-                    staffProfits[p] = { profit: 0, commission: 0, dealsCount: 0 };
+                const normName = normalizePersonnelName(p) || 'نامشخص';
+                if (!staffProfits[normName]) {
+                    staffProfits[normName] = { profit: 0, commission: 0, dealsCount: 0 };
                 }
-                const pComm = (deal.customPersonCommissions && deal.customPersonCommissions[p] !== undefined)
-                    ? deal.customPersonCommissions[p]
-                    : comm * share;
+                const pComm = getPersonCommissionShareForDeal(deal, normName, deals, settings);
 
-                staffProfits[p].profit += profit * share;
-                staffProfits[p].commission += pComm;
-                staffProfits[p].dealsCount += share;
+                staffProfits[normName].profit += profit * share;
+                staffProfits[normName].commission += pComm;
+                staffProfits[normName].dealsCount += share;
             });
         });
+
+        const summary = buildPersonnelFinalAndPayoutSummary(deals, activePeriod, settings);
 
         // Net company margin
         const netCompanyMargin = totalGrossProfit - totalCommission;
         const commissionCostRate = totalGrossProfit > 0 ? ((totalCommission / totalGrossProfit) * 100).toFixed(1) : '0';
         const roiFactor = totalCommission > 0 ? (totalGrossProfit / totalCommission).toFixed(1) : '0';
-
-        // Azad Karaneh: (مجموع کمیسیون آزاد - جمع کل پورسانت آزاد) / ۲۵
-        const azadProfit = categoryBreakdown.AZAD.profit;
-        const azadComm = categoryBreakdown.AZAD.commission;
-        const azadSurplus = azadProfit - azadComm;
-        const azadKaraneh = Math.round(azadSurplus / 25);
 
         const top3ProfitableStaff = Object.entries(staffProfits)
             .map(([name, data]) => ({ name, ...data }))
@@ -116,15 +128,18 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
             totalCommission: Math.round(totalCommission / divisor),
             netCompanyMargin: Math.round(netCompanyMargin / divisor),
             totalPaid: Math.round(totalPaid / divisor),
-            azadSurplus: Math.round(azadSurplus / divisor),
-            azadKaraneh: Math.round(azadKaraneh / divisor),
+            totalAzadKaraneh: Math.round(summary.karaneh.totalAzadFinalCommission / divisor),
+            perSectionKaraneh: Math.round(summary.karaneh.perSectionKaraneh / divisor),
+            karanehSectionCount: summary.karaneh.sectionCount,
+            draftLeasingCount: summary.totals.draftLeasingCount,
+            flaggedUnrealisticCount: summary.totals.flaggedUnrealisticCount,
             commissionCostRate,
             roiFactor,
-            dealsCount: deals.length,
+            dealsCount: confirmedDealsCount,
             categoryBreakdown,
             top3ProfitableStaff
         };
-    }, [deals, divisor]);
+    }, [deals, activePeriod, divisor, settings]);
 
     const isCeoApproved = Boolean(activePeriod.approvals?.ceoApproved);
 
@@ -147,6 +162,20 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                         <p className="text-xs text-slate-300 mt-1">
                             تحلیل نسبت ارزش‌آفرینی تیم فروش، سهم سود خالص شرکت و کنترل نهایی اسناد پرداخت
                         </p>
+                        {(ceoMetrics.draftLeasingCount > 0 || ceoMetrics.flaggedUnrealisticCount > 0) && (
+                            <div className="flex flex-wrap gap-2 mt-2.5 text-[11px]">
+                                {ceoMetrics.draftLeasingCount > 0 && (
+                                    <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/20 border border-purple-400/30 text-purple-200">
+                                        {ceoMetrics.draftLeasingCount} ردیف لیزینگ پیش‌نویس (منتظر تأیید نرخ)
+                                    </span>
+                                )}
+                                {ceoMetrics.flaggedUnrealisticCount > 0 && (
+                                    <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/20 border border-amber-400/30 text-amber-200">
+                                        {ceoMetrics.flaggedUnrealisticCount} ردیف نرخ خرید غیرواقعی (خارج از جمع قطعی)
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -178,14 +207,14 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                 
                 {/* 1. Total Turnover (گردش کل فروش) */}
                 <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <span className="text-xs font-bold text-slate-400 block mb-1">ارزش کل معاملات دوره (GMV)</span>
+                    <span className="text-xs font-bold text-slate-400 block mb-1">ارزش کل معاملات قطعی دوره (GMV)</span>
                     <div className="font-mono font-black text-2xl text-slate-800 dark:text-white">
                         {ceoMetrics.totalTurnover.toLocaleString('fa-IR')}
                         <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel}</span>
                     </div>
                     <div className="text-[11px] text-slate-500 mt-2 flex justify-between">
-                        <span>تعداد قراردادها: {ceoMetrics.dealsCount} فقره</span>
-                        <span className="text-emerald-600 font-bold">۱۰۰٪ پوشش</span>
+                        <span>تعداد قراردادهای قطعی: {ceoMetrics.dealsCount} فقره</span>
+                        <span className="text-emerald-600 font-bold">مبنای محاسبه</span>
                     </div>
                 </div>
 
@@ -197,13 +226,13 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                         <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel}</span>
                     </div>
                     <div className="text-[11px] text-slate-500 mt-2 flex justify-between">
-                        <span>سود انبار + کمیسیون آزاد + حواله</span>
+                        <span>سود انبار + آزاد + حواله</span>
                     </div>
                 </div>
 
                 {/* 3. Commission Payout Cost */}
                 <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <span className="text-xs font-bold text-slate-400 block mb-1">کل هزینه پورسانت پرسنل</span>
+                    <span className="text-xs font-bold text-slate-400 block mb-1">کل هزینه پورسانت قطعی پرسنل</span>
                     <div className="font-mono font-black text-2xl text-indigo-600 dark:text-indigo-400">
                         {ceoMetrics.totalCommission.toLocaleString('fa-IR')}
                         <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel}</span>
@@ -224,7 +253,7 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                         <span className="text-xs font-sans text-slate-400 mr-1.5">{unitLabel}</span>
                     </div>
                     <p className="text-[10px] text-slate-400 mt-2">
-                        سود ناخالص پس از کسر تمامی پورسانت‌ها و تعدیلات
+                        سود ناخالص پس از کسر تمامی پورسانت‌های قطعی
                     </p>
                 </div>
 
@@ -246,11 +275,11 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                         {[
-                            { name: 'فروش انبار خودرو', data: ceoMetrics.categoryBreakdown.ANBAR, color: 'bg-emerald-500', rate: '۰.۰۵٪ فروش' },
-                            { name: 'فروش آزاد و واسطه‌ای', data: ceoMetrics.categoryBreakdown.AZAD, color: 'bg-indigo-500', rate: '۱۰٪ کمیسیون' },
-                            { name: 'فروش حواله', data: ceoMetrics.categoryBreakdown.HAVALEH, color: 'bg-amber-500', rate: '۰.۰۵٪ فروش' },
-                            { name: 'لیزینگ و اقساطی', data: ceoMetrics.categoryBreakdown.LEASING, color: 'bg-teal-500', rate: '۰.۱٪ پیش‌پرداخت' },
-                            { name: 'ثبت‌نام کارخانه', data: ceoMetrics.categoryBreakdown.REGISTRATION, color: 'bg-rose-500', rate: 'کارمزد مصوب' },
+                            { name: 'فروش انبار خودرو', data: ceoMetrics.categoryBreakdown.ANBAR, color: 'bg-emerald-500', rate: `${formatDecimalPercentLabel(settings.anbarRate)} + تشویقی` },
+                            { name: 'فروش آزاد و واسطه‌ای', data: ceoMetrics.categoryBreakdown.AZAD, color: 'bg-indigo-500', rate: `${formatDecimalPercentLabel(settings.azadRate)} / ${formatDecimalPercentLabel(settings.azadHardRate)} سود` },
+                            { name: 'فروش حواله', data: ceoMetrics.categoryBreakdown.HAVALEH, color: 'bg-amber-500', rate: `${formatDecimalPercentLabel(settings.havalehRate)} مابه‌التفاوت` },
+                            { name: 'لیزینگ و اقساطی', data: ceoMetrics.categoryBreakdown.LEASING, color: 'bg-teal-500', rate: settings.leasingRateConfirmed ? formatDecimalPercentLabel(settings.leasingRate) : 'پیش‌نویس / نامشخص' },
+                            { name: 'ثبت‌نام کارخانه', data: ceoMetrics.categoryBreakdown.REGISTRATION, color: 'bg-rose-500', rate: `${formatDecimalPercentLabel(settings.registrationRate)} پیش‌پرداخت` },
                         ].map(item => (
                             <div key={item.name} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
                                 <div className="flex items-center justify-between mb-2">
@@ -258,7 +287,7 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                                         <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
                                         {item.name}
                                     </span>
-                                    <span className="text-[10px] text-slate-400">{item.data.count} معامله</span>
+                                    <span className="text-[10px] text-slate-400">{item.rate} • {item.data.count} معامله</span>
                                 </div>
                                 <div className="space-y-1 text-xs">
                                     <div className="flex justify-between">
@@ -275,8 +304,10 @@ export const CommissionCeoView: React.FC<CommissionCeoViewProps> = ({
                                     </div>
                                     {item.name.includes('آزاد') && (
                                         <div className="flex justify-between pt-1 bg-amber-50 dark:bg-amber-950/40 -mx-2 px-2 py-0.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
-                                            <span className="text-amber-800 dark:text-amber-300 text-[11px] font-bold">کارانه فروش آزاد (سهم ۱/۲۵):</span>
-                                            <span className="font-mono font-black text-amber-700 dark:text-amber-300">{ceoMetrics.azadKaraneh.toLocaleString('fa-IR')} {unitLabel}</span>
+                                            <span className="text-amber-800 dark:text-amber-300 text-[11px] font-bold">
+                                                کارانه هر بخش (۱/{ceoMetrics.karanehSectionCount} از کل آزاد):
+                                            </span>
+                                            <span className="font-mono font-black text-amber-700 dark:text-amber-300">{ceoMetrics.perSectionKaraneh.toLocaleString('fa-IR')} {unitLabel}</span>
                                         </div>
                                     )}
                                 </div>
